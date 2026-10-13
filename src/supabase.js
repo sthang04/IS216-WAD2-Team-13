@@ -9,7 +9,7 @@ const supabaseAnonKey = rawKey.trim()
 // Helper function to check a Supabase configured credentials
 export const isSupabaseConfigured = () => {
     return (
-        supabaseUrl.startsWith('https//') && !supabaseUrl.includes('your-supabase-url') &&  !supabaseUrl.includes('your-project-id') && supabaseAnonKey.length >30 && supabaseAnonKey !== 'your-anon-key'
+        supabaseUrl.startsWith('https://') && !supabaseUrl.includes('your-supabase-url') &&  !supabaseUrl.includes('your-project-id') && supabaseAnonKey.length >30 && supabaseAnonKey !== 'your-anon-key'
     )
 }
 

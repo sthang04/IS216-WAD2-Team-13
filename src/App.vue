@@ -9,11 +9,49 @@ const toast = ref('')
 
 // ADDED: simulated role  (no real authentication).
 const selectedRole = ref('club')
-const selectedClub = ref('SMU Eurhythmix')
-const clubs = ['SMU Eurhythmix', 'SMU Chamber Orchestra', 'SoundFoundry', 'ACF ExCo']
+const selectedClub = ref('Eurhythmix')
+const clubs = [
+  'Ardiente',
+  'Artdicted',
+  'Ballare',
+  'Broadcast & Entertainment',
+  'Caderas Latinas',
+  'Chamber Choir',
+  'Chinese Orchestra',
+  'Eurhythmix',
+  'Funk Movement',
+  'Guitarissimo',
+  'INDANCITY',
+  'Ivory Keys',
+  'Literati',
+  'Malay Language & Cultural Club',
+  'SMUSAIC',
+  'Samba Masala',
+  'SoundFoundry',
+  'Stageit',
+  'Stereometa',
+  'Symphonia',
+  'VOIX',
+  'ACF ExCo',
+]
 const isAdmin = computed(() => selectedRole.value === 'admin')
 const profileMenuOpen = ref(false)
 const toastType = ref('info')
+
+// ADDED: venue category filter tabs (values match venue_type in the data).
+const categories = [
+  { label: 'All Venues', value: 'All' },
+  { label: 'Dance Studios', value: 'Dance Studio' },
+  { label: 'Acoustic Rooms', value: 'Acoustic Room' },
+  { label: 'Sports Courts', value: 'Sports Court' },
+  { label: 'Multi-Purpose', value: 'Multi-Purpose' },
+]
+const selectedCategory = ref('All')
+const filteredSlots = computed(() =>
+  selectedCategory.value === 'All'
+    ? slots.value
+    : slots.value.filter((slot) => slot.venue_type === selectedCategory.value)
+)
 
 function selectProfile(role) {
   selectedRole.value = role
@@ -130,6 +168,20 @@ onMounted(async () => {
       <strong>Facility Admin </strong> 
     </div>
 
+    <!-- Venue category filter tabs -->
+    <ul class="nav nav-pills mb-3">
+      <li v-for="category in categories" :key="category.value" class="nav-item">
+        <button
+          type="button"
+          class="nav-link"
+          :class="{ active: selectedCategory === category.value }"
+          @click="selectedCategory = category.value"
+        >
+          {{ category.label }}
+        </button>
+      </li>
+    </ul>
+
     <!-- Original alert banner: shown only for the user clicking an action -->
     <div v-if="toast" class="alert alert-dismissible fade show" :class="`alert-${toastType}`" role="alert">
       {{ toast }}
@@ -141,8 +193,12 @@ onMounted(async () => {
       <p class="text-muted mt-2">Loading facility slots...</p>
     </div>
 
+    <p v-else-if="!filteredSlots.length" class="text-center text-muted py-5">
+      No facility slots in this category.
+    </p>
+
     <div v-else class="row">
-      <div v-for="slot in slots" :key="slot.id" class="col-md-6 mb-3">
+      <div v-for="slot in filteredSlots" :key="slot.id" class="col-md-6 mb-3">
         <div class="card p-3 shadow-sm h-100">
           <div class="d-flex justify-content-between align-items-start">
             <h5 class="fw-bold mb-1">{{ slot.venue_name }}</h5>
