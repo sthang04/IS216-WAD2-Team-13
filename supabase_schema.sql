@@ -31,61 +31,87 @@ DROP POLICY IF EXISTS "Allow public insert access" ON facility_slots;
 CREATE POLICY "Allow public insert access" ON facility_slots FOR INSERT WITH CHECK (true);
 
 -- 4. Insert records
-DELETE FROM facility_slots WHERE id IN (1, 2, 3, 4);
+DELETE FROM facility_slots WHERE id IN (1, 2, 3, 4, 5, 6);
 
 INSERT INTO facility_slots (id, venue_name, venue_type, building_location, event_date, time_slot, owner_club, status, claiming_club, audit_ticket_id, notes)
 VALUES
   (
     1,
-    'Dance Studio A',
-    'Dance Studio',
-    'School Of Econonomics, Level 7, Room 201',
+    'ACC',
+    'Multi-Purpose',
+    'Location TBC',
     '2027-10-16',
-    '18:00 - 21:00',
-    'SMU Eurhythmix',
+    '10:00 - 13:00',
+    'Stageit',
     'Booked',
     NULL,
     NULL,
-    'Mirrored walls, sprung floor, and sound system available. Please ensure to clean up after use.'
+    NULL
   ),
   (
     2,
-    'Band Room B',
+    'Studio L7.1 (Music)',
     'Acoustic Room',
-    'School Of Econonomics, Level B1',
+    'Level 7',
     '2027-10-16',
     '16:00 - 19:00',
-    'SMU Chamber Orchestra',
+    'Chinese Orchestra',
     'Proposed Peer Transfer',
     NULL,
     NULL,
-    'Acoustic treated, upright piano, 18 music stands'
+    NULL
   ),
   (
     3,
-    'Green Room',
-    'Acoustic Room',
-    'SMU Hall, Basement',
-    '2027-10-17',
-    '14:00 - 18:00',
-    'SoundFoundry',
-    'Pending Admin Sign-off',
-    'SMU Eurhythmix',
-    '#SMU-2027-089',
-    'Backstage holding room with 12 pax capacity'
+    'Studio L7.2 (Dance)',
+    'Dance Studio',
+    'Level 7',
+    '2027-10-16',
+    '18:00 - 21:00',
+    'Eurhythmix',
+    'Booked',
+    NULL,
+    NULL,
+    NULL
   ),
   (
     4,
-    'Multi-Purpose Spo rtsHall',
+    'Gym Studio',
     'Sports Court',
-    'Campus Centre, Level 2',
+    'Location TBC',
     '2027-10-17',
     '19:00 - 22:00',
     'ACF ExCo',
     'Booked',
     NULL,
     NULL,
-    '50 pax capacity, parquet flooring, full PA system'
+    NULL
+  ),
+  (
+    5,
+    'Music Drama Lab (MDL)',
+    'Acoustic Room',
+    'Location TBC',
+    '2027-10-17',
+    '14:00 - 18:00',
+    'SoundFoundry',
+    'Pending Admin Sign-off',
+    'Eurhythmix',
+    '#SMU-2027-089',
+    NULL
+  ),
+  (
+    6,
+    'Basement Studio',
+    'Multi-Purpose',
+    'Basement',
+    '2027-10-18',
+    '15:00 - 18:00',
+    'Funk Movement',
+    'Booked',
+    NULL,
+    NULL,
+    NULL
   );
 
 -- Sync sequence with highest id
