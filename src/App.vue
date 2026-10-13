@@ -134,6 +134,17 @@ onMounted(async () => {
 
       </div>
 
+<!-- Reset button for demo page -->
+      <div class="d-flex align-items-center gap-2">
+        <button
+          type="button"
+          class="btn btn-outline-danger btn-sm"
+
+          @click="facilityService.resetData().then(() => { loadSlots(); toast = ''; })"
+        >
+          Reset Demo
+        </button>
+
       <!-- Profile menu: switch between Club EXCO and Facility Admin -->
       <div class="position-relative">
         <button
@@ -156,7 +167,7 @@ onMounted(async () => {
         </div>
       </div>
     </div>
-
+  </div>
     <!-- Club switcher appears only for Club EXCO -->
     <div v-if="!isAdmin" class="mb-3">
       <label for="clubSwitcher" class="form-label fw-bold">Club Switcher</label>
