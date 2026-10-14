@@ -16,7 +16,7 @@
 Arts & Cultural Fraternity (ACF) and sports CCAs across Singapore Management University (SMU) rely on highly fragmented communication channels (Telegram chats, ad-hoc Google Sheets, When2Meet polls, and email chains) to schedule rehearsals, book facilities, and coordinate day-of event operations.
 
 This fragmentation creates three operational bottlenecks:
-1. **Facility Under-utilization & Room Waste:** CCAs holding block bookings cannot easily release unused slots to peer clubs without manual administrator intervention.
+1. **Facility Under-utilisation & Room Waste:** CCAs holding block bookings cannot easily release unused slots to peer clubs without manual administrator intervention.
 2. **Scheduling Friction:** Finding overlapping availability for 20+ member rehearsal rosters requires repetitive polling and manual clash reconciliation.
 3. **Day-of Event Vulnerability:** Unforeseen disruptions (weather incidents, room lockouts, member illness) lack real-time contingency routing and sandboxed alternative planning.
 
@@ -26,7 +26,7 @@ This fragmentation creates three operational bottlenecks:
 
 ## 2. Technical Architecture: Verified Room Exchange
 
-Addressing university facility reservation policy (**Prof K. J. Shim's feedback**), Pulse enforces a **Verified Room Exchange** workflow with institutional accountability:
+Addressing university facility reservation policy (**Prof K's feedback**), Pulse enforces a **Verified Room Exchange** workflow with institutional accountability:
 
 ```mermaid
 flowchart TD
@@ -47,7 +47,7 @@ flowchart TD
 ### Frontend & Build System
 - **Framework:** Vue 3 (Composition API `<script setup>`)
 - **Build Tool:** Vite 6 with Hot Module Replacement (HMR)
-- **Styling & UI:** Bootstrap 5.3 + Custom CSS Tokens (Figma design system aligned)
+- **Styling & UI:** Bootstrap 5.3 + CSS
 - **State Management:** Pinia (multi-club context and auth state)
 - **Package Manager:** `pnpm`
 
