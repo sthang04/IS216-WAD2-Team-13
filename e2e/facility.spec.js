@@ -10,7 +10,7 @@ test('Facility page loads with 6 slots', async ({ page }) => {
     })
   ).toBeVisible();
 
-  // Check that exactly 4 facility slots are displayed
+  // Check that exactly 6 facility slots are displayed
   await expect(
     page.locator('.row > .col-md-6.mb-3')
   ).toHaveCount(6);
