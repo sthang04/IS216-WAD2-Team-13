@@ -1,6 +1,6 @@
 <script setup>
 import { ref, onMounted, computed } from 'vue';
-import { facilityService } from './services/facilityService';
+import { facilityService, getStatusBadgeClass } from './services/facilityService';
 
 const slots = ref([])
 const loading = ref(true)
@@ -213,17 +213,20 @@ onMounted(async () => {
         <div class="card p-3 shadow-sm h-100">
           <div class="d-flex justify-content-between align-items-start">
             <h5 class="fw-bold mb-1">{{ slot.venue_name }}</h5>
-            <span class="badge bg-secondary">{{ slot.status }}</span>
+            <span :class="getStatusBadgeClass(slot.status)">{{ slot.status }}</span>
           </div>
           <small class="text-muted mb-2">{{ slot.building_location }}</small>
           <p class="mb-1"><strong>Time:</strong> {{ slot.time_slot }}</p>
           <p class="mb-0 text-muted small"><strong>Owner:</strong> {{ slot.owner_club }}</p>
           <p v-if="slot.claiming_club" class="mb-0 text-muted small"><strong>Claiming Club:</strong> {{ slot.claiming_club }}</p>
+          <p v-if="slot.audit_ticket_id" class="mb-0 text-muted small"><strong>Audit Ticket:</strong>
+          <span class="badge bg-dark font-monospace ms-1">{{ slot.audit_ticket_id }}</span></p>
+
 
           <!-- Same action button section, with role-specific conditions -->
           <div class="mt-auto d-flex flex-wrap gap-2 pt-3">
             <button
-              v-if="!isAdmin && slot.status === 'Booked' && slot.owner_club === selectedClub"
+              v-if="!isAdmin && (slot.status === 'Booked' || slot.status === 'Officially Confirmed') && slot.owner_club === selectedClub"
               class="btn btn-outline-primary btn-sm"
               :disabled="processingId !== null"
               @click="handleRelease(slot)">

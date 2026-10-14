@@ -114,7 +114,7 @@ export const facilityService = {
     async releaseSlot(id, actingClub) {
         // ADDED: verify this is the acting club's own BOOKED slot.
         const current = await findSlot(id)
-        if (!current || current.status !== 'Booked' || current.owner_club !== actingClub) {
+        if (!current || (current.status !== 'Booked' && current.status !== 'Officially Confirmed') || current.owner_club !== actingClub) {
             throw new Error('Only the owner club can release its booked facility.')
         }
         const updates = {
@@ -126,7 +126,7 @@ export const facilityService = {
 
         if (isSupabaseConfigured() && supabase) {
             const {data, error} = await supabase.from('facility_slots').update(updates)
-                .eq('id', id).eq('status', 'Booked').eq('owner_club', actingClub).select()
+                .eq('id', id).in('status', ['Booked', 'Officially Confirmed']).eq('owner_club', actingClub).select()
             if (error) throw error
             if (!data?.length) throw new Error('The booking has changed; please refresh.')
             return {success: true, data: data[0], source: 'supabase'}
@@ -177,7 +177,7 @@ export const facilityService = {
         const newOwner = slotTarget.claiming_club
 
         const updates = {
-            status: "Booked",  // CHANGED: no fourth status
+            status: "Officially Confirmed",  // CHANGED: no fourth status
             owner_club: newOwner,
             claiming_club: null,
             audit_ticket_id: null,
@@ -255,3 +255,17 @@ export const facilityService = {
         return {success: true}
     }
 }
+
+// Status badge styling helper 
+
+export function getStatusBadgeClass(status) {
+   switch(status) {
+    case 'Proposed Peer Transfer': return 'badge bg-warning text-dark'
+    case 'Pending Admin Sign-off': return 'badge bg-info text-dark'
+    case 'Officially Confirmed': return 'badge bg-success'
+    case 'Booked':
+    default: 
+      return 'badge bg-secondary'
+   } 
+}
+
