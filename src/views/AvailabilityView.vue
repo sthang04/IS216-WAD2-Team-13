@@ -2,7 +2,8 @@
 import { ref, computed } from 'vue';
 
 const props = defineProps({
-  apiMode: { type: Boolean, default: false }
+  apiMode: { type: Boolean, default: false },
+  readOnly: { type: Boolean, default: false }
 });
 
 const emit = defineEmits(['back']);
@@ -10,6 +11,13 @@ const emit = defineEmits(['back']);
 const selectedSubcommittee = ref('All ExCo')
 const showClassBaseline = ref(true)
 const toastMsg = ref('')
+
+// Guests can look around but not make changes
+function blockedForGuest() {
+  if (!props.readOnly) return false
+  toastMsg.value = 'Guest view is read-only. Sign in as a CCA ExCo to make changes.'
+  return true
+}
 
 const days = ['Mon 12 Oct', 'Tue 13 Oct', 'Wed 14 Oct', 'Thu 15 Oct', 'Fri 16 Oct', 'Sat 17 Oct', 'Sun 18 Oct']
 const hours = [
@@ -53,6 +61,7 @@ function isMySlotAvailable(dIdx, hIdx) {
 }
 
 function handleCellClick(d, h, dIdx, hIdx) {
+  if (blockedForGuest()) return
   const key = `${dIdx}_${hIdx}`
   const wasAvailable = !!myAvailability.value[key]
   myAvailability.value[key] = !wasAvailable
@@ -91,6 +100,7 @@ function getClassName(dIdx, hIdx) {
 }
 
 function pingMemberOnTelegram(member) {
+  if (blockedForGuest()) return
   toastMsg.value = `Telegram reminder dispatched to ${member.name} (${member.handle}): "Please confirm your availability for SMU Arts Festival rehearsals."`
   setTimeout(() => {
     toastMsg.value = ''
@@ -98,6 +108,7 @@ function pingMemberOnTelegram(member) {
 }
 
 function pingAllOnTelegram() {
+  if (blockedForGuest()) return
   toastMsg.value = 'Automated Telegram broadcast dispatched to all 3 unconfirmed ExCo members!'
   setTimeout(() => {
     toastMsg.value = ''
@@ -168,6 +179,7 @@ function toggleRecipient(id) {
 }
 
 function openMeetingModal(slotInfo = null) {
+  if (blockedForGuest()) return
   if (slotInfo) {
     if (slotInfo.date) meetingForm.value.date = slotInfo.date
     if (slotInfo.time) meetingForm.value.time = slotInfo.time

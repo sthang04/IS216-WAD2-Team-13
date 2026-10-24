@@ -1,6 +1,7 @@
 <script setup>
 import { ref, computed, onMounted, onUnmounted } from 'vue';
-import { DEMO_PERSONAS } from '../services/authProfiles';
+import { DEMO_PERSONAS, DEMO_PASSWORD } from '../services/authProfiles';
+import { signIn, isSmuEmail as checkSmuEmail, findPersonaByEmail } from '../services/authService';
 
 const emit = defineEmits(['login', 'explore']);
 
@@ -9,8 +10,7 @@ const password = ref('')
 const isPasswordFocused = ref(false)
 const isTyping = ref(false)
 const errorMsg = ref('')
-const showSsoModal = ref(false)
-const activeSsoProvider = ref('')
+const isSubmitting = ref(false)
 
 // Cursor tracking for Pulse Beacon
 const mouseX = ref(0)
@@ -22,41 +22,14 @@ function handleMouseMove(e) {
   mouseY.value = ((e.clientY - rect.top) / rect.height - 0.5) * 24
 }
 
-// SMU Domain Validation
-const isSmuEmail = computed(() => {
-  const pattern = /^[a-zA-Z0-9._%+-]+@([a-zA-Z0-9.-]+\.)?smu\.edu\.sg$/i
-  return pattern.test(email.value.trim())
-})
-
-const derivedRole = computed(() => {
-  const lower = email.value.trim().toLowerCase()
-  if (!lower) return null
-  if (lower.includes('osl') || lower.includes('admin') || (!lower.match(/\.\d{4}@/) && lower.endsWith('@smu.edu.sg'))) {
-    return { name: 'Facility Admin (OSL)', type: 'admin', club: 'ACF ExCo', isDev: false }
-  }
-  if (lower.includes('dev')) {
-    return { name: 'Developer (All CCAs)', type: 'dev', club: 'Eurhythmix', isDev: true }
-  }
-  if (lower.includes('darren') || lower.includes('samba')) {
-    return { name: 'Club EXCO (Samba Masala)', type: 'club', club: 'Samba Masala', isDev: false }
-  }
-  if (lower.includes('marcus') || lower.includes('symphonia')) {
-    return { name: 'Club EXCO (Symphonia)', type: 'club', club: 'Symphonia', isDev: false }
-  }
-  return { name: 'Club EXCO (Eurhythmix)', type: 'club', club: 'Eurhythmix', isDev: false }
-})
+// SMU Domain Validation & ExCo list preview (same rules the sign-in uses)
+const isSmuEmail = computed(() => checkSmuEmail(email.value))
+const matchedPersona = computed(() => findPersonaByEmail(email.value))
 
 // Dynamic Typewriter Animated Placeholder for Login Email
-const sampleQueries = [
-  'john.doe.2025@scis.smu.edu.sg',
-  'rachel.tan.2024@scis.smu.edu.sg',
-  'darren.koh.2024@business.smu.edu.sg',
-  'marcus.lim.2024@socsc.smu.edu.sg',
-  'chloe.ang@smu.edu.sg',
-  'dev.admin@smu.edu.sg',
-]
+const sampleQueries = Object.values(DEMO_PERSONAS).map((p) => p.email)
 
-const currentPlaceholder = ref('john.doe.2025@scis.smu.edu.sg')
+const currentPlaceholder = ref(sampleQueries[0])
 let placeholderTimer = null
 let queryIndex = 0
 let charIndex = 0
@@ -96,66 +69,47 @@ onUnmounted(() => {
   if (placeholderTimer) clearTimeout(placeholderTimer)
 })
 
+// All sign-in paths go through the auth service (real password check)
+async function completeLogin(loginEmail, loginPassword) {
+  errorMsg.value = ''
+  isSubmitting.value = true
+  try {
+    const persona = await signIn(loginEmail, loginPassword)
+    emit('login', persona)
+  } catch (err) {
+    errorMsg.value = err.message
+  } finally {
+    isSubmitting.value = false
+  }
+}
+
 // Typewriter Simulation for Demo Logins
 async function simulateTypewriter(personaKey) {
   const persona = DEMO_PERSONAS[personaKey]
-  if (!persona || isTyping.value) return
+  if (!persona || isTyping.value || isSubmitting.value) return
 
   isTyping.value = true
   email.value = ''
   password.value = ''
   errorMsg.value = ''
 
-  const targetEmail = persona.email
-  const targetPassword = 'password123'
-
-  for (let i = 0; i < targetEmail.length; i++) {
-    email.value += targetEmail[i]
+  for (let i = 0; i < persona.email.length; i++) {
+    email.value += persona.email[i]
     await new Promise(r => setTimeout(r, 22))
   }
   await new Promise(r => setTimeout(r, 150))
 
-  for (let i = 0; i < targetPassword.length; i++) {
-    password.value += targetPassword[i]
+  for (let i = 0; i < DEMO_PASSWORD.length; i++) {
+    password.value += DEMO_PASSWORD[i]
     await new Promise(r => setTimeout(r, 22))
   }
   await new Promise(r => setTimeout(r, 250))
 
   isTyping.value = false
-  emit('login', {
-    personaId: persona.id,
-    email: persona.email,
-    name: persona.name,
-    role: persona.role,
-    club: persona.cca,
-    allowedClubs: persona.allowedClubs,
-    isDev: persona.isDev,
-    smartSearches: persona.smartSearches,
-  })
+  await completeLogin(persona.email, DEMO_PASSWORD)
 }
 
-// 1-Click Institutional SSO Selection (Microsoft / Google)
-function openSsoModal(provider) {
-  activeSsoProvider.value = provider
-  showSsoModal.value = true
-}
-
-function selectSsoAccount(personaKey) {
-  const persona = DEMO_PERSONAS[personaKey]
-  showSsoModal.value = false
-  emit('login', {
-    personaId: persona.id,
-    email: persona.email,
-    name: persona.name,
-    role: persona.role,
-    club: persona.cca,
-    allowedClubs: persona.allowedClubs,
-    isDev: persona.isDev,
-    smartSearches: persona.smartSearches,
-  })
-}
-
-function handleManualLogin() {
+async function handleManualLogin() {
   if (!email.value.trim()) {
     errorMsg.value = 'Please enter your SMU institutional email.'
     return
@@ -164,26 +118,11 @@ function handleManualLogin() {
     errorMsg.value = 'Access restricted: Please enter an authorized @*.smu.edu.sg account.'
     return
   }
-
-  // Derive persona
-  const lower = email.value.trim().toLowerCase()
-  let matchedPersona = DEMO_PERSONAS.rachel
-  if (lower.includes('darren') || lower.includes('samba')) matchedPersona = DEMO_PERSONAS.darren
-  else if (lower.includes('marcus') || lower.includes('symphonia')) matchedPersona = DEMO_PERSONAS.marcus
-  else if (lower.includes('chloe') || lower.includes('admin') || lower.includes('osl')) matchedPersona = DEMO_PERSONAS.chloe
-  else if (lower.includes('dev')) matchedPersona = DEMO_PERSONAS.dev
-  else if (lower.includes('john') || lower.includes('doe')) matchedPersona = DEMO_PERSONAS.john
-
-  emit('login', {
-    personaId: matchedPersona.id,
-    email: email.value.trim(),
-    name: matchedPersona.name,
-    role: derivedRole.value.type,
-    club: derivedRole.value.club,
-    allowedClubs: matchedPersona.allowedClubs,
-    isDev: derivedRole.value.isDev,
-    smartSearches: matchedPersona.smartSearches,
-  })
+  if (!password.value) {
+    errorMsg.value = 'Please enter your password.'
+    return
+  }
+  await completeLogin(email.value, password.value)
 }
 </script>
 
@@ -342,61 +281,9 @@ function handleManualLogin() {
             <!-- Two-Column Internal Split: Credentials (Left) & Quick-Select Personas (Right) -->
             <div class="row g-4 align-items-stretch">
               
-              <!-- Sub-Column 1: Institutional SSO & Credentials Form -->
+              <!-- Sub-Column 1: Credentials Form -->
               <div class="col-12 col-md-6 pe-md-4 border-end-md d-flex flex-column justify-content-between">
                 <div>
-                  <div class="d-flex justify-content-between align-items-center mb-2">
-                    <span class="text-muted small fw-bold text-uppercase" style="font-size: 0.68rem; letter-spacing: 0.05em;">
-                      Institutional SSO
-                    </span>
-                    <span class="badge bg-secondary-subtle text-dark border" style="font-size: 0.65rem;">OAuth 2.0</span>
-                  </div>
-
-                  <!-- Institutional SSO Quick Buttons -->
-                  <div class="d-flex flex-column gap-2 mb-3">
-                    <button
-                      type="button"
-                      class="btn btn-outline-secondary py-2 px-3 d-flex align-items-center justify-content-between rounded-3 border bg-white shadow-sm sso-btn"
-                      @click="openSsoModal('Microsoft 365')"
-                    >
-                      <div class="d-flex align-items-center gap-2">
-                        <svg width="17" height="17" viewBox="0 0 23 23">
-                          <path fill="#f35325" d="M1 1h10v10H1z"/>
-                          <path fill="#81bc06" d="M12 1h10v10H12z"/>
-                          <path fill="#05a6f0" d="M1 12h10v10H1z"/>
-                          <path fill="#ffba08" d="M12 12h10v10H12z"/>
-                        </svg>
-                        <span class="fw-semibold text-dark" style="font-size: 0.82rem;">Sign in with Microsoft</span>
-                      </div>
-                      <span class="badge bg-light text-muted border flex-shrink-0" style="font-size: 0.65rem;">SMU OASIS</span>
-                    </button>
-
-                    <button
-                      type="button"
-                      class="btn btn-outline-secondary py-2 px-3 d-flex align-items-center justify-content-between rounded-3 border bg-white shadow-sm sso-btn"
-                      @click="openSsoModal('Google Workspace')"
-                    >
-                      <div class="d-flex align-items-center gap-2">
-                        <svg width="17" height="17" viewBox="0 0 24 24">
-                          <path fill="#4285F4" d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.8-2.4 3.66v3.05h3.9c2.27-2.09 3.645-5.18 3.645-9.15z"/>
-                          <path fill="#34A853" d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.9-3.05c-1.08.72-2.45 1.16-4.03 1.16-3.1 0-5.74-2.1-6.68-4.91H1.21v3.13C3.26 21.48 7.33 24 12 24z"/>
-                          <path fill="#FBBC05" d="M5.32 14.29c-.24-.73-.38-1.5-.38-2.29s.14-1.56.38-2.29V6.58H1.21C.44 8.11 0 9.99 0 12s.44 3.89 1.21 5.42l4.11-3.13z"/>
-                          <path fill="#EA4335" d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.33 0 3.26 2.52 1.21 6.58l4.11 3.13c.94-2.81 3.58-4.96 6.68-4.96z"/>
-                        </svg>
-                        <span class="fw-semibold text-dark" style="font-size: 0.82rem;">Sign in with Google</span>
-                      </div>
-                      <span class="badge bg-light text-muted border flex-shrink-0" style="font-size: 0.65rem;">SMU Google</span>
-                    </button>
-                  </div>
-
-                  <!-- Divider -->
-                  <div class="position-relative text-center my-3">
-                    <hr class="text-muted opacity-25 m-0">
-                    <span class="position-absolute top-50 start-50 translate-middle bg-white px-2 text-muted small" style="font-size: 0.675rem; text-transform: uppercase; letter-spacing: 0.05em;">
-                      or credentials
-                    </span>
-                  </div>
-
                   <!-- Error Banner -->
                   <div v-if="errorMsg" class="alert alert-danger py-2 px-3 small rounded-3 mb-2" role="alert">
                     {{ errorMsg }}
@@ -432,8 +319,11 @@ function handleManualLogin() {
 
                       <!-- Domain Validation Tag -->
                       <div v-if="email.trim()" class="mt-1">
-                        <span v-if="isSmuEmail" class="badge bg-success bg-opacity-10 text-success border border-success-subtle" style="font-size: 0.68rem;">
-                          Verified: <strong>{{ derivedRole?.name }}</strong>
+                        <span v-if="isSmuEmail && matchedPersona" class="badge bg-success bg-opacity-10 text-success border border-success-subtle" style="font-size: 0.68rem;">
+                          Verified: <strong>{{ matchedPersona.roleLabel }}</strong>
+                        </span>
+                        <span v-else-if="isSmuEmail" class="badge bg-warning bg-opacity-10 text-dark border border-warning-subtle" style="font-size: 0.68rem;">
+                          Not on the ExCo list: explore as guest instead
                         </span>
                         <span v-else class="badge bg-danger bg-opacity-10 text-danger border border-danger-subtle" style="font-size: 0.68rem;">
                           Restricted to @*.smu.edu.sg
@@ -471,9 +361,10 @@ function handleManualLogin() {
                     <button 
                       type="submit" 
                       class="btn btn-pulse-primary w-100 py-2 fw-bold d-flex align-items-center justify-content-center gap-2 shadow-sm"
-                      :disabled="isTyping"
+                      :disabled="isTyping || isSubmitting"
                       style="font-size: 0.85rem;"
                     >
+                      <span v-if="isSubmitting" class="spinner-border spinner-border-sm" role="status"></span>
                       <span>Sign In to Workspace</span>
                       <span>→</span>
                     </button>
@@ -506,12 +397,12 @@ function handleManualLogin() {
                     <button 
                       type="button" 
                       class="btn btn-sm btn-outline-secondary text-start p-2 px-3 rounded-3 d-flex justify-content-between align-items-center bg-white persona-tile"
-                      :disabled="isTyping"
+                      :disabled="isTyping || isSubmitting"
                       @click="simulateTypewriter('rachel')"
                     >
                       <div class="me-2 text-truncate">
                         <strong class="d-block text-dark text-truncate" style="font-size: 0.78rem;">Rachel Tan (Eurhythmix ExCo)</strong>
-                        <small class="text-muted d-block text-truncate" style="font-size: 0.68rem;">rachel.tan.2024@scis.smu.edu.sg • Eurhythmix</small>
+                        <small class="text-muted d-block text-truncate" style="font-size: 0.68rem;">{{ DEMO_PERSONAS.rachel.email }} • Eurhythmix</small>
                       </div>
                       <span class="badge bg-danger bg-opacity-10 text-danger border flex-shrink-0" style="font-size: 0.68rem;">Eurhythmix</span>
                     </button>
@@ -520,12 +411,12 @@ function handleManualLogin() {
                     <button 
                       type="button" 
                       class="btn btn-sm btn-outline-secondary text-start p-2 px-3 rounded-3 d-flex justify-content-between align-items-center bg-white persona-tile"
-                      :disabled="isTyping"
+                      :disabled="isTyping || isSubmitting"
                       @click="simulateTypewriter('darren')"
                     >
                       <div class="me-2 text-truncate">
                         <strong class="d-block text-dark text-truncate" style="font-size: 0.78rem;">Darren Koh (Samba Masala ExCo)</strong>
-                        <small class="text-muted d-block text-truncate" style="font-size: 0.68rem;">darren.koh.2024@business.smu.edu.sg • Samba</small>
+                        <small class="text-muted d-block text-truncate" style="font-size: 0.68rem;">{{ DEMO_PERSONAS.darren.email }} • Samba</small>
                       </div>
                       <span class="badge bg-warning bg-opacity-25 text-dark border flex-shrink-0" style="font-size: 0.68rem;">Samba Masala</span>
                     </button>
@@ -534,12 +425,12 @@ function handleManualLogin() {
                     <button 
                       type="button" 
                       class="btn btn-sm btn-outline-secondary text-start p-2 px-3 rounded-3 d-flex justify-content-between align-items-center bg-white persona-tile"
-                      :disabled="isTyping"
+                      :disabled="isTyping || isSubmitting"
                       @click="simulateTypewriter('marcus')"
                     >
                       <div class="me-2 text-truncate">
                         <strong class="d-block text-dark text-truncate" style="font-size: 0.78rem;">Marcus Lim (SMU Symphonia ExCo)</strong>
-                        <small class="text-muted d-block text-truncate" style="font-size: 0.68rem;">marcus.lim.2024@socsc.smu.edu.sg • Symphonia</small>
+                        <small class="text-muted d-block text-truncate" style="font-size: 0.68rem;">{{ DEMO_PERSONAS.marcus.email }} • Symphonia</small>
                       </div>
                       <span class="badge bg-info bg-opacity-10 text-dark border flex-shrink-0" style="font-size: 0.68rem;">Symphonia</span>
                     </button>
@@ -548,12 +439,12 @@ function handleManualLogin() {
                     <button 
                       type="button" 
                       class="btn btn-sm btn-outline-secondary text-start p-2 px-3 rounded-3 d-flex justify-content-between align-items-center bg-white persona-tile"
-                      :disabled="isTyping"
+                      :disabled="isTyping || isSubmitting"
                       @click="simulateTypewriter('chloe')"
                     >
                       <div class="me-2 text-truncate">
                         <strong class="d-block text-dark text-truncate" style="font-size: 0.78rem;">Chloe Ang (OSL Facility Admin)</strong>
-                        <small class="text-muted d-block text-truncate" style="font-size: 0.68rem;">chloe.ang@smu.edu.sg • Administrative Sign-Off</small>
+                        <small class="text-muted d-block text-truncate" style="font-size: 0.68rem;">{{ DEMO_PERSONAS.chloe.email }} • Administrative Sign-Off</small>
                       </div>
                       <span class="badge bg-dark text-white flex-shrink-0" style="font-size: 0.68rem;">OSL Staff</span>
                     </button>
@@ -562,12 +453,12 @@ function handleManualLogin() {
                     <button 
                       type="button" 
                       class="btn btn-sm btn-outline-secondary text-start p-2 px-3 rounded-3 d-flex justify-content-between align-items-center bg-white persona-tile"
-                      :disabled="isTyping"
+                      :disabled="isTyping || isSubmitting"
                       @click="simulateTypewriter('dev')"
                     >
                       <div class="me-2 text-truncate">
                         <strong class="d-block text-dark text-truncate" style="font-size: 0.78rem;">Dev Administrator (All CCAs)</strong>
-                        <small class="text-muted d-block text-truncate" style="font-size: 0.68rem;">dev.admin@smu.edu.sg • All 24 CCAs Unlocked</small>
+                        <small class="text-muted d-block text-truncate" style="font-size: 0.68rem;">{{ DEMO_PERSONAS.dev.email }} • All 24 CCAs Unlocked</small>
                       </div>
                       <span class="badge text-white flex-shrink-0" style="background-color: var(--pulse-purple-transit); font-size: 0.68rem;">Dev View</span>
                     </button>
@@ -591,54 +482,6 @@ function handleManualLogin() {
 
           </div>
         </div>
-
-      </div>
-    </div>
-
-    <!-- Modal: Simulated Institutional SSO Account Picker (Microsoft / Google) -->
-    <div 
-      v-if="showSsoModal" 
-      class="position-fixed top-0 start-0 w-100 h-100 d-flex align-items-center justify-content-center p-3"
-      style="background: rgba(15, 23, 42, 0.65); backdrop-filter: blur(4px); z-index: 2000;"
-    >
-      <div class="card shadow-lg border-0 p-4 w-100" style="max-width: 440px; border-radius: 1rem;">
-        
-        <div class="d-flex justify-content-between align-items-start mb-3">
-          <div>
-            <div class="d-flex align-items-center gap-2 mb-1">
-              <span class="badge bg-secondary-subtle text-dark" style="font-size: 0.7rem;">Institutional SSO</span>
-              <span class="small text-muted">{{ activeSsoProvider }}</span>
-            </div>
-            <h5 class="fw-bold mb-0">Choose an SMU Account</h5>
-          </div>
-          <button type="button" class="btn-close" @click="showSsoModal = false"></button>
-        </div>
-
-        <p class="text-muted small mb-3">
-          Select an authenticated university identity to continue to Pulse Workspace:
-        </p>
-
-        <div class="d-flex flex-column gap-2 mb-3">
-          
-          <button 
-            v-for="(persona, key) in DEMO_PERSONAS" 
-            :key="key"
-            type="button"
-            class="btn btn-outline-light text-dark text-start p-2 border rounded-3 d-flex justify-content-between align-items-center hover-bg-light"
-            @click="selectSsoAccount(key)"
-          >
-            <div>
-              <div class="fw-bold" style="font-size: 0.825rem;">{{ persona.name }}</div>
-              <small class="text-muted" style="font-size: 0.725rem;">{{ persona.email }}</small>
-            </div>
-            <span class="badge bg-light text-muted border" style="font-size: 0.7rem;">{{ persona.roleLabel }}</span>
-          </button>
-
-        </div>
-
-        <button type="button" class="btn btn-light w-100 btn-sm text-muted" @click="showSsoModal = false">
-          Cancel
-        </button>
 
       </div>
     </div>

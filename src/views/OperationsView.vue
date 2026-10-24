@@ -2,10 +2,18 @@
 import { ref, computed } from 'vue';
 
 const props = defineProps({
-  apiMode: { type: Boolean, default: false }
+  apiMode: { type: Boolean, default: false },
+  readOnly: { type: Boolean, default: false }
 });
 
 const toastMsg = ref('')
+
+// Guests can look around but not make changes
+function blockedForGuest() {
+  if (!props.readOnly) return false
+  toastMsg.value = 'Guest view is read-only. Sign in as a CCA ExCo to make changes.'
+  return true
+}
 const delayNotice = ref('')
 const selectedTaskId = ref('cue-2')
 const operationsSearchQuery = ref('')
@@ -98,6 +106,7 @@ const filteredPerformers = computed(() => {
 })
 
 function reportLateETA(performer) {
+  if (blockedForGuest()) return
   performer.status = 'Delayed'
   performer.eta = '+15m Late (SOE Class)'
   toastMsg.value = `Updated ETA for ${performer.name}: +15m late from SOE. Act 2 soundcheck cues auto-flagged on timeline!`
@@ -105,6 +114,7 @@ function reportLateETA(performer) {
 }
 
 function checkInPerformer(performer, isManualOverride = false) {
+  if (blockedForGuest()) return
   performer.status = 'Checked In'
   performer.eta = 'On Site ✓'
   performer.checkinTime = '18:14 SGT'
@@ -117,6 +127,7 @@ function checkInPerformer(performer, isManualOverride = false) {
 
 // One-Click Delay Cascade (+15 mins)
 function applyOneClickDelay() {
+  if (blockedForGuest()) return
   // Shifts downstream tasks by 15 mins
   tasks.value = tasks.value.map(task => {
     if (task.status === 'Completed') return task
@@ -139,6 +150,7 @@ function shiftTime(timeStr, mins) {
 }
 
 function publishToMobile() {
+  if (blockedForGuest()) return
   toastMsg.value = 'Schedule Published Live! Telegram Bot broadcasted updated cues to 42 crew members. Web Push alert triggered.'
   setTimeout(() => { toastMsg.value = '' }, 5000)
 }
@@ -186,12 +198,14 @@ const standbyPool = ref([
 ])
 
 function triggerStandbyForPerformer(p) {
+  if (blockedForGuest()) return
   targetAbsentPerformer.value = p
   activeCopilotTab.value = 'standby'
   showAiCopilotModal.value = true
 }
 
 function dispatchStandby(candidate) {
+  if (blockedForGuest()) return
   isDispatchingStandby.value = true
   setTimeout(() => {
     isDispatchingStandby.value = false
