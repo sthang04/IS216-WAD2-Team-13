@@ -7,6 +7,7 @@ import {
   canActForClub, canOpenView, canResetDemo as canResetDemoFor, homeView,
 } from './services/authService';
 import LandingLoginView from './views/LandingLoginView.vue';
+import SignUpView from './views/SignUpView.vue';
 import AvailabilityView from './views/AvailabilityView.vue';
 import OperationsView from './views/OperationsView.vue';
 import EventRiskView from './views/EventRiskView.vue';
@@ -92,6 +93,7 @@ const sessionPersona = ref(null) // who signed in
 const activePersona = ref(GUEST_PERSONA) // who the app is acting as (only Dev can switch this)
 const selectedClub = ref(null)
 const profileMenuOpen = ref(false)
+const showSignUp = ref(false)
 
 const isAdmin = computed(() => activePersona.value.role === 'admin')
 const isDev = computed(() => activePersona.value.isDev)
@@ -463,6 +465,14 @@ function handleGuestExplore() {
   toastType.value = 'info'
 }
 
+// New ExCo finished sign-up (already signed in by authService)
+function handleSignUpDone(persona) {
+  showSignUp.value = false
+  applySession(persona)
+  toast.value = `Welcome to Pulse, ${persona.name}! You're signed in as ${persona.roleLabel}.`
+  toastType.value = 'success'
+}
+
 async function handleSignOut() {
   profileMenuOpen.value = false
   try {
@@ -511,11 +521,19 @@ onUnmounted(() => {
       <div class="spinner-border text-danger" role="status"></div>
     </div>
 
+    <!-- ExCo sign-up (email must be on OSL's ExCo list) -->
+    <SignUpView
+      v-else-if="showSignUp && !isLoggedIn"
+      @done="handleSignUpDone"
+      @cancel="showSignUp = false"
+    />
+
     <!-- View 0: Landing & Interactive Login Experience (Shown when logged out) -->
     <div v-else-if="!isLoggedIn || currentView === 'landing'">
       <LandingLoginView 
         @login="handleUserLogin"
         @explore="handleGuestExplore"
+        @signup="showSignUp = true"
       />
     </div>
 

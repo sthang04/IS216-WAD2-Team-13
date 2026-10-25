@@ -23,5 +23,5 @@ if (isSupabaseConfigured()) {
 }
 
 
-// create and export supabase
-export const supabase = isSupabaseConfigured() ? createClient(supabaseUrl, supabaseAnonKey) : null;
+// create and export supabase (a single client, so only one instance manages the login session)
+export const supabase = client;

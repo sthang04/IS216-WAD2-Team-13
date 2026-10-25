@@ -1,14 +1,15 @@
 <script setup>
 import { ref, computed, onMounted, onUnmounted } from 'vue';
-import { DEMO_PERSONAS, DEMO_PASSWORD } from '../services/authProfiles';
+import { DEMO_PERSONAS } from '../services/authProfiles';
 import { signIn, isSmuEmail as checkSmuEmail, findPersonaByEmail } from '../services/authService';
+import PasswordVisibilityToggle from '../components/PasswordVisibilityToggle.vue';
 
-const emit = defineEmits(['login', 'explore']);
+const emit = defineEmits(['login', 'explore', 'signup']);
 
 const email = ref('')
 const password = ref('')
 const isPasswordFocused = ref(false)
-const isTyping = ref(false)
+const showPassword = ref(false)
 const errorMsg = ref('')
 const isSubmitting = ref(false)
 
@@ -36,7 +37,7 @@ let charIndex = 0
 let isDeleting = false
 
 function tickPlaceholder() {
-  if (email.value.length > 0 || isTyping.value) return
+  if (email.value.length > 0) return
 
   const target = sampleQueries[queryIndex]
   if (!isDeleting) {
@@ -81,32 +82,6 @@ async function completeLogin(loginEmail, loginPassword) {
   } finally {
     isSubmitting.value = false
   }
-}
-
-// Typewriter Simulation for Demo Logins
-async function simulateTypewriter(personaKey) {
-  const persona = DEMO_PERSONAS[personaKey]
-  if (!persona || isTyping.value || isSubmitting.value) return
-
-  isTyping.value = true
-  email.value = ''
-  password.value = ''
-  errorMsg.value = ''
-
-  for (let i = 0; i < persona.email.length; i++) {
-    email.value += persona.email[i]
-    await new Promise(r => setTimeout(r, 22))
-  }
-  await new Promise(r => setTimeout(r, 150))
-
-  for (let i = 0; i < DEMO_PASSWORD.length; i++) {
-    password.value += DEMO_PASSWORD[i]
-    await new Promise(r => setTimeout(r, 22))
-  }
-  await new Promise(r => setTimeout(r, 250))
-
-  isTyping.value = false
-  await completeLogin(persona.email, DEMO_PASSWORD)
 }
 
 async function handleManualLogin() {
@@ -226,7 +201,7 @@ async function handleManualLogin() {
                 <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
                 <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
               </svg>
-              <span>Authenticated via SMU Institutional Single Sign-On (@*.smu.edu.sg)</span>
+              <span>Sign-in restricted to SMU ExCos & OSL staff (@*.smu.edu.sg)</span>
             </div>
 
           </div>
@@ -274,15 +249,14 @@ async function handleManualLogin() {
 
               <div class="d-inline-flex align-items-center gap-2 px-3 py-1 rounded-pill bg-light border text-muted small" style="font-size: 0.675rem;">
                 <span class="pulse-status-dot pulse-status-confirmed" style="width: 6px; height: 6px;"></span>
-                <span>Session: Active • SMU OASIS SSO</span>
+                <span>Secure sign-in for SMU ExCos & OSL</span>
               </div>
             </div>
 
-            <!-- Two-Column Internal Split: Credentials (Left) & Quick-Select Personas (Right) -->
+            <!-- Credentials Form -->
             <div class="row g-4 align-items-stretch">
               
-              <!-- Sub-Column 1: Credentials Form -->
-              <div class="col-12 col-md-6 pe-md-4 border-end-md d-flex flex-column justify-content-between">
+              <div class="col-12 d-flex flex-column justify-content-between">
                 <div>
                   <!-- Error Banner -->
                   <div v-if="errorMsg" class="alert alert-danger py-2 px-3 small rounded-3 mb-2" role="alert">
@@ -311,7 +285,6 @@ async function handleManualLogin() {
                           type="email" 
                           class="form-control border-start-0" 
                           :placeholder="email.length ? '' : currentPlaceholder"
-                          :disabled="isTyping"
                           required
                           style="font-size: 0.825rem;"
                         />
@@ -322,8 +295,8 @@ async function handleManualLogin() {
                         <span v-if="isSmuEmail && matchedPersona" class="badge bg-success bg-opacity-10 text-success border border-success-subtle" style="font-size: 0.68rem;">
                           Verified: <strong>{{ matchedPersona.roleLabel }}</strong>
                         </span>
-                        <span v-else-if="isSmuEmail" class="badge bg-warning bg-opacity-10 text-dark border border-warning-subtle" style="font-size: 0.68rem;">
-                          Not on the ExCo list: explore as guest instead
+                        <span v-else-if="isSmuEmail" class="badge bg-success bg-opacity-10 text-success border border-success-subtle" style="font-size: 0.68rem;">
+                          SMU account
                         </span>
                         <span v-else class="badge bg-danger bg-opacity-10 text-danger border border-danger-subtle" style="font-size: 0.68rem;">
                           Restricted to @*.smu.edu.sg
@@ -335,7 +308,6 @@ async function handleManualLogin() {
                     <div class="mb-3">
                       <div class="d-flex justify-content-between align-items-center mb-1">
                         <label class="form-label small fw-bold text-muted mb-0" style="font-size: 0.75rem;">Password</label>
-                        <span class="text-muted" style="font-size: 0.68rem;">SMU OASIS</span>
                       </div>
                       <div class="input-group">
                         <span class="input-group-text bg-white text-muted border-end-0">
@@ -346,22 +318,22 @@ async function handleManualLogin() {
                         </span>
                         <input 
                           v-model="password"
-                          type="password" 
-                          class="form-control border-start-0" 
+                          :type="showPassword ? 'text' : 'password'" 
+                          class="form-control border-start-0 pe-5" 
                           placeholder="••••••••••••"
-                          :disabled="isTyping"
                           @focus="isPasswordFocused = true"
                           @blur="isPasswordFocused = false"
                           required
                           style="font-size: 0.825rem;"
                         />
+                        <PasswordVisibilityToggle :visible="showPassword" @toggle="showPassword = !showPassword" />
                       </div>
                     </div>
 
                     <button 
                       type="submit" 
                       class="btn btn-pulse-primary w-100 py-2 fw-bold d-flex align-items-center justify-content-center gap-2 shadow-sm"
-                      :disabled="isTyping || isSubmitting"
+                      :disabled="isSubmitting"
                       style="font-size: 0.85rem;"
                     >
                       <span v-if="isSubmitting" class="spinner-border spinner-border-sm" role="status"></span>
@@ -369,100 +341,12 @@ async function handleManualLogin() {
                       <span>→</span>
                     </button>
                   </form>
-                </div>
-              </div>
 
-              <!-- Sub-Column 2: 1-Click Typewriter Demo Personas -->
-              <div class="col-12 col-md-6 ps-md-4 d-flex flex-column justify-content-between">
-                <div>
-                  <div class="d-flex justify-content-between align-items-center mb-2">
-                    <span class="text-muted small fw-bold text-uppercase" style="font-size: 0.68rem; letter-spacing: 0.05em;">
-                      Quick-Select Demo Personas
-                    </span>
-                    <span v-if="isTyping" class="badge bg-danger rounded-pill px-2 py-0 pulse-auto-typing-badge" style="font-size: 0.65rem;">
-                      Auto-Typing...
-                    </span>
-                    <span v-else class="badge bg-light text-muted border" style="font-size: 0.65rem;">
-                      1-Click Sign-In
-                    </span>
-                  </div>
-                  
-                  <p class="text-muted small mb-2" style="font-size: 0.725rem;">
-                    Instant evaluator simulation with scoped club permissions:
-                  </p>
-
-                  <div class="d-flex flex-column gap-2">
-                    
-                    <!-- Persona 1: Rachel Tan (Eurhythmix ExCo) -->
-                    <button 
-                      type="button" 
-                      class="btn btn-sm btn-outline-secondary text-start p-2 px-3 rounded-3 d-flex justify-content-between align-items-center bg-white persona-tile"
-                      :disabled="isTyping || isSubmitting"
-                      @click="simulateTypewriter('rachel')"
-                    >
-                      <div class="me-2 text-truncate">
-                        <strong class="d-block text-dark text-truncate" style="font-size: 0.78rem;">Rachel Tan (Eurhythmix ExCo)</strong>
-                        <small class="text-muted d-block text-truncate" style="font-size: 0.68rem;">{{ DEMO_PERSONAS.rachel.email }} • Eurhythmix</small>
-                      </div>
-                      <span class="badge bg-danger bg-opacity-10 text-danger border flex-shrink-0" style="font-size: 0.68rem;">Eurhythmix</span>
+                  <!-- New ExCos create their own account (only emails on OSL's ExCo list) -->
+                  <div class="text-center mt-2">
+                    <button type="button" class="btn btn-link btn-sm text-decoration-none" style="font-size: 0.78rem;" @click="emit('signup')">
+                      New ExCo? Create your account
                     </button>
-
-                    <!-- Persona 2: Darren Koh (Samba Masala ExCo) -->
-                    <button 
-                      type="button" 
-                      class="btn btn-sm btn-outline-secondary text-start p-2 px-3 rounded-3 d-flex justify-content-between align-items-center bg-white persona-tile"
-                      :disabled="isTyping || isSubmitting"
-                      @click="simulateTypewriter('darren')"
-                    >
-                      <div class="me-2 text-truncate">
-                        <strong class="d-block text-dark text-truncate" style="font-size: 0.78rem;">Darren Koh (Samba Masala ExCo)</strong>
-                        <small class="text-muted d-block text-truncate" style="font-size: 0.68rem;">{{ DEMO_PERSONAS.darren.email }} • Samba</small>
-                      </div>
-                      <span class="badge bg-warning bg-opacity-25 text-dark border flex-shrink-0" style="font-size: 0.68rem;">Samba Masala</span>
-                    </button>
-
-                    <!-- Persona 3: Marcus Lim (SMU Symphonia ExCo) -->
-                    <button 
-                      type="button" 
-                      class="btn btn-sm btn-outline-secondary text-start p-2 px-3 rounded-3 d-flex justify-content-between align-items-center bg-white persona-tile"
-                      :disabled="isTyping || isSubmitting"
-                      @click="simulateTypewriter('marcus')"
-                    >
-                      <div class="me-2 text-truncate">
-                        <strong class="d-block text-dark text-truncate" style="font-size: 0.78rem;">Marcus Lim (SMU Symphonia ExCo)</strong>
-                        <small class="text-muted d-block text-truncate" style="font-size: 0.68rem;">{{ DEMO_PERSONAS.marcus.email }} • Symphonia</small>
-                      </div>
-                      <span class="badge bg-info bg-opacity-10 text-dark border flex-shrink-0" style="font-size: 0.68rem;">Symphonia</span>
-                    </button>
-
-                    <!-- Persona 4: Chloe Ang (OSL Facility Administrator) -->
-                    <button 
-                      type="button" 
-                      class="btn btn-sm btn-outline-secondary text-start p-2 px-3 rounded-3 d-flex justify-content-between align-items-center bg-white persona-tile"
-                      :disabled="isTyping || isSubmitting"
-                      @click="simulateTypewriter('chloe')"
-                    >
-                      <div class="me-2 text-truncate">
-                        <strong class="d-block text-dark text-truncate" style="font-size: 0.78rem;">Chloe Ang (OSL Facility Admin)</strong>
-                        <small class="text-muted d-block text-truncate" style="font-size: 0.68rem;">{{ DEMO_PERSONAS.chloe.email }} • Administrative Sign-Off</small>
-                      </div>
-                      <span class="badge bg-dark text-white flex-shrink-0" style="font-size: 0.68rem;">OSL Staff</span>
-                    </button>
-
-                    <!-- Persona 5: Dev / Super Admin (All CCAs View) -->
-                    <button 
-                      type="button" 
-                      class="btn btn-sm btn-outline-secondary text-start p-2 px-3 rounded-3 d-flex justify-content-between align-items-center bg-white persona-tile"
-                      :disabled="isTyping || isSubmitting"
-                      @click="simulateTypewriter('dev')"
-                    >
-                      <div class="me-2 text-truncate">
-                        <strong class="d-block text-dark text-truncate" style="font-size: 0.78rem;">Dev Administrator (All CCAs)</strong>
-                        <small class="text-muted d-block text-truncate" style="font-size: 0.68rem;">{{ DEMO_PERSONAS.dev.email }} • All 24 CCAs Unlocked</small>
-                      </div>
-                      <span class="badge text-white flex-shrink-0" style="background-color: var(--pulse-purple-transit); font-size: 0.68rem;">Dev View</span>
-                    </button>
-
                   </div>
                 </div>
               </div>

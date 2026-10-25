@@ -39,10 +39,50 @@ export function isSmuEmail(email) {
   return SMU_EMAIL_PATTERN.test((email || '').trim())
 }
 
-// The ExCo list: only these emails can sign in, and the role comes from here, never from the user
+const NOT_EXCO_MESSAGE = 'Pulse sign-in is for CCA ExCos and OSL staff. Explore as a guest to view venues.'
+
+// Demo accounts (already onboarded): their club and role come from authProfiles.js
 export function findPersonaByEmail(email) {
   const normalized = (email || '').trim().toLowerCase()
   return Object.values(DEMO_PERSONAS).find((p) => p.email === normalized) || null
+}
+
+// Real ExCos: OSL adds one exco_members row per CCA they lead; they fill in the rest at sign-up
+function personaFromExcoRows(rows) {
+  const ccas = rows.map((r) => r.cca)
+  const first = rows[0]
+  const positions = Object.fromEntries(rows.map((r) => [r.cca, r.position]))
+  const roleLabel = ccas.length > 1
+    ? `ExCo (${ccas.join(' & ')})`
+    : (first.position ? `${first.cca} ${first.position}` : `${first.cca} ExCo`)
+  return {
+    id: `exco:${first.email}`,
+    name: rows.find((r) => r.full_name)?.full_name || first.email,
+    email: first.email,
+    role: 'club',
+    roleLabel,
+    cca: first.cca,
+    allowedClubs: ccas,
+    isDev: false,
+    sector: 'ACF • Arts & Culture',
+    smartSearches: ['All Venues', 'Dance Studio', 'Acoustic Room'],
+    positions,
+    telegramHandle: first.telegram_handle,
+  }
+}
+
+// Row-level security only lets a signed-in user read their own rows
+async function fetchExcoRows(email) {
+  const { data, error } = await supabase.from('exco_members').select('*').ilike('email', email).order('cca')
+  if (error) throw error
+  return data || []
+}
+
+async function personaForSignedInEmail(email) {
+  const demo = findPersonaByEmail(email)
+  if (demo) return demo
+  const rows = await fetchExcoRows(email)
+  return rows.length ? personaFromExcoRows(rows) : null
 }
 
 export async function signIn(email, password) {
@@ -50,25 +90,81 @@ export async function signIn(email, password) {
   if (!isSmuEmail(normalized)) {
     throw new Error('Restricted: please sign in with your @smu.edu.sg email.')
   }
-  const persona = findPersonaByEmail(normalized)
-  if (!persona) {
-    throw new Error('Pulse sign-in is for CCA ExCos and OSL staff. Explore as a guest to view venues.')
-  }
 
   if (isSupabaseConfigured() && supabase) {
     const { error } = await supabase.auth.signInWithPassword({ email: normalized, password })
     if (error) {
       throw new Error(error.message === 'Invalid login credentials' ? 'Incorrect email or password.' : error.message)
     }
+    const persona = await personaForSignedInEmail(normalized).catch(() => null)
+    if (!persona) {
+      await supabase.auth.signOut()
+      throw new Error(NOT_EXCO_MESSAGE)
+    }
     writeLocalSession(null)
-  } else {
-    // Offline fallback (no Supabase keys): accept the shared demo password only
-    if (password !== DEMO_PASSWORD) throw new Error('Incorrect email or password.')
-    writeLocalSession({ email: normalized })
+    sessionPersona = persona
+    return persona
   }
 
+  // Offline fallback (no Supabase keys): demo accounts with the shared demo password only
+  const persona = findPersonaByEmail(normalized)
+  if (!persona) throw new Error(NOT_EXCO_MESSAGE)
+  if (password !== DEMO_PASSWORD) throw new Error('Incorrect email or password.')
+  writeLocalSession({ email: normalized })
   sessionPersona = persona
   return persona
+}
+
+// Sign-up step 1: is this email on OSL's ExCo list, and not signed up yet?
+export async function checkSignupEligibility(email) {
+  const normalized = (email || '').trim().toLowerCase()
+  if (!isSmuEmail(normalized)) {
+    throw new Error('Restricted: please use your @smu.edu.sg email.')
+  }
+  if (findPersonaByEmail(normalized)) {
+    throw new Error('This is a demo account that is already set up. Sign in with it instead.')
+  }
+  if (!isSupabaseConfigured() || !supabase) {
+    throw new Error('Sign-up needs the Supabase connection, which is not configured on this device.')
+  }
+
+  const { data, error } = await supabase.rpc('check_exco_signup', { p_email: normalized })
+  if (error) throw new Error('Could not check the ExCo list right now. Please try again.')
+  if (data?.status === 'not_listed') {
+    throw new Error("This email isn't on the ExCo list. Ask OSL to add you, or explore as a guest.")
+  }
+  if (data?.status === 'already_registered') {
+    throw new Error('This email already has an account. Sign in instead.')
+  }
+  return { email: normalized, ccas: data.ccas }
+}
+
+// Sign-up step 2: create the account, then save their profile (never their CCAs, which OSL controls)
+// positions: { [cca]: title }, since someone leading 2 CCAs may hold a different title in each
+export async function signUpExco({ email, fullName, positions, telegramHandle, password }) {
+  const { data, error } = await supabase.auth.signUp({ email, password })
+  if (error) throw new Error(error.message)
+  if (!data.session) {
+    // Supabase is still set to email a confirmation link before the account can be used
+    throw new Error('Account created, but Supabase is waiting for email confirmation. Turn off "Confirm email" in Supabase Auth settings.')
+  }
+
+  const onboardedAt = new Date().toISOString()
+  for (const [cca, position] of Object.entries(positions)) {
+    const { error: profileError } = await supabase
+      .from('exco_members')
+      .update({ full_name: fullName, position, telegram_handle: telegramHandle, onboarded_at: onboardedAt })
+      .ilike('email', email)
+      .eq('cca', cca)
+    if (profileError) throw new Error(profileError.message)
+  }
+
+  const rows = await fetchExcoRows(email)
+  if (!rows.length) throw new Error("Your email isn't on the ExCo list. Ask OSL to add you.")
+
+  writeLocalSession(null)
+  sessionPersona = personaFromExcoRows(rows)
+  return sessionPersona
 }
 
 export function enterGuest() {
@@ -81,7 +177,8 @@ export function enterGuest() {
 export async function restoreSession() {
   if (isSupabaseConfigured() && supabase) {
     const { data } = await supabase.auth.getSession()
-    const persona = findPersonaByEmail(data.session?.user?.email)
+    const email = data.session?.user?.email
+    const persona = email ? await personaForSignedInEmail(email).catch(() => null) : null
     if (persona) {
       sessionPersona = persona
       return persona
