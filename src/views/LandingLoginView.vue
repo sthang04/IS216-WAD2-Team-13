@@ -14,6 +14,19 @@ const errorMsg = ref('')
 const isSubmitting = ref(false)
 const showDemoLogins = ref(false)
 
+// Loading Screen with Fun Facts & Mascot
+const isAuthenticating = ref(false)
+const authProgress = ref(0)
+const currentFactIndex = ref(0)
+
+const funFacts = [
+  "👑 Supreme Leader Kyong: Legend says Prof Kyong commands WAD2 with supreme wisdom and an army of adorable cats! 🐱",
+  "🐱 Jerica's Mascot Cat has stamped your session as 100% genuine and ready for the live demo!",
+  "🏃 SMU Campus Trivia: Running from SMU Connexion to Li Ka Shing B1 is 650m (~8 min brisk walk). Perfect transit buffer for OneMap!",
+  "🎭 ACF Eurhythmix & Samba Masala maintain a 100% compliance record on weekend studio handovers under OSL Clause 9.1(c).",
+  "✨ A+ Rubric Secret: A seamless live demo with 1-click evaluator logins saves crucial minutes during the 12m finals presentation!"
+];
+
 async function handleQuickLogin(personaKey) {
   const p = DEMO_PERSONAS[personaKey];
   if (!p) return;
@@ -79,14 +92,46 @@ onUnmounted(() => {
   if (placeholderTimer) clearTimeout(placeholderTimer)
 })
 
-// All sign-in paths go through the auth service (real password check)
+// All sign-in paths go through the auth service with fun loading screen
 async function completeLogin(loginEmail, loginPassword) {
   errorMsg.value = ''
   isSubmitting.value = true
+  
+  // Pick a random fun fact to display
+  currentFactIndex.value = Math.floor(Math.random() * funFacts.length)
+  
+  let progressInterval = null
   try {
-    const persona = await signIn(loginEmail, loginPassword)
-    emit('login', persona)
+    const authPromise = signIn(loginEmail, loginPassword)
+    
+    // Trigger fun loading screen
+    isAuthenticating.value = true
+    authProgress.value = 15
+    
+    // Smooth progress ticker over ~1.4s
+    progressInterval = setInterval(() => {
+      if (authProgress.value < 88) {
+        authProgress.value += 18
+      }
+    }, 180)
+    
+    const [persona] = await Promise.all([
+      authPromise,
+      new Promise(resolve => setTimeout(resolve, 1300)) // smooth ~1.3s delay to read fun fact
+    ])
+    
+    clearInterval(progressInterval)
+    authProgress.value = 100
+    
+    setTimeout(() => {
+      isAuthenticating.value = false
+      emit('login', persona)
+    }, 280)
+    
   } catch (err) {
+    if (progressInterval) clearInterval(progressInterval)
+    isAuthenticating.value = false
+    authProgress.value = 0
     errorMsg.value = err.message
   } finally {
     isSubmitting.value = false
@@ -129,9 +174,12 @@ async function handleManualLogin() {
         <div class="col-12 col-lg-6 col-xl-6">
           <div class="pe-lg-4">
             
-            <div class="d-inline-flex align-items-center gap-2 px-3 py-1 rounded-pill liquid-glass-tag mb-3 shadow-sm">
-              <span class="pulse-status-dot pulse-status-confirmed"></span>
-              <span class="small fw-bold text-uppercase" style="font-size: 0.7rem; letter-spacing: 0.05em; color: var(--pulse-primary);">
+            <!-- Redesigned Dignified Institutional Badge (No distracting green dot) -->
+            <div class="d-inline-flex align-items-center gap-2 px-3 py-1.5 rounded-pill liquid-glass-tag mb-3 shadow-sm border">
+              <span class="badge rounded-pill bg-danger bg-opacity-10 text-danger border border-danger-subtle px-2 py-0.5 fw-bold" style="font-size: 0.68rem; letter-spacing: 0.04em;">
+                OFFICIAL PORTAL
+              </span>
+              <span class="fw-semibold text-dark" style="font-size: 0.78rem;">
                 SMU Office of Student Life • CCA Facilities Portal
               </span>
             </div>
@@ -222,9 +270,9 @@ async function handleManualLogin() {
 
         <!-- Right Column: Liquid Glass Sign-In Portal -->
         <div class="col-12 col-lg-6 col-xl-6 d-flex justify-content-center justify-content-lg-end">
-          <div class="pulse-card liquid-glass-card p-4 p-xl-4 shadow-lg border w-100" style="max-width: 500px;">
+          <div class="pulse-card liquid-glass-card p-4 p-xl-4 shadow-lg border w-100 position-relative" style="max-width: 500px;">
             
-            <!-- Sleek Enterprise Header -->
+            <!-- Sleek Enterprise Header (Clean Dimensions, No Overlapping Pulsing Dots) -->
             <div class="d-flex align-items-center justify-content-between mb-4 pb-3 border-bottom flex-wrap gap-2">
               <div class="d-flex align-items-center gap-3">
                 <div 
@@ -260,8 +308,12 @@ async function handleManualLogin() {
                 </div>
               </div>
 
-              <div class="d-inline-flex align-items-center gap-1.5 px-2.5 py-1 rounded-pill bg-light border text-muted small" style="font-size: 0.675rem;">
-                <span class="pulse-status-dot pulse-status-confirmed" style="width: 6px; height: 6px;"></span>
+              <!-- Clean, Spacious Role Tag (Replaces tight green pulsing dot) -->
+              <div class="d-inline-flex align-items-center gap-1.5 px-3 py-1 rounded-pill bg-white border shadow-2xs text-secondary small" style="font-size: 0.725rem; font-weight: 600;">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" class="text-secondary">
+                  <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+                  <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+                </svg>
                 <span>ExCo & OSL Staff</span>
               </div>
             </div>
@@ -343,24 +395,75 @@ async function handleManualLogin() {
                 </div>
               </div>
 
-              <!-- Sign In CTA with Creative Shimmer & Pulse Animation -->
-              <button 
-                type="submit" 
-                class="btn btn-pulse-primary w-100 py-2.5 fw-bold d-flex align-items-center justify-content-center gap-2 shadow-sm pulse-submit-btn text-white"
-                :class="{ 'pulse-btn-submitting': isSubmitting }"
-                :disabled="isSubmitting"
-                style="font-size: 0.875rem;"
-              >
-                <span v-if="isSubmitting" class="spinner-border spinner-border-sm text-white" role="status"></span>
-                <span class="text-white">{{ isSubmitting ? 'Authenticating with Supabase...' : 'Sign In' }}</span>
-                <span v-if="!isSubmitting" class="text-white">→</span>
-              </button>
+              <!-- Sign In CTA with Peeking Mascot Cat & Hover Animation -->
+              <div class="sign-in-btn-wrapper position-relative">
+                
+                <!-- Peeking Mascot Cat Animation (Pops up when user hovers over Sign In) -->
+                <div class="peeking-mascot-cat">
+                  <div class="cat-bubble">
+                    <span>meow! 🐾</span>
+                  </div>
+                  <svg width="48" height="42" viewBox="0 0 60 50" fill="none" class="peeking-cat-svg">
+                    <polygon points="12,24 6,4 24,14" fill="#fda4af" stroke="#e11d48" stroke-width="2.5" class="ear-l" />
+                    <polygon points="48,24 54,4 36,14" fill="#fda4af" stroke="#e11d48" stroke-width="2.5" class="ear-r" />
+                    <ellipse cx="30" cy="32" rx="22" ry="18" fill="#ffffff" stroke="#e11d48" stroke-width="2.5" />
+                    <path d="M20,28 Q24,23 28,28" stroke="#1e293b" stroke-width="2.2" stroke-linecap="round" fill="none" />
+                    <path d="M32,28 Q36,23 40,28" stroke="#1e293b" stroke-width="2.2" stroke-linecap="round" fill="none" />
+                    <polygon points="30,33 27,30 33,30" fill="#f43f5e" />
+                    <path d="M26,36 Q30,39 30,34 Q30,39 34,36" stroke="#1e293b" stroke-width="1.8" stroke-linecap="round" fill="none" />
+                    <circle cx="16" cy="33" r="3" fill="#fecdd3" opacity="0.9" />
+                    <circle cx="44" cy="33" r="3" fill="#fecdd3" opacity="0.9" />
+                    <ellipse cx="18" cy="46" rx="5" ry="3.5" fill="#ffffff" stroke="#e11d48" stroke-width="2" />
+                    <ellipse cx="42" cy="46" rx="5" ry="3.5" fill="#ffffff" stroke="#e11d48" stroke-width="2" />
+                  </svg>
+                </div>
+
+                <button 
+                  type="submit" 
+                  class="btn btn-pulse-primary w-100 py-2.5 fw-bold d-flex align-items-center justify-content-center gap-2 shadow-sm pulse-submit-btn text-white position-relative"
+                  :class="{ 'pulse-btn-submitting': isSubmitting }"
+                  :disabled="isSubmitting"
+                  style="font-size: 0.875rem;"
+                >
+                  <span v-if="isSubmitting" class="spinner-border spinner-border-sm text-white" role="status"></span>
+                  <span class="text-white">{{ isSubmitting ? 'Authenticating...' : 'Sign In' }}</span>
+                  <span v-if="!isSubmitting" class="text-white">→</span>
+                </button>
+              </div>
             </form>
 
-            <!-- New ExCos create account link -->
-            <div class="text-center mt-2.5">
-              <button type="button" class="btn btn-link btn-sm text-decoration-none signup-link" style="font-size: 0.78rem;" @click="emit('signup')">
-                New ExCo? Create your account
+            <!-- Feature-Rich New ExCo Onboarding Button (Secondary Action) -->
+            <div class="mt-2.5">
+              <button 
+                type="button" 
+                class="btn btn-sm w-100 py-2 px-3 rounded-3 d-flex align-items-center justify-content-between new-exco-feature-btn" 
+                @click="emit('signup')"
+              >
+                <div class="d-flex align-items-center gap-2">
+                  <div class="new-exco-icon-box">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+                      <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+                      <circle cx="8.5" cy="7" r="4"></circle>
+                      <line x1="20" y1="8" x2="20" y2="14"></line>
+                      <line x1="23" y1="11" x2="17" y2="11"></line>
+                    </svg>
+                  </div>
+                  <div class="text-start">
+                    <span class="d-block fw-bold text-dark new-exco-label" style="font-size: 0.775rem;">
+                      New ExCo Onboarding
+                    </span>
+                    <small class="text-muted d-block" style="font-size: 0.66rem; margin-top: -2px;">
+                      Approved CCAs via OSL Whitelist Check
+                    </small>
+                  </div>
+                </div>
+                
+                <div class="d-flex align-items-center gap-1.5">
+                  <span class="badge bg-secondary-subtle text-secondary border px-2 py-0.5" style="font-size: 0.65rem;">
+                    Whitelist
+                  </span>
+                  <span class="new-exco-arrow text-muted">→</span>
+                </div>
               </button>
             </div>
 
@@ -381,7 +484,7 @@ async function handleManualLogin() {
                   </span>
                 </div>
                 <div class="d-flex align-items-center gap-1 small text-muted" style="font-size: 0.72rem;">
-                  <span>{{ showDemoLogins ? 'Collapse' : 'Expand (12m Demo)' }}</span>
+                  <span>{{ showDemoLogins ? 'Hide' : 'Expand (12m Demo)' }}</span>
                   <svg 
                     width="13" 
                     height="13" 
@@ -486,6 +589,58 @@ async function handleManualLogin() {
               </button>
             </div>
 
+            <!-- Interactive Authenticating / Fun Fact Screen Overlay -->
+            <transition name="loading-fade">
+              <div 
+                v-if="isAuthenticating" 
+                class="position-absolute top-0 start-0 w-100 h-100 d-flex flex-column justify-content-center align-items-center p-4 rounded-4 auth-loading-overlay text-center"
+                style="z-index: 25;"
+              >
+                <!-- Animated Mascot Cat Head & Crown -->
+                <div class="auth-mascot-container mb-3 position-relative">
+                  <div class="supreme-crown">👑</div>
+                  <div class="mascot-cat-face">
+                    <svg width="76" height="76" viewBox="0 0 100 100" fill="none" class="cat-svg">
+                      <polygon points="18,36 10,8 36,22" fill="#fda4af" stroke="#e11d48" stroke-width="3" stroke-linejoin="round" class="cat-ear-left" />
+                      <polygon points="82,36 90,8 64,22" fill="#fda4af" stroke="#e11d48" stroke-width="3" stroke-linejoin="round" class="cat-ear-right" />
+                      <circle cx="50" cy="54" r="38" fill="#ffffff" stroke="#e11d48" stroke-width="3.5" />
+                      <path d="M34,48 Q40,42 46,48" stroke="#1e293b" stroke-width="3.5" stroke-linecap="round" fill="none" />
+                      <path d="M54,48 Q60,42 66,48" stroke="#1e293b" stroke-width="3.5" stroke-linecap="round" fill="none" />
+                      <polygon points="50,56 46,52 54,52" fill="#f43f5e" />
+                      <path d="M44,61 Q50,66 50,58 Q50,66 56,61" stroke="#1e293b" stroke-width="2.5" stroke-linecap="round" fill="none" />
+                      <line x1="22" y1="52" x2="38" y2="55" stroke="#94a3b8" stroke-width="2" stroke-linecap="round" />
+                      <line x1="20" y1="60" x2="38" y2="60" stroke="#94a3b8" stroke-width="2" stroke-linecap="round" />
+                      <line x1="78" y1="52" x2="62" y2="55" stroke="#94a3b8" stroke-width="2" stroke-linecap="round" />
+                      <line x1="80" y1="60" x2="62" y2="60" stroke="#94a3b8" stroke-width="2" stroke-linecap="round" />
+                      <circle cx="28" cy="58" r="5" fill="#fecdd3" opacity="0.8" />
+                      <circle cx="72" cy="58" r="5" fill="#fecdd3" opacity="0.8" />
+                    </svg>
+                  </div>
+                </div>
+
+                <h5 class="fw-bold mb-1 text-dark" style="letter-spacing: -0.02em;">Authenticating Session...</h5>
+                <p class="text-muted small mb-3" style="font-size: 0.78rem;">Connecting with SMU Supabase Cloud</p>
+
+                <!-- Progress Bar -->
+                <div class="progress w-100 rounded-pill mb-3" style="height: 6px; max-width: 280px; background-color: rgba(226, 232, 240, 0.8);">
+                  <div class="progress-bar progress-bar-striped progress-bar-animated bg-danger" :style="{ width: `${authProgress}%`, transition: 'width 0.2s linear' }"></div>
+                </div>
+
+                <!-- Fun Facts Card -->
+                <div class="p-3 rounded-3 bg-white border shadow-sm w-100 text-start" style="max-width: 380px;">
+                  <div class="d-flex align-items-center justify-content-between mb-1.5">
+                    <span class="badge bg-danger bg-opacity-10 text-danger border border-danger-subtle px-2 py-0.5" style="font-size: 0.65rem; font-weight: 700;">
+                      💡 SMU & WAD2 FUN FACT
+                    </span>
+                    <span class="text-muted" style="font-size: 0.65rem;">Tip #{{ currentFactIndex + 1 }}</span>
+                  </div>
+                  <p class="text-dark small mb-0 fw-medium" style="font-size: 0.76rem; line-height: 1.45;">
+                    {{ funFacts[currentFactIndex] }}
+                  </p>
+                </div>
+              </div>
+            </transition>
+
           </div>
         </div>
 
@@ -576,7 +731,7 @@ async function handleManualLogin() {
 
 /* Glassmorphism Container */
 .liquid-glass-card {
-  background: rgba(255, 255, 255, 0.86) !important;
+  background: rgba(255, 255, 255, 0.88) !important;
   backdrop-filter: blur(24px) saturate(190%) !important;
   -webkit-backdrop-filter: blur(24px) saturate(190%) !important;
   border: 1px solid rgba(255, 255, 255, 0.95) !important;
@@ -605,8 +760,63 @@ async function handleManualLogin() {
 }
 
 /* ==========================================================================
-   Sign In Button Animation & Shimmer
+   Sign In Button & Peeking Cat Mascot
    ========================================================================== */
+.sign-in-btn-wrapper {
+  margin-top: 0.25rem;
+}
+
+.peeking-mascot-cat {
+  position: absolute;
+  top: -34px;
+  right: 24px;
+  z-index: 10;
+  pointer-events: none;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  transform: translateY(32px) scale(0.4);
+  opacity: 0;
+  transition: all 0.32s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.sign-in-btn-wrapper:hover .peeking-mascot-cat {
+  transform: translateY(0) scale(1);
+  opacity: 1;
+}
+
+.cat-bubble {
+  background: #ffffff;
+  border: 1.5px solid #fda4af;
+  color: #e11d48;
+  font-size: 0.62rem;
+  font-weight: 800;
+  padding: 1px 7px;
+  border-radius: 9999px;
+  box-shadow: 0 4px 10px rgba(225, 29, 72, 0.15);
+  margin-bottom: -4px;
+  animation: bubble-bounce 1s ease infinite alternate;
+}
+
+@keyframes bubble-bounce {
+  0% { transform: translateY(0); }
+  100% { transform: translateY(-3px); }
+}
+
+.sign-in-btn-wrapper:hover .ear-l {
+  animation: ear-twitch 0.8s ease infinite alternate;
+}
+
+.sign-in-btn-wrapper:hover .ear-r {
+  animation: ear-twitch 0.8s ease 0.2s infinite alternate;
+}
+
+@keyframes ear-twitch {
+  0% { transform: rotate(0deg); }
+  50% { transform: rotate(-8deg); }
+  100% { transform: rotate(0deg); }
+}
+
 .pulse-submit-btn {
   background: linear-gradient(135deg, #e11d48 0%, #f43f5e 50%, #be123c 100%) !important;
   background-size: 200% auto !important;
@@ -668,6 +878,54 @@ async function handleManualLogin() {
   100% {
     box-shadow: 0 0 0 0 rgba(225, 29, 72, 0), 0 6px 20px rgba(225, 29, 72, 0.4);
   }
+}
+
+/* ==========================================================================
+   New ExCo Feature Button
+   ========================================================================== */
+.new-exco-feature-btn {
+  background: rgba(255, 255, 255, 0.78);
+  border: 1px solid #e2e8f0;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04);
+}
+
+.new-exco-icon-box {
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
+  background-color: #fff1f2;
+  color: var(--pulse-primary, #e11d48);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: transform 0.2s ease;
+}
+
+.new-exco-feature-btn:hover {
+  background: #ffffff;
+  border-color: #fda4af;
+  box-shadow: 0 4px 12px rgba(225, 29, 72, 0.08);
+  transform: translateY(-1px);
+}
+
+.new-exco-feature-btn:hover .new-exco-icon-box {
+  transform: scale(1.1);
+}
+
+.new-exco-feature-btn:hover .new-exco-label {
+  color: var(--pulse-primary, #e11d48) !important;
+}
+
+.new-exco-feature-btn:hover .new-exco-arrow {
+  transform: translateX(2px);
+  color: var(--pulse-primary, #e11d48) !important;
+}
+
+.new-exco-arrow {
+  transition: transform 0.2s ease, color 0.2s ease;
+  font-size: 0.85rem;
 }
 
 /* ==========================================================================
@@ -737,14 +995,68 @@ async function handleManualLogin() {
   color: var(--pulse-primary, #e11d48) !important;
 }
 
-.signup-link {
-  color: var(--pulse-primary, #e11d48);
-  font-weight: 600;
-  transition: opacity 0.15s ease;
+/* ==========================================================================
+   Interactive Auth Loading Screen Overlay
+   ========================================================================== */
+.auth-loading-overlay {
+  background: rgba(255, 255, 255, 0.94);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  animation: fadeIn 0.25s ease-out;
 }
 
-.signup-link:hover {
-  opacity: 0.8;
-  text-decoration: underline !important;
+.supreme-crown {
+  position: absolute;
+  top: -14px;
+  left: 50%;
+  transform: translateX(-50%) rotate(4deg);
+  font-size: 1.35rem;
+  z-index: 5;
+  animation: crown-float 1.5s ease-in-out infinite alternate;
+}
+
+@keyframes crown-float {
+  0% { transform: translateX(-50%) translateY(0) rotate(4deg); }
+  100% { transform: translateX(-50%) translateY(-3px) rotate(-2deg); }
+}
+
+.mascot-cat-face {
+  filter: drop-shadow(0 6px 16px rgba(225, 29, 72, 0.18));
+  animation: cat-breathe 2s ease-in-out infinite alternate;
+}
+
+@keyframes cat-breathe {
+  0% { transform: scale(1); }
+  100% { transform: scale(1.04); }
+}
+
+.cat-ear-left {
+  animation: ear-wiggle-left 1.8s infinite ease-in-out;
+  transform-origin: 20px 30px;
+}
+
+.cat-ear-right {
+  animation: ear-wiggle-right 1.8s infinite ease-in-out 0.3s;
+  transform-origin: 70px 30px;
+}
+
+@keyframes ear-wiggle-left {
+  0%, 100% { transform: rotate(0deg); }
+  50% { transform: rotate(-5deg); }
+}
+
+@keyframes ear-wiggle-right {
+  0%, 100% { transform: rotate(0deg); }
+  50% { transform: rotate(5deg); }
+}
+
+.loading-fade-enter-active,
+.loading-fade-leave-active {
+  transition: opacity 0.25s ease;
+}
+
+.loading-fade-enter-from,
+.loading-fade-leave-to {
+  opacity: 0;
 }
 </style>
