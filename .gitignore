@@ -29,3 +29,5 @@ dist-ssr/
 *.sln
 *.sw?
 example/
+test-results/
+playwright-report/
