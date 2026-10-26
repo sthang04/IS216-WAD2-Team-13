@@ -3,6 +3,7 @@ import { ref, computed } from 'vue';
 
 const props = defineProps({
   apiMode: { type: Boolean, default: false },
+  readOnly: { type: Boolean, default: false },
   activePersona: {
     type: Object,
     default: () => ({
@@ -18,6 +19,13 @@ const isCheckedIn = ref(false);
 const isLocating = ref(false);
 const checkInMsg = ref('');
 const toastMsg = ref('');
+
+// Guests can look around but not make changes
+function blockedForGuest() {
+  if (!props.readOnly) return false
+  toastMsg.value = 'Guest view is read-only. Sign in as a CCA ExCo to make changes.'
+  return true
+}
 const selectedCategory = ref('All'); // 'All', 'CCA', 'Academic', 'Personal', 'Duty'
 const showModal = ref(false);
 const isEditing = ref(false);
@@ -171,6 +179,7 @@ function calculateDistance(lat1, lon1, lat2, lon2) {
 }
 
 function handleGeolocationCheckIn() {
+  if (blockedForGuest()) return
   if (!navigator.geolocation) {
     verificationMethodUsed.value = 'Simulated GPS Sensor (within 25m)';
     simulateSuccessCheckIn('HTML5 Geolocation sensor active: Checked in within 30m of Main Hall Stage!');
@@ -213,6 +222,7 @@ function simulateSuccessCheckIn(msg) {
 
 // Manual Check-In Handlers
 function openManualCheckIn() {
+  if (blockedForGuest()) return
   showManualCheckInModal.value = true;
 }
 
@@ -238,6 +248,7 @@ function submitManualCheckIn() {
 }
 
 function resetCheckIn() {
+  if (blockedForGuest()) return
   isCheckedIn.value = false;
   checkInMsg.value = '';
   verificationMethodUsed.value = '';
@@ -246,6 +257,7 @@ function resetCheckIn() {
 }
 
 function toggleEventStatus(event) {
+  if (blockedForGuest()) return
   if (event.status === 'Not Started') {
     event.status = 'In Progress';
     toastMsg.value = `Started: "${event.title}" is now active.`;
@@ -261,6 +273,7 @@ function toggleEventStatus(event) {
 
 // Modal Form Actions
 function openAddModal() {
+  if (blockedForGuest()) return
   isEditing.value = false;
   editingId.value = null;
   eventForm.value = {
@@ -278,6 +291,7 @@ function openAddModal() {
 }
 
 function openEditModal(event) {
+  if (blockedForGuest()) return
   isEditing.value = true;
   editingId.value = event.id;
   eventForm.value = {
@@ -327,6 +341,7 @@ function saveEvent() {
 }
 
 function deleteEvent(id) {
+  if (blockedForGuest()) return
   const item = scheduleEvents.value.find(e => e.id === id);
   if (!item) return;
   scheduleEvents.value = scheduleEvents.value.filter(e => e.id !== id);

@@ -2,7 +2,8 @@
 import { ref } from 'vue';
 
 const props = defineProps({
-  apiMode: { type: Boolean, default: false }
+  apiMode: { type: Boolean, default: false },
+  readOnly: { type: Boolean, default: false }
 });
 
 const activeScenario = ref('member')
@@ -12,6 +13,13 @@ const dispatchModalOpen = ref(false)
 const dispatchSent = ref(false)
 const dispatchAccepted = ref(false)
 const toastMsg = ref('')
+
+// Guests can look around but not make changes
+function blockedForGuest() {
+  if (!props.readOnly) return false
+  toastMsg.value = 'Guest view is read-only. Sign in as a CCA ExCo to make changes.'
+  return true
+}
 const activeComparison = ref('proposed')
 
 const candidates = ref([
@@ -51,6 +59,7 @@ function runSimulation() {
 }
 
 function openTelegramDispatch(candidate) {
+  if (blockedForGuest()) return
   dispatchModalOpen.value = true
   dispatchSent.value = false
   dispatchAccepted.value = false
@@ -72,6 +81,7 @@ function simulateMemberAcceptance() {
 }
 
 function applyToEventPlan() {
+  if (blockedForGuest()) return
   toastMsg.value = 'Applied Changes to Event Plan! Live Supabase database updated and Telegram confirmation broadcasted.'
   setTimeout(() => { toastMsg.value = '' }, 4500)
 }

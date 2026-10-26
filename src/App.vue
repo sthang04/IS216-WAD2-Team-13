@@ -1,8 +1,13 @@
 <script setup>
 import { ref, onMounted, onUnmounted, computed, watch } from 'vue';
 import { facilityService, getStatusBadgeClass } from './services/facilityService';
-import { DEMO_PERSONAS, ALL_CLUBS } from './services/authProfiles';
+import { DEMO_PERSONAS, ALL_CLUBS, GUEST_PERSONA } from './services/authProfiles';
+import {
+  enterGuest, restoreSession, signOut,
+  canActForClub, canOpenView, canResetDemo as canResetDemoFor, homeView,
+} from './services/authService';
 import LandingLoginView from './views/LandingLoginView.vue';
+import SignUpView from './views/SignUpView.vue';
 import AvailabilityView from './views/AvailabilityView.vue';
 import OperationsView from './views/OperationsView.vue';
 import EventRiskView from './views/EventRiskView.vue';
@@ -11,7 +16,7 @@ import OslAdminView from './views/OslAdminView.vue';
 import { calculateWaitlistCutoff } from './services/smuClubsDirectory';
 
 // App Views state
-const currentView = ref('facilities') // 'landing', 'admin', 'facilities', 'schedule', 'heatmap', 'operations', 'risk'
+const currentView = ref('landing') // 'landing', 'admin', 'facilities', 'schedule', 'heatmap', 'operations', 'risk'
 const apiMode = ref(false) // Toggle API badge tags on/off across all views (Default: OFF as requested)
 const isDarkMode = ref(false)
 const notificationsOpen = ref(false)
@@ -82,14 +87,31 @@ const toastType = ref('info')
 const searchQuery = ref('')
 
 // User & Role State with Strict CCA Scoping
-const isLoggedIn = ref(true)
-const activePersona = ref(DEMO_PERSONAS.rachel) // Defaults to Rachel Tan (Eurhythmix ExCo)
-const selectedClub = ref('Eurhythmix')
+const authReady = ref(false) // false until the saved session has been checked on load
+const isLoggedIn = ref(false)
+const sessionPersona = ref(null) // who signed in
+const activePersona = ref(GUEST_PERSONA) // who the app is acting as (only Dev can switch this)
+const selectedClub = ref(null)
 const profileMenuOpen = ref(false)
+const showSignUp = ref(false)
 
 const isAdmin = computed(() => activePersona.value.role === 'admin')
 const isDev = computed(() => activePersona.value.isDev)
-const allowedClubs = computed(() => activePersona.value.allowedClubs || ['Eurhythmix'])
+const isGuest = computed(() => activePersona.value.role === 'guest')
+const allowedClubs = computed(() => activePersona.value.allowedClubs || [])
+const canAct = computed(() => canActForClub(activePersona.value, selectedClub.value))
+const canSwitchPersona = computed(() => !!sessionPersona.value?.isDev)
+const canResetDemo = computed(() => canResetDemoFor(sessionPersona.value))
+
+// Route protection: send users back to their home page if they open a page their role can't see
+watch(currentView, (view) => {
+  if (!isLoggedIn.value || view === 'landing') return
+  if (!canOpenView(activePersona.value, view)) {
+    currentView.value = homeView(activePersona.value)
+    toast.value = `${activePersona.value.roleLabel} accounts can't open that page.`
+    toastType.value = 'warning'
+  }
+})
 
 // Dynamic Animated Search Placeholder (Robust Auto-Typing with restart on clear)
 const searchPlaceholder = ref('Search venue or location...')
@@ -189,7 +211,7 @@ const categories = computed(() => {
   const list = [
     { label: 'All Venues', value: 'All' },
   ]
-  if (selectedClub.value !== 'Office of Student Life') {
+  if (selectedClub.value !== 'Office of Student Life' && !isGuest.value) {
     list.push({ label: 'Wishlist', value: 'Wishlist' })
   }
   list.push(
@@ -232,18 +254,17 @@ const filteredSlots = computed(() => {
   })
 })
 
+// Dev-only: view the app as another persona (permissions still come from the Dev sign-in)
 function switchPersona(personaKey) {
   const p = DEMO_PERSONAS[personaKey]
-  if (!p) return
+  if (!p || !canSwitchPersona.value) return
   activePersona.value = p
   selectedClub.value = p.cca
   profileMenuOpen.value = false
   searchQuery.value = ''
   
-  if (p.role === 'admin') {
-    currentView.value = 'admin'
-  } else if (currentView.value === 'admin') {
-    currentView.value = 'facilities'
+  if (p.role === 'admin' || !canOpenView(p, currentView.value)) {
+    currentView.value = homeView(p)
   }
 
   toast.value = `Switched perspective to ${p.name} (${p.roleLabel})`
@@ -386,7 +407,7 @@ const isAutoRunning = ref(false)
 const autoStepText = ref('')
 
 async function runDemoSimulation() {
-  if (isAutoRunning.value) return
+  if (isAutoRunning.value || !canSwitchPersona.value) return
   isAutoRunning.value = true
   currentView.value = 'facilities'
   
@@ -423,40 +444,60 @@ async function runDemoSimulation() {
   }
 }
 
-// Handle Login from LandingLoginView
-function handleUserLogin(authData) {
-  if (authData.personaId && DEMO_PERSONAS[authData.personaId]) {
-    activePersona.value = DEMO_PERSONAS[authData.personaId]
-  } else {
-    const lower = (authData.email || '').toLowerCase()
-    if (lower.includes('darren') || lower.includes('samba')) activePersona.value = DEMO_PERSONAS.darren
-    else if (lower.includes('marcus') || lower.includes('symphonia')) activePersona.value = DEMO_PERSONAS.marcus
-    else if (lower.includes('chloe') || lower.includes('admin') || lower.includes('osl')) activePersona.value = DEMO_PERSONAS.chloe
-    else if (lower.includes('dev')) activePersona.value = DEMO_PERSONAS.dev
-    else if (lower.includes('john')) activePersona.value = DEMO_PERSONAS.john
-    else activePersona.value = DEMO_PERSONAS.rachel
-  }
-  selectedClub.value = activePersona.value.cca
+function applySession(persona) {
+  sessionPersona.value = persona
+  activePersona.value = persona
+  selectedClub.value = persona.cca
   isLoggedIn.value = true
-  currentView.value = activePersona.value.role === 'admin' ? 'admin' : 'facilities'
-  toast.value = `Signed in as ${activePersona.value.name} (${activePersona.value.roleLabel})`
+  currentView.value = homeView(persona)
+}
+
+// Handle Login from LandingLoginView (the password was already checked by authService)
+function handleUserLogin(persona) {
+  applySession(persona)
+  toast.value = `Signed in as ${persona.name} (${persona.roleLabel})`
   toastType.value = 'success'
 }
 
 function handleGuestExplore() {
-  switchPersona('john')
-  isLoggedIn.value = true
-  currentView.value = 'facilities'
+  applySession(enterGuest())
+  toast.value = 'Browsing as a guest: you can view venues, but only signed-in ExCos can release or claim.'
+  toastType.value = 'info'
 }
 
-function handleSignOut() {
-  isLoggedIn.value = false
-  currentView.value = 'landing'
+// New ExCo finished sign-up (already signed in by authService)
+function handleSignUpDone(persona) {
+  showSignUp.value = false
+  applySession(persona)
+  toast.value = `Welcome to Pulse, ${persona.name}! You're signed in as ${persona.roleLabel}.`
+  toastType.value = 'success'
+}
+
+async function handleSignOut() {
+  profileMenuOpen.value = false
+  try {
+    await signOut()
+  } finally {
+    isLoggedIn.value = false
+    sessionPersona.value = null
+    activePersona.value = GUEST_PERSONA
+    selectedClub.value = null
+    currentView.value = 'landing'
+    toast.value = ''
+  }
 }
 
 onMounted(async () => {
   try {
     initTheme()
+    try {
+      const persona = await restoreSession()
+      if (persona) applySession(persona)
+    } catch (error) {
+      console.warn('Could not restore session:', error.message)
+    } finally {
+      authReady.value = true
+    }
     await loadSlots()
     searchTimer = setTimeout(tickSearchPlaceholder, 1000)
   } catch (error) {
@@ -475,11 +516,24 @@ onUnmounted(() => {
 <template>
   <div>
     
+    <!-- Checking for a saved session on page load -->
+    <div v-if="!authReady" class="min-vh-100 d-flex align-items-center justify-content-center">
+      <div class="spinner-border text-danger" role="status"></div>
+    </div>
+
+    <!-- ExCo sign-up (email must be on OSL's ExCo list) -->
+    <SignUpView
+      v-else-if="showSignUp && !isLoggedIn"
+      @done="handleSignUpDone"
+      @cancel="showSignUp = false"
+    />
+
     <!-- View 0: Landing & Interactive Login Experience (Shown when logged out) -->
-    <div v-if="!isLoggedIn || currentView === 'landing'">
+    <div v-else-if="!isLoggedIn || currentView === 'landing'">
       <LandingLoginView 
         @login="handleUserLogin"
         @explore="handleGuestExplore"
+        @signup="showSignUp = true"
       />
     </div>
 
@@ -526,7 +580,12 @@ onUnmounted(() => {
               </span>
             </div>
 
-            <!-- Case C: Regular Club ExCo (Strictly Scoped to their CCA) -->
+            <!-- Case C: Guest (View Only, no club to act for) -->
+            <div v-else-if="isGuest" class="badge bg-light text-muted border px-3 py-2" style="border-radius: 0.65rem; font-size: 0.75rem;">
+              Guest • View Only
+            </div>
+
+            <!-- Case D: Regular Club ExCo (Strictly Scoped to their CCA) -->
             <div v-else class="d-flex align-items-center">
               <div class="input-group input-group-sm">
                 <span class="input-group-text bg-white border-end-0 text-muted" style="border-radius: 0.65rem 0 0 0.65rem;">
@@ -588,6 +647,7 @@ onUnmounted(() => {
               Master Facility Calendar
             </button>
             <button 
+              v-if="canOpenView(activePersona, 'schedule')"
               type="button" 
               class="pulse-nav-pill" 
               :class="{ active: currentView === 'schedule' }"
@@ -596,6 +656,7 @@ onUnmounted(() => {
               Personal Schedule
             </button>
             <button 
+              v-if="canOpenView(activePersona, 'heatmap')"
               type="button" 
               class="pulse-nav-pill" 
               :class="{ active: currentView === 'heatmap' }"
@@ -604,6 +665,7 @@ onUnmounted(() => {
               Availability Heatmap
             </button>
             <button 
+              v-if="canOpenView(activePersona, 'operations')"
               type="button" 
               class="pulse-nav-pill" 
               :class="{ active: currentView === 'operations' }"
@@ -612,6 +674,7 @@ onUnmounted(() => {
               Day-of Operations
             </button>
             <button 
+              v-if="canOpenView(activePersona, 'risk')"
               type="button" 
               class="pulse-nav-pill" 
               :class="{ active: currentView === 'risk' }"
@@ -626,6 +689,7 @@ onUnmounted(() => {
             
             <!-- Reset Demo Button -->
             <button
+              v-if="canResetDemo"
               type="button"
               class="btn btn-outline-danger btn-sm px-3 fw-bold rounded-pill"
               :disabled="isAutoRunning"
@@ -636,6 +700,7 @@ onUnmounted(() => {
 
             <!-- 1-Click Pitch Autopilot Simulation -->
             <button
+              v-if="canSwitchPersona"
               type="button"
               class="btn btn-pulse-primary btn-sm px-3 rounded-pill d-none d-sm-inline-flex align-items-center gap-1"
               :disabled="isAutoRunning"
@@ -784,6 +849,15 @@ onUnmounted(() => {
                 class="card shadow-lg position-absolute end-0 mt-2 p-2 border-0" 
                 style="min-width: 260px; z-index: 1050; border-radius: 0.85rem;"
               >
+                <!-- Signed-in identity (everyone except Dev sees just this) -->
+                <div v-if="!canSwitchPersona" class="p-2 border-bottom mb-2">
+                  <div class="fw-bold" style="font-size: 0.825rem;">{{ activePersona.name }}</div>
+                  <small class="text-muted d-block" style="font-size: 0.7rem;">{{ activePersona.roleLabel }}</small>
+                  <small v-if="activePersona.email" class="text-muted d-block" style="font-size: 0.7rem;">{{ activePersona.email }}</small>
+                </div>
+
+                <!-- Dev only: switch persona for live demo -->
+                <template v-if="canSwitchPersona">
                 <div class="p-2 border-bottom mb-2 text-muted" style="font-size: 0.7rem; font-weight: 700; text-transform: uppercase;">
                   Switch Persona (Live Demo)
                 </div>
@@ -859,12 +933,13 @@ onUnmounted(() => {
                 </button>
 
                 <hr class="my-1">
+                </template>
                 <button 
                   type="button" 
                   class="btn btn-sm btn-link text-danger text-start px-3 py-1 text-decoration-none"
                   @click="handleSignOut"
                 >
-                  Sign Out to Landing
+                  {{ isGuest ? 'Exit Guest Mode' : 'Sign Out to Landing' }}
                 </button>
               </div>
             </div>
@@ -901,6 +976,12 @@ onUnmounted(() => {
             <strong>Notice:</strong> {{ toast }}
           </div>
           <button type="button" class="btn-close" @click="toast = ''"></button>
+        </div>
+
+        <!-- Guest banner: every page is view-only -->
+        <div v-if="isGuest" class="alert alert-light border d-flex flex-wrap justify-content-between align-items-center gap-2 py-2 mb-3" style="border-radius: 0.85rem; font-size: 0.8rem;">
+          <span><strong>Guest view (read-only).</strong> You can browse every page, but only signed-in CCA ExCos can make changes.</span>
+          <button type="button" class="btn btn-sm btn-pulse-primary rounded-pill px-3" @click="handleSignOut">Sign in</button>
         </div>
 
         <!-- VIEW 0: OSL Administrative Console (Chloe Ang - OSL Staff Advisor) -->
@@ -1003,7 +1084,7 @@ onUnmounted(() => {
             <!-- Smart Suggestion Chips tailored to Active Persona -->
             <div class="d-flex flex-wrap align-items-center gap-1 mt-2 pt-2 border-top">
               <span class="text-muted small fw-bold" style="font-size: 0.675rem; text-transform: uppercase;">
-                Suggested for {{ selectedClub }}:
+                Suggested for {{ selectedClub || 'you' }}:
               </span>
               <button 
                 v-for="chip in activePersona.smartSearches" 
@@ -1061,7 +1142,7 @@ onUnmounted(() => {
 
                       <!-- Facility Wishlist Toggle Button (Student CCAs only - OSL Admin does not have a club wishlist) -->
                       <button 
-                        v-if="!isAdmin"
+                        v-if="!isAdmin && !isGuest"
                         type="button" 
                         class="btn btn-sm py-0 px-2 rounded-pill border d-inline-flex align-items-center gap-1 pulse-wishlist-btn"
                         :class="isWishlisted(slot.id) ? 'active' : 'text-muted'"
@@ -1160,7 +1241,7 @@ onUnmounted(() => {
                     </div>
 
                     <!-- SSU Clause 9.1(c) 48-Hour Advance Notice Indicator on Owned Slots -->
-                    <div v-if="!isAdmin && (slot.status === 'Booked' || slot.status === 'Officially Confirmed') && slot.owner_club === selectedClub" class="mt-2 pt-2 border-top">
+                    <div v-if="canAct && (slot.status === 'Booked' || slot.status === 'Officially Confirmed') && slot.owner_club === selectedClub" class="mt-2 pt-2 border-top">
                       <div class="d-flex align-items-center justify-content-between text-success small" style="font-size: 0.72rem;">
                         <span class="fw-semibold">SSU 9.1(c):</span>
                         <span class="badge bg-success-subtle text-success border border-success">
@@ -1192,7 +1273,7 @@ onUnmounted(() => {
                 <div class="pulse-card-footer d-flex flex-wrap gap-2 justify-content-end align-items-center">
                   
                   <button
-                    v-if="!isAdmin && (slot.status === 'Booked' || slot.status === 'Officially Confirmed') && slot.owner_club === selectedClub"
+                    v-if="canAct && (slot.status === 'Booked' || slot.status === 'Officially Confirmed') && slot.owner_club === selectedClub"
                     class="btn btn-pulse-primary btn-sm"
                     :disabled="processingId !== null || isAutoRunning"
                     @click="handleRelease(slot)"
@@ -1202,7 +1283,7 @@ onUnmounted(() => {
                   </button>
 
                   <button
-                    v-if="!isAdmin && slot.status === 'Proposed Peer Transfer' && slot.owner_club === selectedClub"
+                    v-if="canAct && slot.status === 'Proposed Peer Transfer' && slot.owner_club === selectedClub"
                     class="btn btn-pulse-outline btn-sm"
                     :disabled="processingId !== null || isAutoRunning"
                     @click="handleUndo(slot)"
@@ -1212,7 +1293,7 @@ onUnmounted(() => {
                   </button>
 
                   <button
-                    v-if="!isAdmin && slot.status === 'Proposed Peer Transfer' && slot.owner_club !== selectedClub"
+                    v-if="canAct && slot.status === 'Proposed Peer Transfer' && slot.owner_club !== selectedClub"
                     class="btn btn-pulse-primary btn-sm"
                     :disabled="processingId !== null || isAutoRunning"
                     @click="handleClaim(slot)"
@@ -1243,7 +1324,7 @@ onUnmounted(() => {
 
                   <!-- Join Waitlist Action Button (Replaces redundant "Held by" text) -->
                   <button 
-                    v-if="!isAdmin && slot.status === 'Booked' && slot.owner_club !== selectedClub"
+                    v-if="canAct && slot.status === 'Booked' && slot.owner_club !== selectedClub"
                     type="button"
                     class="btn btn-outline-secondary btn-sm rounded-pill d-inline-flex align-items-center gap-1"
                     style="font-size: 0.75rem;"
@@ -1273,22 +1354,22 @@ onUnmounted(() => {
 
         <!-- VIEW 2: Personal Schedule & Attendance -->
         <div v-show="currentView === 'schedule'">
-          <PersonalScheduleView :api-mode="apiMode" :active-persona="activePersona" />
+          <PersonalScheduleView :api-mode="apiMode" :active-persona="activePersona" :read-only="isGuest" />
         </div>
 
         <!-- VIEW 3: Availability Heatmap -->
         <div v-show="currentView === 'heatmap'">
-          <AvailabilityView :api-mode="apiMode" @meeting-scheduled="handleMeetingScheduled" />
+          <AvailabilityView :api-mode="apiMode" :read-only="isGuest" @meeting-scheduled="handleMeetingScheduled" />
         </div>
 
         <!-- VIEW 4: Day-of Operations & Multi-Track Timeline -->
         <div v-show="currentView === 'operations'">
-          <OperationsView :api-mode="apiMode" />
+          <OperationsView :api-mode="apiMode" :read-only="isGuest" />
         </div>
 
         <!-- VIEW 5: Event Risk Planning & What-If Simulator -->
         <div v-show="currentView === 'risk'">
-          <EventRiskView :api-mode="apiMode" />
+          <EventRiskView :api-mode="apiMode" :read-only="isGuest" />
         </div>
 
       </main>
