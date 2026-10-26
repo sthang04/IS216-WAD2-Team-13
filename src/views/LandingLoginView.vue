@@ -68,6 +68,21 @@ function handleMouseMove(e) {
   mouseY.value = ((e.clientY - rect.top) / rect.height - 0.5) * 24
 }
 
+// Mascot Cat dynamic tracking (peeks on left or right side based on cursor proximity)
+const catSide = ref('right')
+const isButtonHovered = ref(false)
+
+function handleButtonMouseMove(e) {
+  const rect = e.currentTarget.getBoundingClientRect()
+  const mouseXRel = e.clientX - rect.left
+  catSide.value = mouseXRel < rect.width / 2 ? 'left' : 'right'
+  isButtonHovered.value = true
+}
+
+function handleButtonLeave() {
+  isButtonHovered.value = false
+}
+
 // SMU Domain Validation & ExCo list preview (same rules the sign-in uses)
 const isSmuEmail = computed(() => checkSmuEmail(email.value))
 const matchedPersona = computed(() => findPersonaByEmail(email.value))
@@ -108,12 +123,11 @@ function tickPlaceholder() {
 }
 
 onMounted(() => {
-  // Read remembered account from session cache
+  // Read remembered account from session cache (do not set email.value directly to prevent Safari keychain highlight lock)
   try {
     const cached = localStorage.getItem('pulse_remembered_account')
     if (cached) {
       rememberedAccount.value = JSON.parse(cached)
-      email.value = rememberedAccount.value.email
     }
   } catch (err) {
     console.error('Session cache load error', err)
@@ -249,12 +263,12 @@ async function handleManualLogin() {
         <div class="col-12 col-lg-6 col-xl-6">
           <div class="pe-lg-4">
             
-            <!-- Redesigned Dignified Institutional Badge (No distracting green dot) -->
-            <div class="d-inline-flex align-items-center gap-2 px-3 py-1.5 rounded-pill liquid-glass-tag mb-3 shadow-sm border">
-              <span class="badge rounded-pill bg-danger bg-opacity-10 text-danger border border-danger-subtle px-2 py-0.5 fw-bold" style="font-size: 0.68rem; letter-spacing: 0.04em;">
+            <!-- Redesigned Dignified Institutional Badge (Comfortable Dimensions & Padding) -->
+            <div class="d-inline-flex align-items-center gap-2.5 px-3.5 py-1.5 rounded-pill liquid-glass-tag mb-3 shadow-sm border" style="padding: 6px 14px 6px 8px;">
+              <span class="badge rounded-pill bg-danger bg-opacity-10 text-danger border border-danger-subtle px-2.5 py-1 fw-bold" style="font-size: 0.68rem; letter-spacing: 0.05em; line-height: 1.25;">
                 OFFICIAL PORTAL
               </span>
-              <span class="fw-semibold text-dark" style="font-size: 0.78rem;">
+              <span class="fw-semibold text-dark pe-1" style="font-size: 0.78rem;">
                 SMU Office of Student Life • CCA Facilities Portal
               </span>
             </div>
@@ -522,13 +536,13 @@ async function handleManualLogin() {
                 </div>
               </div>
 
-              <!-- Clean, Spacious Role Tag (Replaces tight green pulsing dot) -->
-              <div class="d-inline-flex align-items-center gap-1.5 px-3 py-1 rounded-pill bg-white border shadow-2xs text-secondary small" style="font-size: 0.725rem; font-weight: 600;">
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" class="text-secondary">
+              <!-- Clean, Spacious Role Tag (Generous Breathing Room) -->
+              <div class="d-inline-flex align-items-center gap-2 rounded-pill bg-white border shadow-2xs text-secondary" style="font-size: 0.75rem; font-weight: 600; padding: 6px 14px;">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" class="text-secondary flex-shrink-0" style="margin-left: 1px;">
                   <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
                   <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
                 </svg>
-                <span>ExCo & OSL Staff</span>
+                <span style="margin-right: 1px;">ExCo & OSL Staff</span>
               </div>
             </div>
 
@@ -610,7 +624,7 @@ async function handleManualLogin() {
                 </div>
                 
                 <div class="input-group">
-                  <span class="input-group-text bg-white text-muted border-end-0">
+                  <span class="input-group-text bg-white text-muted border-end-0 pe-2">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                       <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path>
                       <polyline points="22,6 12,13 2,6"></polyline>
@@ -619,11 +633,33 @@ async function handleManualLogin() {
                   <input 
                     v-model="email"
                     type="email" 
-                    class="form-control border-start-0" 
+                    name="smu_user_login_email"
+                    autocomplete="off"
+                    autocorrect="off"
+                    autocapitalize="off"
+                    spellcheck="false"
+                    class="form-control border-start-0 border-end-0 px-2" 
                     :placeholder="email.length ? '' : currentPlaceholder"
                     required
                     style="font-size: 0.825rem;"
                   />
+                  <!-- 1-Tap Instant Clear Button to reset highlighted or autofilled suggestion -->
+                  <span class="input-group-text bg-white border-start-0 ps-1 pe-2">
+                    <button
+                      v-if="email.length > 0"
+                      type="button"
+                      class="btn btn-link p-0 text-muted border-0 input-clear-btn"
+                      title="Clear email field"
+                      aria-label="Clear email"
+                      @click="email = ''"
+                    >
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                      </svg>
+                    </button>
+                    <span v-else style="width: 13px; display: inline-block;"></span>
+                  </span>
                 </div>
 
                 <!-- Domain Validation Tag -->
@@ -655,6 +691,8 @@ async function handleManualLogin() {
                   <input 
                     v-model="password"
                     :type="showPassword ? 'text' : 'password'" 
+                    name="smu_user_password"
+                    autocomplete="current-password"
                     class="form-control border-start-0 pe-5" 
                     placeholder="••••••••••••"
                     @focus="isPasswordFocused = true"
@@ -666,15 +704,21 @@ async function handleManualLogin() {
                 </div>
               </div>
 
-              <!-- Sign In CTA with Peeking Mascot Cat & Hover Animation -->
-              <div class="sign-in-btn-wrapper position-relative">
-                
-                <!-- Peeking Mascot Cat Animation (Pops up when user hovers over Sign In) -->
-                <div class="peeking-mascot-cat">
+              <!-- Sign In CTA with Side-Peeking Mascot Cat & Hover Animation -->
+              <div 
+                class="sign-in-btn-wrapper position-relative"
+                @mousemove="handleButtonMouseMove"
+                @mouseleave="handleButtonLeave"
+              >
+                <!-- Peeking Mascot Cat Animation (Smaller, pops out on left or right depending on cursor proximity) -->
+                <div 
+                  class="peeking-mascot-cat"
+                  :class="[catSide, { 'is-active': isButtonHovered }]"
+                >
                   <div class="cat-bubble">
                     <span>meow! 🐾</span>
                   </div>
-                  <svg width="48" height="42" viewBox="0 0 60 50" fill="none" class="peeking-cat-svg">
+                  <svg width="28" height="26" viewBox="0 0 60 50" fill="none" class="peeking-cat-svg">
                     <polygon points="12,24 6,4 24,14" fill="#fda4af" stroke="#e11d48" stroke-width="2.5" class="ear-l" />
                     <polygon points="48,24 54,4 36,14" fill="#fda4af" stroke="#e11d48" stroke-width="2.5" class="ear-r" />
                     <ellipse cx="30" cy="32" rx="22" ry="18" fill="#ffffff" stroke="#e11d48" stroke-width="2.5" />
@@ -703,16 +747,16 @@ async function handleManualLogin() {
               </div>
             </form>
 
-            <!-- Feature-Rich New ExCo Onboarding Button (Secondary Action) -->
-            <div class="mt-2.5">
+            <!-- Feature-Rich New ExCo Onboarding Button (Secondary Action with Generous Breathing Room) -->
+            <div class="mt-4 pt-1">
               <button 
                 type="button" 
-                class="btn btn-sm w-100 py-2 px-3 rounded-3 d-flex align-items-center justify-content-between new-exco-feature-btn" 
+                class="btn btn-sm w-100 py-2.5 px-3.5 rounded-3 d-flex align-items-center justify-content-between new-exco-feature-btn shadow-2xs" 
                 @click="emit('signup')"
               >
-                <div class="d-flex align-items-center gap-2">
+                <div class="d-flex align-items-center gap-2.5">
                   <div class="new-exco-icon-box">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
                       <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
                       <circle cx="8.5" cy="7" r="4"></circle>
                       <line x1="20" y1="8" x2="20" y2="14"></line>
@@ -720,10 +764,10 @@ async function handleManualLogin() {
                     </svg>
                   </div>
                   <div class="text-start">
-                    <span class="d-block fw-bold text-dark new-exco-label" style="font-size: 0.775rem;">
+                    <span class="d-block fw-bold text-dark new-exco-label" style="font-size: 0.78rem;">
                       New ExCo Onboarding
                     </span>
-                    <small class="text-muted d-block" style="font-size: 0.66rem; margin-top: -2px;">
+                    <small class="text-muted d-block" style="font-size: 0.67rem; margin-top: -1px;">
                       Approved CCAs via OSL Whitelist Check
                     </small>
                   </div>
@@ -1111,22 +1155,40 @@ async function handleManualLogin() {
   margin-top: 0.25rem;
 }
 
+/* Side-Peeking Mascot Cat (Pops out from left or right edge beside the button) */
 .peeking-mascot-cat {
   position: absolute;
-  top: -34px;
-  right: 24px;
+  top: 50%;
   z-index: 10;
   pointer-events: none;
   display: flex;
   flex-direction: column;
   align-items: center;
-  transform: translateY(32px) scale(0.4);
   opacity: 0;
-  transition: all 0.32s cubic-bezier(0.34, 1.56, 0.64, 1);
+  transition: all 0.28s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
-.sign-in-btn-wrapper:hover .peeking-mascot-cat {
-  transform: translateY(0) scale(1);
+/* Left side peeking: peeks out from the left edge */
+.peeking-mascot-cat.left {
+  left: -8px;
+  transform: translateY(-50%) translateX(16px) scale(0.6) rotate(-8deg);
+}
+
+.peeking-mascot-cat.left.is-active,
+.sign-in-btn-wrapper:hover .peeking-mascot-cat.left {
+  transform: translateY(-50%) translateX(-14px) scale(1) rotate(-8deg);
+  opacity: 1;
+}
+
+/* Right side peeking: peeks out from the right edge */
+.peeking-mascot-cat.right {
+  right: -8px;
+  transform: translateY(-50%) translateX(-16px) scale(0.6) rotate(8deg);
+}
+
+.peeking-mascot-cat.right.is-active,
+.sign-in-btn-wrapper:hover .peeking-mascot-cat.right {
+  transform: translateY(-50%) translateX(14px) scale(1) rotate(8deg);
   opacity: 1;
 }
 
@@ -1134,12 +1196,13 @@ async function handleManualLogin() {
   background: #ffffff;
   border: 1.5px solid #fda4af;
   color: #e11d48;
-  font-size: 0.62rem;
+  font-size: 0.54rem;
   font-weight: 800;
-  padding: 1px 7px;
+  padding: 1px 6px;
   border-radius: 9999px;
   box-shadow: 0 4px 10px rgba(225, 29, 72, 0.15);
-  margin-bottom: -4px;
+  margin-bottom: -2px;
+  white-space: nowrap;
   animation: bubble-bounce 1s ease infinite alternate;
 }
 
@@ -1160,6 +1223,35 @@ async function handleManualLogin() {
   0% { transform: rotate(0deg); }
   50% { transform: rotate(-8deg); }
   100% { transform: rotate(0deg); }
+}
+
+/* Neutralize Safari & Chrome aggressive autofill solid blue/yellow background locks */
+input:-webkit-autofill,
+input:-webkit-autofill:hover, 
+input:-webkit-autofill:focus, 
+input:-webkit-autofill:active {
+  -webkit-box-shadow: 0 0 0 1000px #ffffff inset !important;
+  -webkit-text-fill-color: var(--pulse-ink, #0f172a) !important;
+  caret-color: var(--pulse-ink, #0f172a) !important;
+  transition: background-color 5000s ease-in-out 0s;
+}
+
+.input-clear-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  color: #94a3b8 !important;
+  background: transparent;
+  transition: all 0.15s ease;
+  line-height: 1;
+}
+
+.input-clear-btn:hover {
+  background: #fee2e2;
+  color: #e11d48 !important;
 }
 
 .pulse-submit-btn {
