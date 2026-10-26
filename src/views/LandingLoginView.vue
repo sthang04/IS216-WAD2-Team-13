@@ -300,15 +300,15 @@ async function handleManualLogin() {
           <div class="pe-lg-4">
             
             <!-- Dignified Institutional Badge with Full University Name & Acronym (Mentioned Once) -->
-            <div class="d-inline-flex align-items-center gap-3 px-3.5 py-2 rounded-4 liquid-glass-tag mb-3 shadow-sm border" style="background: rgba(255, 255, 255, 0.88); backdrop-filter: blur(12px);">
-              <span class="badge rounded-pill bg-danger bg-opacity-10 text-danger border border-danger-subtle px-2.5 py-1.5 fw-bold flex-shrink-0" style="font-size: 0.68rem; letter-spacing: 0.05em; line-height: 1.2;">
+            <div class="d-inline-flex align-items-center rounded-4 liquid-glass-tag mb-3 shadow-sm border" style="background: rgba(255, 255, 255, 0.92); backdrop-filter: blur(12px); padding: 8px 18px 8px 10px; gap: 14px;">
+              <span class="badge rounded-pill bg-danger bg-opacity-10 text-danger border border-danger-subtle fw-bold flex-shrink-0" style="font-size: 0.7rem; letter-spacing: 0.05em; line-height: 1.2; padding: 6px 12px;">
                 OFFICIAL PORTAL
               </span>
-              <div class="text-start pe-2" style="line-height: 1.25;">
-                <span class="d-block fw-bold text-dark" style="font-size: 0.82rem; letter-spacing: -0.01em;">
+              <div class="text-start pe-2" style="line-height: 1.3;">
+                <span class="d-block fw-bold text-dark" style="font-size: 0.83rem; letter-spacing: -0.01em;">
                   Singapore Management University (SMU)
                 </span>
-                <span class="text-muted d-block" style="font-size: 0.7rem; font-weight: 500;">
+                <span class="text-muted d-block" style="font-size: 0.71rem; font-weight: 500; margin-top: 2px;">
                   Office of Student Life • Facilities Portal
                 </span>
               </div>
@@ -696,11 +696,12 @@ async function handleManualLogin() {
             <div class="mt-4 pt-1">
               <button 
                 type="button" 
-                class="btn btn-sm w-100 py-2.5 px-3.5 rounded-3 d-flex align-items-center justify-content-between new-exco-feature-btn shadow-2xs" 
+                class="btn w-100 rounded-3 d-flex align-items-center justify-content-between new-exco-feature-btn shadow-2xs" 
+                style="padding: 10px 16px;"
                 @click="emit('signup')"
               >
-                <div class="d-flex align-items-center gap-2.5">
-                  <div class="new-exco-icon-box">
+                <div class="d-flex align-items-center text-start" style="gap: 12px;">
+                  <div class="new-exco-icon-box flex-shrink-0">
                     <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
                       <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
                       <circle cx="8.5" cy="7" r="4"></circle>
@@ -709,17 +710,17 @@ async function handleManualLogin() {
                     </svg>
                   </div>
                   <div class="text-start">
-                    <span class="d-block fw-bold text-dark new-exco-label" style="font-size: 0.78rem;">
+                    <span class="d-block fw-bold text-dark new-exco-label" style="font-size: 0.8rem;">
                       New ExCo Onboarding
                     </span>
-                    <small class="text-muted d-block" style="font-size: 0.67rem; margin-top: -1px;">
+                    <small class="text-muted d-block" style="font-size: 0.7rem; margin-top: 1px;">
                       Approved CCAs via OSL Whitelist Check
                     </small>
                   </div>
                 </div>
                 
-                <div class="d-flex align-items-center gap-1.5">
-                  <span class="badge bg-secondary-subtle text-secondary border px-2 py-0.5" style="font-size: 0.65rem;">
+                <div class="d-flex align-items-center" style="gap: 6px;">
+                  <span class="badge bg-secondary-subtle text-secondary border px-2.5 py-1" style="font-size: 0.68rem; font-weight: 600;">
                     Whitelist
                   </span>
                   <span class="new-exco-arrow text-muted">→</span>
@@ -731,19 +732,20 @@ async function handleManualLogin() {
             <div class="mt-4 pt-3 border-top">
               <button 
                 type="button" 
-                class="btn btn-sm w-100 py-2.5 px-3 rounded-3 d-flex align-items-center justify-content-between demo-toggle-bar text-start"
+                class="btn w-100 rounded-3 d-flex align-items-center justify-content-between demo-toggle-bar text-start"
                 :class="showDemoLogins ? 'demo-toggle-active' : 'demo-toggle-inactive'"
+                style="padding: 11px 16px; border-radius: 12px;"
                 @click="showDemoLogins = !showDemoLogins"
               >
-                <div class="d-flex align-items-center gap-2.5 text-start flex-grow-1 min-w-0">
-                  <span class="badge rounded-pill px-2.5 py-1 demo-badge flex-shrink-0" style="font-size: 0.67rem; font-weight: 700;">
+                <div class="d-flex align-items-center text-start flex-grow-1 min-w-0" style="gap: 12px;">
+                  <span class="badge rounded-pill demo-badge flex-shrink-0" style="font-size: 0.72rem; font-weight: 700; padding: 5px 12px;">
                     ⚡ 1-Click
                   </span>
-                  <span class="fw-bold text-dark text-start" style="font-size: 0.81rem; letter-spacing: -0.01em; white-space: nowrap;">
+                  <span class="fw-bold text-dark text-start" style="font-size: 0.82rem; letter-spacing: -0.01em; white-space: nowrap;">
                     Click here for 1-Click Login for different personas
                   </span>
                 </div>
-                <div class="d-flex align-items-center gap-1.5 small text-muted flex-shrink-0 ms-2" style="font-size: 0.72rem; font-weight: 500;">
+                <div class="d-flex align-items-center small text-muted flex-shrink-0 ms-2" style="font-size: 0.74rem; font-weight: 500; gap: 6px;">
                   <span>{{ showDemoLogins ? 'Hide' : 'Expand' }}</span>
                   <svg 
                     width="13" 
@@ -1273,6 +1275,7 @@ input:-webkit-autofill:active {
 .new-exco-feature-btn {
   background: rgba(255, 255, 255, 0.78);
   border: 1px solid #e2e8f0;
+  padding: 10px 16px !important;
   transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
   box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04);
 }
@@ -1321,6 +1324,7 @@ input:-webkit-autofill:active {
 .demo-toggle-bar {
   background: rgba(255, 255, 255, 0.7);
   border: 1px dashed #cbd5e1;
+  padding: 11px 16px !important;
   transition: all 0.2s ease;
   text-align: left !important;
 }
