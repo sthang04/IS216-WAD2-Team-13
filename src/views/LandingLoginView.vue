@@ -18,25 +18,6 @@ const showDemoLogins = ref(false)
 const rememberedAccount = ref(null)
 const isSwitchingAccount = ref(false)
 
-// Interactive Left-Column Campus Operations Console
-const activeApiTab = ref('onemap') // 'onemap', 'handover', 'telegram'
-const simulatedDelay = ref(false)
-const simulatedApproval = ref(false)
-const simulatedPing = ref(false)
-
-function toggleSimulatedDelay() {
-  simulatedDelay.value = !simulatedDelay.value
-}
-
-function toggleSimulatedApproval() {
-  simulatedApproval.value = !simulatedApproval.value
-}
-
-function triggerSimulatedPing() {
-  simulatedPing.value = true
-  setTimeout(() => { simulatedPing.value = false }, 2500)
-}
-
 // Loading Screen with Fun Facts & Mascot
 const isAuthenticating = ref(false)
 const authProgress = ref(0)
@@ -45,7 +26,7 @@ const currentFactIndex = ref(0)
 const funFacts = [
   "👑 Supreme Leader Kyong: Legend says Prof Kyong commands WAD2 with supreme wisdom and an army of adorable cats! 🐱",
   "🐱 Jerica's Mascot Cat has stamped your session as 100% genuine and ready for the live demo!",
-  "🏃 SMU Campus Trivia: Running from SMU Connexion to Li Ka Shing B1 is 650m (~8 min brisk walk). Perfect transit buffer for OneMap!",
+  "🏃 Singapore Management University (SMU) Trivia: Running from SMU Connexion to Li Ka Shing B1 is 650m (~8 min brisk walk). Perfect transit buffer for OneMap!",
   "🎭 ACF Eurhythmix & Samba Masala maintain a 100% compliance record on weekend studio handovers under OSL Clause 9.1(c).",
   "✨ A+ Rubric Secret: A seamless live demo with 1-click evaluator logins saves crucial minutes during the 12m finals presentation!"
 ];
@@ -229,7 +210,7 @@ async function completeLogin(loginEmail, loginPassword) {
 
 async function handleManualLogin() {
   if (!email.value.trim()) {
-    errorMsg.value = 'Please enter your SMU institutional email.'
+    errorMsg.value = 'Please enter your Singapore Management University (SMU) institutional email.'
     return
   }
   if (!isSmuEmail.value) {
@@ -263,234 +244,138 @@ async function handleManualLogin() {
         <div class="col-12 col-lg-6 col-xl-6">
           <div class="pe-lg-4">
             
-            <!-- Redesigned Dignified Institutional Badge (Comfortable Dimensions & Padding) -->
+            <!-- Dignified Institutional Badge with Full University Name & Acronym -->
             <div class="d-inline-flex align-items-center gap-2.5 px-3.5 py-1.5 rounded-pill liquid-glass-tag mb-3 shadow-sm border" style="padding: 6px 14px 6px 8px;">
               <span class="badge rounded-pill bg-danger bg-opacity-10 text-danger border border-danger-subtle px-2.5 py-1 fw-bold" style="font-size: 0.68rem; letter-spacing: 0.05em; line-height: 1.25;">
                 OFFICIAL PORTAL
               </span>
               <span class="fw-semibold text-dark pe-1" style="font-size: 0.78rem;">
-                SMU Office of Student Life • CCA Facilities Portal
+                Singapore Management University (SMU) • Office of Student Life
               </span>
             </div>
 
             <h1 class="display-6 fw-bold tracking-tight mb-3" style="color: var(--pulse-ink); line-height: 1.15;">
               Pulse:
-              <br>Centralised Facilities & Operations for SMU Student Life
+              <br>Centralised Facilities & Operations
             </h1>
 
             <p class="text-muted mb-4" style="font-size: 0.95rem; line-height: 1.6;">
-              The official co-curricular management platform for SMU student clubs, performance groups, and OSL administrators. Simplifies arts studio handovers, automates waitlists for in-demand venues, and streamlines rehearsal logistics across the SMU city campus.
+              The official co-curricular management platform for <strong>Singapore Management University (SMU)</strong> student clubs, performance groups, and Office of Student Life (OSL) administrators. Simplifies arts studio handovers, automates waitlists for in-demand venues, and streamlines rehearsal logistics across the city campus.
             </p>
 
-            <!-- Creative Interactive Live Campus Operations Telemetry Console (Replaces generic static cards) -->
-            <div class="pulse-card liquid-glass-card p-3 p-xl-3.5 border shadow-sm mb-4 interactive-terminal-box">
+            <!-- Creative Glanceable Campus Operations Showcase (Instant 2-Second Preview) -->
+            <div class="pulse-card liquid-glass-card p-3 p-xl-3.5 border shadow-sm mb-4 glance-showcase-box">
               
-              <!-- Console Tab Bar -->
+              <!-- Showcase Header -->
               <div class="d-flex align-items-center justify-content-between mb-3 pb-2 border-bottom flex-wrap gap-2">
                 <div class="d-flex align-items-center gap-2">
-                  <div class="pulse-terminal-dot"></div>
+                  <span class="glance-pulse-indicator"></span>
                   <span class="text-uppercase fw-bold text-dark" style="font-size: 0.72rem; letter-spacing: 0.05em;">
-                    Live Campus Operations Telemetry
+                    Live Campus Operations at a Glance
                   </span>
                 </div>
+                <span class="badge bg-danger bg-opacity-10 text-danger border border-danger-subtle px-2 py-0.5 rounded-pill fw-bold" style="font-size: 0.65rem;">
+                  Real-Time Sync
+                </span>
+              </div>
+
+              <!-- 3 Sleek Glance Cards (Clean, instant comprehension at a glance) -->
+              <div class="d-flex flex-column gap-2.5">
                 
-                <!-- Tab Selectors -->
-                <div class="d-inline-flex p-0.5 rounded-pill bg-light border gap-1">
-                  <button 
-                    type="button" 
-                    class="terminal-tab-btn"
-                    :class="{ active: activeApiTab === 'onemap' }"
-                    @click="activeApiTab = 'onemap'"
-                  >
-                    🗺️ OneMap API
-                  </button>
-                  <button 
-                    type="button" 
-                    class="terminal-tab-btn"
-                    :class="{ active: activeApiTab === 'handover' }"
-                    @click="activeApiTab = 'handover'"
-                  >
-                    🔄 P2P Studio
-                  </button>
-                  <button 
-                    type="button" 
-                    class="terminal-tab-btn"
-                    :class="{ active: activeApiTab === 'telegram' }"
-                    @click="activeApiTab = 'telegram'"
-                  >
-                    🤖 Bot Dispatch
-                  </button>
-                </div>
-              </div>
-
-              <!-- Tab 1: OneMap Routing API Live Simulator -->
-              <div v-if="activeApiTab === 'onemap'" class="terminal-content-panel">
-                <div class="d-flex align-items-center justify-content-between mb-2">
-                  <span class="badge bg-primary bg-opacity-10 text-primary border border-primary-subtle px-2 py-0.5" style="font-size: 0.65rem; font-weight: 700;">
-                    SLA ONEMAP CAMPUS ROUTE
-                  </span>
-                  <span class="text-muted small" style="font-size: 0.68rem;">Verified Walking Buffer</span>
-                </div>
-
-                <div class="p-2.5 rounded-3 bg-white border mb-2.5">
-                  <div class="d-flex align-items-center justify-content-between small text-muted mb-1" style="font-size: 0.7rem;">
-                    <span>Holding Room: <strong>SMU Connexion B1</strong></span>
-                    <span>→</span>
-                    <span>Venue: <strong>Li Ka Shing B1 Hall</strong></span>
-                  </div>
-
-                  <!-- Route Telemetry Grid -->
-                  <div class="row g-2 text-center mt-1">
-                    <div class="col-3">
-                      <div class="p-1.5 rounded-2 bg-light border">
-                        <div class="fw-bold text-dark" style="font-size: 0.78rem;">650m</div>
-                        <div class="text-muted" style="font-size: 0.62rem;">Distance</div>
+                <!-- Glance Item 1: Smart Venue Booking & Waitlist -->
+                <div class="glance-item-card p-2.5 rounded-3 border bg-white shadow-2xs">
+                  <div class="d-flex align-items-center justify-content-between mb-1">
+                    <div class="d-flex align-items-center gap-2">
+                      <div class="glance-icon-circle bg-primary bg-opacity-10 text-primary">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+                          <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
+                          <line x1="16" y1="2" x2="16" y2="6"></line>
+                          <line x1="8" y1="2" x2="8" y2="6"></line>
+                          <line x1="3" y1="10" x2="21" y2="10"></line>
+                        </svg>
                       </div>
+                      <strong class="text-dark small" style="font-size: 0.8rem;">Smart Booking & Instant Waitlist</strong>
                     </div>
-                    <div class="col-3">
-                      <div class="p-1.5 rounded-2 bg-light border">
-                        <div class="fw-bold text-dark" style="font-size: 0.78rem;">8 mins</div>
-                        <div class="text-muted" style="font-size: 0.62rem;">Brisk Walk</div>
-                      </div>
-                    </div>
-                    <div class="col-3">
-                      <div class="p-1.5 rounded-2 bg-light border">
-                        <div class="fw-bold text-dark" style="font-size: 0.78rem;">85%</div>
-                        <div class="text-muted" style="font-size: 0.62rem;">Sheltered</div>
-                      </div>
-                    </div>
-                    <div class="col-3">
-                      <div class="p-1.5 rounded-2 border" :class="simulatedDelay ? 'bg-danger bg-opacity-10 border-danger' : 'bg-light'">
-                        <div class="fw-bold" :class="simulatedDelay ? 'text-danger' : 'text-dark'" style="font-size: 0.78rem;">
-                          {{ simulatedDelay ? '+25m' : '+15m' }}
-                        </div>
-                        <div class="text-muted" style="font-size: 0.62rem;">Cue Buffer</div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                <!-- Interactive Route Control Button -->
-                <div class="d-flex align-items-center justify-content-between gap-2">
-                  <p class="text-muted small mb-0" style="font-size: 0.7rem;">
-                    {{ simulatedDelay ? '⚠️ Concourse delay active: Downstream cues auto-shifted by 10 mins.' : 'Auto-injects verified walking buffers into stage cue run-of-show.' }}
-                  </p>
-                  <button 
-                    type="button" 
-                    class="btn btn-xs btn-outline-primary text-nowrap py-1 px-2.5 rounded-pill"
-                    style="font-size: 0.7rem; font-weight: 600;"
-                    @click="toggleSimulatedDelay"
-                  >
-                    {{ simulatedDelay ? 'Reset Buffer' : 'Simulate +10m Delay' }}
-                  </button>
-                </div>
-              </div>
-
-              <!-- Tab 2: P2P Studio Handover Engine -->
-              <div v-else-if="activeApiTab === 'handover'" class="terminal-content-panel">
-                <div class="d-flex align-items-center justify-content-between mb-2">
-                  <span class="badge bg-danger bg-opacity-10 text-danger border border-danger-subtle px-2 py-0.5" style="font-size: 0.65rem; font-weight: 700;">
-                    P2P STUDIO SWAP AUDIT
-                  </span>
-                  <span class="text-muted small" style="font-size: 0.68rem;">Clause 9.1(c) Compliant</span>
-                </div>
-
-                <div class="p-2.5 rounded-3 bg-white border mb-2.5">
-                  <div class="d-flex align-items-center justify-content-between mb-2">
-                    <span class="fw-bold text-dark small" style="font-size: 0.78rem;">MPSH Dance Studio 3</span>
-                    <span class="badge" :class="simulatedApproval ? 'bg-success text-white' : 'bg-warning text-dark'" style="font-size: 0.65rem;">
-                      {{ simulatedApproval ? 'OSL Endorsed ✓' : 'Awaiting OSL Sign-Off' }}
+                    <span class="badge bg-success bg-opacity-10 text-success border border-success-subtle px-2 py-0.5 rounded-pill" style="font-size: 0.64rem; font-weight: 700;">
+                      ● 6 Venues Live
                     </span>
                   </div>
-
-                  <div class="d-flex align-items-center justify-content-between small text-muted mb-2" style="font-size: 0.72rem;">
-                    <span class="badge bg-danger bg-opacity-10 text-danger border">Eurhythmix (Releasing)</span>
-                    <span>⇄</span>
-                    <span class="badge bg-warning bg-opacity-25 text-dark border">Samba Masala (Claiming)</span>
-                  </div>
-
-                  <!-- Live Audit Steps -->
-                  <div class="d-flex flex-column gap-1 small text-muted" style="font-size: 0.68rem;">
-                    <div class="d-flex align-items-center gap-1.5 text-success fw-semibold">
-                      <span>✓</span> <span>48h Advance Handover Notice Verified (0 Demerit Points)</span>
-                    </div>
-                    <div class="d-flex align-items-center gap-1.5 text-success fw-semibold">
-                      <span>✓</span> <span>Weekly Availability Heatmap Checked (Zero timetable clash)</span>
-                    </div>
-                    <div class="d-flex align-items-center gap-1.5" :class="simulatedApproval ? 'text-success fw-semibold' : 'text-secondary'">
-                      <span>{{ simulatedApproval ? '✓' : '○' }}</span>
-                      <span>{{ simulatedApproval ? 'OSL Admin Sign-Off Complete (Legal venue liability reassigned)' : 'Dual-signoff gatekeeper pending Chloe Ang approval' }}</span>
-                    </div>
-                  </div>
-                </div>
-
-                <!-- Interactive Handover Button -->
-                <div class="d-flex align-items-center justify-content-between gap-2">
-                  <p class="text-muted small mb-0" style="font-size: 0.7rem;">
-                    Direct CCA studio exchanges without losing priority allocation BOSS credits.
+                  <p class="text-muted small mb-0 ps-4 ms-2" style="font-size: 0.72rem; line-height: 1.4;">
+                    Instant queue alerts & auto-promotion when popular campus studios (e.g. Connexion B1 & MPSH) are released.
                   </p>
-                  <button 
-                    type="button" 
-                    class="btn btn-xs btn-outline-danger text-nowrap py-1 px-2.5 rounded-pill"
-                    style="font-size: 0.7rem; font-weight: 600;"
-                    @click="toggleSimulatedApproval"
-                  >
-                    {{ simulatedApproval ? 'Revert Pending' : 'Simulate OSL Approval' }}
-                  </button>
                 </div>
+
+                <!-- Glance Item 2: P2P Studio Handover Engine -->
+                <div class="glance-item-card p-2.5 rounded-3 border bg-white shadow-2xs">
+                  <div class="d-flex align-items-center justify-content-between mb-1">
+                    <div class="d-flex align-items-center gap-2">
+                      <div class="glance-icon-circle bg-danger bg-opacity-10 text-danger">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+                          <polyline points="17 1 21 5 17 9"></polyline>
+                          <path d="M3 11V9a4 4 0 0 1 4-4h14"></path>
+                          <polyline points="7 23 3 19 7 15"></polyline>
+                          <path d="M21 13v2a4 4 0 0 1-4 4H3"></path>
+                        </svg>
+                      </div>
+                      <strong class="text-dark small" style="font-size: 0.8rem;">Peer-to-Peer Studio Handover</strong>
+                    </div>
+                    <span class="badge bg-primary bg-opacity-10 text-primary border border-primary-subtle px-2 py-0.5 rounded-pill" style="font-size: 0.64rem; font-weight: 700;">
+                      OSL Clause 9.1(c)
+                    </span>
+                  </div>
+                  <p class="text-muted small mb-0 ps-4 ms-2" style="font-size: 0.72rem; line-height: 1.4;">
+                    Direct slot exchanges between CCAs (e.g. Eurhythmix ⇄ Samba Masala) with verified legal liability reassignment.
+                  </p>
+                </div>
+
+                <!-- Glance Item 3: Rehearsal Run-of-Show & Transit Buffer -->
+                <div class="glance-item-card p-2.5 rounded-3 border bg-white shadow-2xs">
+                  <div class="d-flex align-items-center justify-content-between mb-1">
+                    <div class="d-flex align-items-center gap-2">
+                      <div class="glance-icon-circle bg-success bg-opacity-10 text-success">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+                          <circle cx="12" cy="12" r="10"></circle>
+                          <polyline points="12 6 12 12 16 14"></polyline>
+                        </svg>
+                      </div>
+                      <strong class="text-dark small" style="font-size: 0.8rem;">Run-of-Show & OneMap Walking SLA</strong>
+                    </div>
+                    <span class="badge bg-secondary bg-opacity-10 text-secondary border px-2 py-0.5 rounded-pill" style="font-size: 0.64rem; font-weight: 700;">
+                      +15m Sheltered Buffer
+                    </span>
+                  </div>
+                  <p class="text-muted small mb-0 ps-4 ms-2" style="font-size: 0.72rem; line-height: 1.4;">
+                    Verified 650m walking routes (Connexion to Li Ka Shing Hall) auto-injected into cue sheets with Telegram bot alerts.
+                  </p>
+                </div>
+
               </div>
 
-              <!-- Tab 3: Telegram Bot Webhook Integration -->
-              <div v-else-if="activeApiTab === 'telegram'" class="terminal-content-panel">
-                <div class="d-flex align-items-center justify-content-between mb-2">
-                  <span class="badge bg-success bg-opacity-10 text-success border border-success-subtle px-2 py-0.5" style="font-size: 0.65rem; font-weight: 700;">
-                    TELEGRAM WEBHOOK DISPATCH
-                  </span>
-                  <span class="text-muted small" style="font-size: 0.68rem;">Verified @SMUPulseBot</span>
+              <!-- Campus Stats Micro-Strip at Bottom of Glance Card -->
+              <div class="d-flex align-items-center justify-content-between pt-2.5 mt-2.5 border-top flex-wrap gap-2 text-muted" style="font-size: 0.7rem;">
+                <div class="d-flex align-items-center gap-1.5">
+                  <span class="text-success fw-bold">✓</span>
+                  <span>28 Approved SMU CCAs</span>
                 </div>
-
-                <!-- Mock Telegram Message Bubble -->
-                <div class="p-2.5 rounded-3 bg-white border mb-2.5 position-relative overflow-hidden" :class="{ 'telegram-ping-glow': simulatedPing }">
-                  <div class="d-flex align-items-center justify-content-between mb-1.5">
-                    <div class="d-flex align-items-center gap-1.5">
-                      <span style="font-size: 0.9rem;">🤖</span>
-                      <strong class="text-dark small" style="font-size: 0.76rem;">@SMUPulseBot</strong>
-                      <span class="badge bg-primary text-white" style="font-size: 0.55rem;">BOT</span>
-                    </div>
-                    <span class="text-muted" style="font-size: 0.65rem;">Just now</span>
-                  </div>
-
-                  <div class="p-2 rounded-2 bg-light border small text-dark" style="font-size: 0.71rem; line-height: 1.45;">
-                    📢 <strong>Rehearsal Alert:</strong> MPSH Studio 3 transfer approved. Act 2 Lead Dancer Marcus Tan confirmed arrival at Li Ka Shing B1. Tap <code>/callsheet</code> for updated run-of-show cues.
-                  </div>
+                <div class="d-flex align-items-center gap-1.5">
+                  <span class="text-primary fw-bold">⚡</span>
+                  <span>0 Demerit Point Record</span>
                 </div>
-
-                <!-- Interactive Ping Button -->
-                <div class="d-flex align-items-center justify-content-between gap-2">
-                  <p class="text-muted small mb-0" style="font-size: 0.7rem;">
-                    {{ simulatedPing ? '🔔 Dispatched to 42 stage performers via linked Telegram bot!' : 'Real-time alert dispatch connected via Supabase webhook.' }}
-                  </p>
-                  <button 
-                    type="button" 
-                    class="btn btn-xs btn-outline-success text-nowrap py-1 px-2.5 rounded-pill"
-                    style="font-size: 0.7rem; font-weight: 600;"
-                    :disabled="simulatedPing"
-                    @click="triggerSimulatedPing"
-                  >
-                    {{ simulatedPing ? 'Broadcasting...' : 'Test-Ping Bot Alert' }}
-                  </button>
+                <div class="d-flex align-items-center gap-1.5">
+                  <span class="text-danger fw-bold">🏛️</span>
+                  <span>Direct OSL Whitelist</span>
                 </div>
               </div>
 
             </div>
 
-            <!-- Security Assurance Note -->
+            <!-- Security Assurance Note with Full University Name -->
             <div class="d-flex align-items-center gap-2 text-muted small" style="font-size: 0.775rem;">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
                 <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
               </svg>
-              <span>Sign-in restricted to SMU ExCos & OSL staff (@*.smu.edu.sg)</span>
+              <span>Sign-in restricted to Singapore Management University (SMU) ExCos & OSL staff (@*.smu.edu.sg)</span>
             </div>
 
           </div>
@@ -532,7 +417,7 @@ async function handleManualLogin() {
 
                 <div>
                   <h4 class="fw-bold mb-0 tracking-tight" style="color: var(--pulse-ink);">Sign In to Pulse</h4>
-                  <p class="text-muted small mb-0" style="font-size: 0.8rem;">SMU Student Life & Facilities Portal</p>
+                  <p class="text-muted small mb-0" style="font-size: 0.8rem;">Singapore Management University (SMU) Facilities Portal</p>
                 </div>
               </div>
 
@@ -782,24 +667,24 @@ async function handleManualLogin() {
               </button>
             </div>
 
-            <!-- Collapsible 1-Click Demo Persona Drawer -->
-            <div class="mt-3 pt-3 border-top">
+            <!-- Collapsible 1-Click Persona Drawer -->
+            <div class="mt-4 pt-3 border-top">
               <button 
                 type="button" 
-                class="btn btn-sm w-100 py-2 px-3 rounded-3 d-flex align-items-center justify-content-between demo-toggle-bar"
+                class="btn btn-sm w-100 py-2.5 px-3 rounded-3 d-flex align-items-center justify-content-between demo-toggle-bar"
                 :class="showDemoLogins ? 'demo-toggle-active' : 'demo-toggle-inactive'"
                 @click="showDemoLogins = !showDemoLogins"
               >
                 <div class="d-flex align-items-center gap-2">
-                  <span class="badge rounded-pill px-2 py-0.5 demo-badge">
-                    Demo Evaluator
+                  <span class="badge rounded-pill px-2 py-0.5 demo-badge" style="font-size: 0.67rem; font-weight: 700;">
+                    ⚡ 1-Click
                   </span>
                   <span class="fw-bold small text-dark" style="font-size: 0.78rem;">
-                    1-Click Demo Personas
+                    Click here for 1-Click Login for different personas
                   </span>
                 </div>
                 <div class="d-flex align-items-center gap-1 small text-muted" style="font-size: 0.72rem;">
-                  <span>{{ showDemoLogins ? 'Hide' : 'Expand (12m Demo)' }}</span>
+                  <span>{{ showDemoLogins ? 'Hide' : 'Expand' }}</span>
                   <svg 
                     width="13" 
                     height="13" 
@@ -819,7 +704,7 @@ async function handleManualLogin() {
                 <div v-if="showDemoLogins" class="mt-2 p-2.5 rounded-3 bg-light bg-opacity-75 border demo-cards-container">
                   <div class="d-flex align-items-center justify-content-between mb-2 px-1">
                     <span class="text-uppercase fw-bold text-muted" style="font-size: 0.64rem; letter-spacing: 0.05em;">
-                      Select Demo Role:
+                      Select a persona to sign in:
                     </span>
                     <span class="small text-muted" style="font-size: 0.65rem;">Instant Session</span>
                   </div>
@@ -934,7 +819,7 @@ async function handleManualLogin() {
                 </div>
 
                 <h5 class="fw-bold mb-1 text-dark" style="letter-spacing: -0.02em;">Authenticating Session...</h5>
-                <p class="text-muted small mb-3" style="font-size: 0.78rem;">Connecting with SMU Supabase Cloud</p>
+                <p class="text-muted small mb-3" style="font-size: 0.78rem;">Connecting with Singapore Management University (SMU) Supabase Cloud</p>
 
                 <!-- Progress Bar -->
                 <div class="progress w-100 rounded-pill mb-3" style="height: 6px; max-width: 280px; background-color: rgba(226, 232, 240, 0.8);">
@@ -945,7 +830,7 @@ async function handleManualLogin() {
                 <div class="p-3 rounded-3 bg-white border shadow-sm w-100 text-start" style="max-width: 380px;">
                   <div class="d-flex align-items-center justify-content-between mb-1.5">
                     <span class="badge bg-danger bg-opacity-10 text-danger border border-danger-subtle px-2 py-0.5" style="font-size: 0.65rem; font-weight: 700;">
-                      💡 SMU & WAD2 FUN FACT
+                      💡 SINGAPORE MANAGEMENT UNIVERSITY (SMU) TRIVIA
                     </span>
                     <span class="text-muted" style="font-size: 0.65rem;">Tip #{{ currentFactIndex + 1 }}</span>
                   </div>
@@ -1075,59 +960,51 @@ async function handleManualLogin() {
 }
 
 /* ==========================================================================
-   Interactive Operations Telemetry Console
+   Glanceable Campus Operations Showcase
    ========================================================================== */
-.interactive-terminal-box {
-  background: rgba(255, 255, 255, 0.84) !important;
+.glance-showcase-box {
+  background: rgba(255, 255, 255, 0.88) !important;
   border-radius: 1.25rem !important;
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
 }
 
-.pulse-terminal-dot {
+.glance-pulse-indicator {
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background-color: var(--pulse-primary, #e11d48);
-  box-shadow: 0 0 8px rgba(225, 29, 72, 0.6);
-  animation: dot-pulse 2s infinite ease-in-out;
+  background: #22c55e;
+  box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.7);
+  animation: glance-pulse 2s infinite;
+  display: inline-block;
 }
 
-@keyframes dot-pulse {
-  0%, 100% { opacity: 1; transform: scale(1); }
-  50% { opacity: 0.5; transform: scale(0.85); }
+@keyframes glance-pulse {
+  0% { box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.7); }
+  70% { box-shadow: 0 0 0 6px rgba(34, 197, 94, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(34, 197, 94, 0); }
 }
 
-.terminal-tab-btn {
-  border: none;
-  background: transparent;
-  padding: 3px 10px;
-  border-radius: 9999px;
-  font-size: 0.68rem;
-  font-weight: 600;
-  color: #64748b;
-  transition: all 0.18s ease;
+.glance-item-card {
+  transition: all 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
 }
 
-.terminal-tab-btn:hover {
-  color: #0f172a;
+.glance-item-card:hover {
+  transform: translateY(-2px);
+  border-color: rgba(225, 29, 72, 0.25) !important;
+  box-shadow: 0 6px 18px -4px rgba(15, 23, 42, 0.08) !important;
 }
 
-.terminal-tab-btn.active {
-  background-color: #ffffff;
-  color: var(--pulse-primary, #e11d48);
-  box-shadow: 0 1px 4px rgba(15, 23, 42, 0.08);
-}
-
-.terminal-content-panel {
-  animation: fadeIn 0.2s ease-out;
-}
-
-.telegram-ping-glow {
-  animation: ping-glow 1s ease-in-out infinite alternate;
-}
-
-@keyframes ping-glow {
-  0% { box-shadow: 0 0 0 rgba(34, 197, 94, 0); }
-  100% { box-shadow: 0 0 14px rgba(34, 197, 94, 0.4); border-color: #86efac !important; }
+.glance-icon-circle {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
 }
 
 /* ==========================================================================
