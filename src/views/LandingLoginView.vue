@@ -14,6 +14,29 @@ const errorMsg = ref('')
 const isSubmitting = ref(false)
 const showDemoLogins = ref(false)
 
+// Session Cache: Remembered repeated accounts
+const rememberedAccount = ref(null)
+const isSwitchingAccount = ref(false)
+
+// Interactive Left-Column Campus Operations Console
+const activeApiTab = ref('onemap') // 'onemap', 'handover', 'telegram'
+const simulatedDelay = ref(false)
+const simulatedApproval = ref(false)
+const simulatedPing = ref(false)
+
+function toggleSimulatedDelay() {
+  simulatedDelay.value = !simulatedDelay.value
+}
+
+function toggleSimulatedApproval() {
+  simulatedApproval.value = !simulatedApproval.value
+}
+
+function triggerSimulatedPing() {
+  simulatedPing.value = true
+  setTimeout(() => { simulatedPing.value = false }, 2500)
+}
+
 // Loading Screen with Fun Facts & Mascot
 const isAuthenticating = ref(false)
 const authProgress = ref(0)
@@ -59,7 +82,7 @@ let charIndex = 0
 let isDeleting = false
 
 function tickPlaceholder() {
-  if (email.value.length > 0) return
+  if (email.value.length > 0 || isSwitchingAccount.value) return
 
   const target = sampleQueries[queryIndex]
   if (!isDeleting) {
@@ -85,6 +108,17 @@ function tickPlaceholder() {
 }
 
 onMounted(() => {
+  // Read remembered account from session cache
+  try {
+    const cached = localStorage.getItem('pulse_remembered_account')
+    if (cached) {
+      rememberedAccount.value = JSON.parse(cached)
+      email.value = rememberedAccount.value.email
+    }
+  } catch (err) {
+    console.error('Session cache load error', err)
+  }
+
   placeholderTimer = setTimeout(tickPlaceholder, 1000)
 })
 
@@ -92,7 +126,31 @@ onUnmounted(() => {
   if (placeholderTimer) clearTimeout(placeholderTimer)
 })
 
-// All sign-in paths go through the auth service with fun loading screen
+// Account switcher methods
+function switchAccount() {
+  isSwitchingAccount.value = true
+  email.value = ''
+  password.value = ''
+}
+
+function forgetRememberedAccount() {
+  try {
+    localStorage.removeItem('pulse_remembered_account')
+  } catch {}
+  rememberedAccount.value = null
+  isSwitchingAccount.value = false
+  email.value = ''
+  password.value = ''
+}
+
+async function resumeRememberedLogin() {
+  if (!rememberedAccount.value) return
+  email.value = rememberedAccount.value.email
+  password.value = DEMO_PASSWORD
+  await completeLogin(rememberedAccount.value.email, DEMO_PASSWORD)
+}
+
+// All sign-in paths go through the auth service with fun loading screen & cache update
 async function completeLogin(loginEmail, loginPassword) {
   errorMsg.value = ''
   isSubmitting.value = true
@@ -122,6 +180,23 @@ async function completeLogin(loginEmail, loginPassword) {
     
     clearInterval(progressInterval)
     authProgress.value = 100
+
+    // Store in Session Cache for repeated visits
+    if (persona) {
+      const now = new Date()
+      const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+      const cached = {
+        email: persona.email,
+        name: persona.name,
+        roleLabel: persona.roleLabel,
+        club: persona.club,
+        lastLoginAt: `Today, ${timeStr}`
+      }
+      try {
+        localStorage.setItem('pulse_remembered_account', JSON.stringify(cached))
+        rememberedAccount.value = cached
+      } catch {}
+    }
     
     setTimeout(() => {
       isAuthenticating.value = false
@@ -170,7 +245,7 @@ async function handleManualLogin() {
     <div class="container-fluid position-relative" style="max-width: 1240px; z-index: 1;">
       <div class="row align-items-center g-4 g-xl-5">
         
-        <!-- Left Column: Unified Value Proposition & Showcase -->
+        <!-- Left Column: Unified Value Proposition & Interactive Live Operations Telemetry -->
         <div class="col-12 col-lg-6 col-xl-6">
           <div class="pe-lg-4">
             
@@ -193,64 +268,203 @@ async function handleManualLogin() {
               The official co-curricular management platform for SMU student clubs, performance groups, and OSL administrators. Simplifies arts studio handovers, automates waitlists for in-demand venues, and streamlines rehearsal logistics across the SMU city campus.
             </p>
 
-            <!-- Grounded Sector Showcase Cards (Subtle Floating Animation + Glass Backdrop) -->
-            <div class="d-flex flex-column gap-3 mb-4">
+            <!-- Creative Interactive Live Campus Operations Telemetry Console (Replaces generic static cards) -->
+            <div class="pulse-card liquid-glass-card p-3 p-xl-3.5 border shadow-sm mb-4 interactive-terminal-box">
               
-              <!-- Card 1: ACF Arts -->
-              <div class="p-3 liquid-glass-tag border rounded-3 d-flex align-items-start gap-3 pulse-floating-tag" style="animation-delay: 0s;">
-                <div class="p-2 rounded-2 text-danger bg-danger bg-opacity-10 flex-shrink-0" style="line-height: 1;">
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon>
-                  </svg>
+              <!-- Console Tab Bar -->
+              <div class="d-flex align-items-center justify-content-between mb-3 pb-2 border-bottom flex-wrap gap-2">
+                <div class="d-flex align-items-center gap-2">
+                  <div class="pulse-terminal-dot"></div>
+                  <span class="text-uppercase fw-bold text-dark" style="font-size: 0.72rem; letter-spacing: 0.05em;">
+                    Live Campus Operations Telemetry
+                  </span>
                 </div>
-                <div>
-                  <div class="d-flex align-items-center gap-2 mb-1">
-                    <span class="badge bg-danger rounded-pill px-2" style="font-size: 0.65rem;">ACF • ARTS</span>
-                    <span class="fw-bold text-dark small">Peer-to-Peer Studio Handover</span>
-                  </div>
-                  <div class="text-muted small" style="font-size: 0.8rem;">
-                    Direct studio exchanges between ACF clubs (e.g. Eurhythmix & Samba Masala) with weekend conditional passes and OSL endorsement.
-                  </div>
+                
+                <!-- Tab Selectors -->
+                <div class="d-inline-flex p-0.5 rounded-pill bg-light border gap-1">
+                  <button 
+                    type="button" 
+                    class="terminal-tab-btn"
+                    :class="{ active: activeApiTab === 'onemap' }"
+                    @click="activeApiTab = 'onemap'"
+                  >
+                    🗺️ OneMap API
+                  </button>
+                  <button 
+                    type="button" 
+                    class="terminal-tab-btn"
+                    :class="{ active: activeApiTab === 'handover' }"
+                    @click="activeApiTab = 'handover'"
+                  >
+                    🔄 P2P Studio
+                  </button>
+                  <button 
+                    type="button" 
+                    class="terminal-tab-btn"
+                    :class="{ active: activeApiTab === 'telegram' }"
+                    @click="activeApiTab = 'telegram'"
+                  >
+                    🤖 Bot Dispatch
+                  </button>
                 </div>
               </div>
 
-              <!-- Card 2: SSU Sports -->
-              <div class="p-3 liquid-glass-tag border rounded-3 d-flex align-items-start gap-3 pulse-floating-tag" style="animation-delay: 1.2s;">
-                <div class="p-2 rounded-2 text-primary bg-primary bg-opacity-10 flex-shrink-0" style="line-height: 1;">
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <circle cx="12" cy="12" r="10"></circle>
-                    <polyline points="12 6 12 12 16 14"></polyline>
-                  </svg>
+              <!-- Tab 1: OneMap Routing API Live Simulator -->
+              <div v-if="activeApiTab === 'onemap'" class="terminal-content-panel">
+                <div class="d-flex align-items-center justify-content-between mb-2">
+                  <span class="badge bg-primary bg-opacity-10 text-primary border border-primary-subtle px-2 py-0.5" style="font-size: 0.65rem; font-weight: 700;">
+                    SLA ONEMAP CAMPUS ROUTE
+                  </span>
+                  <span class="text-muted small" style="font-size: 0.68rem;">Verified Walking Buffer</span>
                 </div>
-                <div>
-                  <div class="d-flex align-items-center gap-2 mb-1">
-                    <span class="badge bg-primary rounded-pill px-2" style="font-size: 0.65rem;">SSU • SPORTS</span>
-                    <span class="fw-bold text-dark small">Automated Facility Waitlist</span>
+
+                <div class="p-2.5 rounded-3 bg-white border mb-2.5">
+                  <div class="d-flex align-items-center justify-content-between small text-muted mb-1" style="font-size: 0.7rem;">
+                    <span>Holding Room: <strong>SMU Connexion B1</strong></span>
+                    <span>→</span>
+                    <span>Venue: <strong>Li Ka Shing B1 Hall</strong></span>
                   </div>
-                  <div class="text-muted small" style="font-size: 0.8rem;">
-                    Instant queue alerts for high-demand campus studios and practice spaces when booked slots are released early by other clubs.
+
+                  <!-- Route Telemetry Grid -->
+                  <div class="row g-2 text-center mt-1">
+                    <div class="col-3">
+                      <div class="p-1.5 rounded-2 bg-light border">
+                        <div class="fw-bold text-dark" style="font-size: 0.78rem;">650m</div>
+                        <div class="text-muted" style="font-size: 0.62rem;">Distance</div>
+                      </div>
+                    </div>
+                    <div class="col-3">
+                      <div class="p-1.5 rounded-2 bg-light border">
+                        <div class="fw-bold text-dark" style="font-size: 0.78rem;">8 mins</div>
+                        <div class="text-muted" style="font-size: 0.62rem;">Brisk Walk</div>
+                      </div>
+                    </div>
+                    <div class="col-3">
+                      <div class="p-1.5 rounded-2 bg-light border">
+                        <div class="fw-bold text-dark" style="font-size: 0.78rem;">85%</div>
+                        <div class="text-muted" style="font-size: 0.62rem;">Sheltered</div>
+                      </div>
+                    </div>
+                    <div class="col-3">
+                      <div class="p-1.5 rounded-2 border" :class="simulatedDelay ? 'bg-danger bg-opacity-10 border-danger' : 'bg-light'">
+                        <div class="fw-bold" :class="simulatedDelay ? 'text-danger' : 'text-dark'" style="font-size: 0.78rem;">
+                          {{ simulatedDelay ? '+25m' : '+15m' }}
+                        </div>
+                        <div class="text-muted" style="font-size: 0.62rem;">Cue Buffer</div>
+                      </div>
+                    </div>
                   </div>
+                </div>
+
+                <!-- Interactive Route Control Button -->
+                <div class="d-flex align-items-center justify-content-between gap-2">
+                  <p class="text-muted small mb-0" style="font-size: 0.7rem;">
+                    {{ simulatedDelay ? '⚠️ Concourse delay active: Downstream cues auto-shifted by 10 mins.' : 'Auto-injects verified walking buffers into stage cue run-of-show.' }}
+                  </p>
+                  <button 
+                    type="button" 
+                    class="btn btn-xs btn-outline-primary text-nowrap py-1 px-2.5 rounded-pill"
+                    style="font-size: 0.7rem; font-weight: 600;"
+                    @click="toggleSimulatedDelay"
+                  >
+                    {{ simulatedDelay ? 'Reset Buffer' : 'Simulate +10m Delay' }}
+                  </button>
                 </div>
               </div>
 
-              <!-- Card 3: Operations & Transit -->
-              <div class="p-3 liquid-glass-tag border rounded-3 d-flex align-items-start gap-3 pulse-floating-tag" style="animation-delay: 2.4s;">
-                <div class="p-2 rounded-2 text-success bg-success bg-opacity-10 flex-shrink-0" style="line-height: 1;">
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
-                    <circle cx="9" cy="7" r="4"></circle>
-                    <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
-                    <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
-                  </svg>
+              <!-- Tab 2: P2P Studio Handover Engine -->
+              <div v-else-if="activeApiTab === 'handover'" class="terminal-content-panel">
+                <div class="d-flex align-items-center justify-content-between mb-2">
+                  <span class="badge bg-danger bg-opacity-10 text-danger border border-danger-subtle px-2 py-0.5" style="font-size: 0.65rem; font-weight: 700;">
+                    P2P STUDIO SWAP AUDIT
+                  </span>
+                  <span class="text-muted small" style="font-size: 0.68rem;">Clause 9.1(c) Compliant</span>
                 </div>
-                <div>
-                  <div class="d-flex align-items-center gap-2 mb-1">
-                    <span class="badge bg-success rounded-pill px-2" style="font-size: 0.65rem;">OPERATIONS • TRANSIT</span>
-                    <span class="fw-bold text-dark small">Rehearsal Run-of-Show & Transit</span>
+
+                <div class="p-2.5 rounded-3 bg-white border mb-2.5">
+                  <div class="d-flex align-items-center justify-content-between mb-2">
+                    <span class="fw-bold text-dark small" style="font-size: 0.78rem;">MPSH Dance Studio 3</span>
+                    <span class="badge" :class="simulatedApproval ? 'bg-success text-white' : 'bg-warning text-dark'" style="font-size: 0.65rem;">
+                      {{ simulatedApproval ? 'OSL Endorsed ✓' : 'Awaiting OSL Sign-Off' }}
+                    </span>
                   </div>
-                  <div class="text-muted small" style="font-size: 0.8rem;">
-                    Coordinated cue timelines with verified OneMap walking buffers between SMU Connexion, holding spaces, and event stages.
+
+                  <div class="d-flex align-items-center justify-content-between small text-muted mb-2" style="font-size: 0.72rem;">
+                    <span class="badge bg-danger bg-opacity-10 text-danger border">Eurhythmix (Releasing)</span>
+                    <span>⇄</span>
+                    <span class="badge bg-warning bg-opacity-25 text-dark border">Samba Masala (Claiming)</span>
                   </div>
+
+                  <!-- Live Audit Steps -->
+                  <div class="d-flex flex-column gap-1 small text-muted" style="font-size: 0.68rem;">
+                    <div class="d-flex align-items-center gap-1.5 text-success fw-semibold">
+                      <span>✓</span> <span>48h Advance Handover Notice Verified (0 Demerit Points)</span>
+                    </div>
+                    <div class="d-flex align-items-center gap-1.5 text-success fw-semibold">
+                      <span>✓</span> <span>Weekly Availability Heatmap Checked (Zero timetable clash)</span>
+                    </div>
+                    <div class="d-flex align-items-center gap-1.5" :class="simulatedApproval ? 'text-success fw-semibold' : 'text-secondary'">
+                      <span>{{ simulatedApproval ? '✓' : '○' }}</span>
+                      <span>{{ simulatedApproval ? 'OSL Admin Sign-Off Complete (Legal venue liability reassigned)' : 'Dual-signoff gatekeeper pending Chloe Ang approval' }}</span>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Interactive Handover Button -->
+                <div class="d-flex align-items-center justify-content-between gap-2">
+                  <p class="text-muted small mb-0" style="font-size: 0.7rem;">
+                    Direct CCA studio exchanges without losing priority allocation BOSS credits.
+                  </p>
+                  <button 
+                    type="button" 
+                    class="btn btn-xs btn-outline-danger text-nowrap py-1 px-2.5 rounded-pill"
+                    style="font-size: 0.7rem; font-weight: 600;"
+                    @click="toggleSimulatedApproval"
+                  >
+                    {{ simulatedApproval ? 'Revert Pending' : 'Simulate OSL Approval' }}
+                  </button>
+                </div>
+              </div>
+
+              <!-- Tab 3: Telegram Bot Webhook Integration -->
+              <div v-else-if="activeApiTab === 'telegram'" class="terminal-content-panel">
+                <div class="d-flex align-items-center justify-content-between mb-2">
+                  <span class="badge bg-success bg-opacity-10 text-success border border-success-subtle px-2 py-0.5" style="font-size: 0.65rem; font-weight: 700;">
+                    TELEGRAM WEBHOOK DISPATCH
+                  </span>
+                  <span class="text-muted small" style="font-size: 0.68rem;">Verified @SMUPulseBot</span>
+                </div>
+
+                <!-- Mock Telegram Message Bubble -->
+                <div class="p-2.5 rounded-3 bg-white border mb-2.5 position-relative overflow-hidden" :class="{ 'telegram-ping-glow': simulatedPing }">
+                  <div class="d-flex align-items-center justify-content-between mb-1.5">
+                    <div class="d-flex align-items-center gap-1.5">
+                      <span style="font-size: 0.9rem;">🤖</span>
+                      <strong class="text-dark small" style="font-size: 0.76rem;">@SMUPulseBot</strong>
+                      <span class="badge bg-primary text-white" style="font-size: 0.55rem;">BOT</span>
+                    </div>
+                    <span class="text-muted" style="font-size: 0.65rem;">Just now</span>
+                  </div>
+
+                  <div class="p-2 rounded-2 bg-light border small text-dark" style="font-size: 0.71rem; line-height: 1.45;">
+                    📢 <strong>Rehearsal Alert:</strong> MPSH Studio 3 transfer approved. Act 2 Lead Dancer Marcus Tan confirmed arrival at Li Ka Shing B1. Tap <code>/callsheet</code> for updated run-of-show cues.
+                  </div>
+                </div>
+
+                <!-- Interactive Ping Button -->
+                <div class="d-flex align-items-center justify-content-between gap-2">
+                  <p class="text-muted small mb-0" style="font-size: 0.7rem;">
+                    {{ simulatedPing ? '🔔 Dispatched to 42 stage performers via linked Telegram bot!' : 'Real-time alert dispatch connected via Supabase webhook.' }}
+                  </p>
+                  <button 
+                    type="button" 
+                    class="btn btn-xs btn-outline-success text-nowrap py-1 px-2.5 rounded-pill"
+                    style="font-size: 0.7rem; font-weight: 600;"
+                    :disabled="simulatedPing"
+                    @click="triggerSimulatedPing"
+                  >
+                    {{ simulatedPing ? 'Broadcasting...' : 'Test-Ping Bot Alert' }}
+                  </button>
                 </div>
               </div>
 
@@ -273,7 +487,7 @@ async function handleManualLogin() {
           <div class="pulse-card liquid-glass-card p-4 p-xl-4 shadow-lg border w-100 position-relative" style="max-width: 500px;">
             
             <!-- Sleek Enterprise Header (Clean Dimensions, No Overlapping Pulsing Dots) -->
-            <div class="d-flex align-items-center justify-content-between mb-4 pb-3 border-bottom flex-wrap gap-2">
+            <div class="d-flex align-items-center justify-content-between mb-3 pb-3 border-bottom flex-wrap gap-2">
               <div class="d-flex align-items-center gap-3">
                 <div 
                   class="d-inline-flex flex-column align-items-center justify-content-center rounded-circle shadow-sm position-relative flex-shrink-0"
@@ -328,8 +542,65 @@ async function handleManualLogin() {
               <span>{{ errorMsg }}</span>
             </div>
 
-            <!-- Manual Sign-In Form -->
-            <form @submit.prevent="handleManualLogin">
+            <!-- Session Cache: Remembered Account Fast-Resume Card -->
+            <div v-if="rememberedAccount && !isSwitchingAccount" class="p-3 rounded-3 bg-white border shadow-sm mb-3 remembered-session-card">
+              <div class="d-flex align-items-center justify-content-between mb-2">
+                <span class="badge bg-danger bg-opacity-10 text-danger border border-danger-subtle px-2 py-0.5" style="font-size: 0.65rem; font-weight: 700;">
+                  ⚡ SESSION CACHED
+                </span>
+                <span class="text-muted" style="font-size: 0.68rem;">Last active: {{ rememberedAccount.lastLoginAt || 'Recent session' }}</span>
+              </div>
+
+              <div class="d-flex align-items-center gap-2.5 mb-2.5">
+                <div class="remembered-avatar text-white fw-bold d-flex align-items-center justify-content-center shadow-xs">
+                  {{ rememberedAccount.name ? rememberedAccount.name.charAt(0) : 'U' }}
+                </div>
+                <div class="me-auto text-truncate">
+                  <strong class="d-block text-dark text-truncate" style="font-size: 0.85rem;">{{ rememberedAccount.name }}</strong>
+                  <small class="text-muted d-block text-truncate" style="font-size: 0.72rem;">{{ rememberedAccount.email }}</small>
+                </div>
+                <span class="badge bg-secondary-subtle text-dark border flex-shrink-0" style="font-size: 0.65rem;">
+                  {{ rememberedAccount.club || 'SMU ExCo' }}
+                </span>
+              </div>
+
+              <div class="d-flex gap-2">
+                <button 
+                  type="button" 
+                  class="btn btn-sm btn-pulse-primary flex-grow-1 py-1.5 fw-bold text-white shadow-sm d-flex align-items-center justify-content-center gap-1.5"
+                  :disabled="isSubmitting"
+                  @click="resumeRememberedLogin"
+                >
+                  <span>Fast Sign-In as {{ rememberedAccount.name.split(' ')[0] }}</span>
+                  <span>→</span>
+                </button>
+                <button 
+                  type="button" 
+                  class="btn btn-sm btn-outline-secondary py-1.5 px-2.5" 
+                  title="Switch to another SMU account" 
+                  @click="switchAccount"
+                >
+                  Switch
+                </button>
+              </div>
+              
+              <div class="text-end mt-1.5">
+                <button type="button" class="btn btn-link p-0 text-muted" style="font-size: 0.68rem;" @click="forgetRememberedAccount">
+                  Clear saved login
+                </button>
+              </div>
+            </div>
+
+            <!-- Account Switcher Banner (When switching away from cached account) -->
+            <div v-if="rememberedAccount && isSwitchingAccount" class="d-flex align-items-center justify-content-between mb-2 px-1">
+              <span class="small text-muted" style="font-size: 0.72rem;">Signing in with different account</span>
+              <button type="button" class="btn btn-link p-0 text-decoration-none small text-danger fw-semibold" style="font-size: 0.72rem;" @click="isSwitchingAccount = false">
+                ← Resume {{ rememberedAccount.name.split(' ')[0] }}
+              </button>
+            </div>
+
+            <!-- Manual Sign-In Form (Shown if no cache, or user chose to switch account) -->
+            <form v-if="!rememberedAccount || isSwitchingAccount" @submit.prevent="handleManualLogin">
               
               <!-- SMU Email with Dynamic Typewriter Placeholder -->
               <div class="mb-3">
@@ -757,6 +1028,80 @@ async function handleManualLogin() {
   transform: translateY(-2px);
   box-shadow: 0 8px 24px -4px rgba(15, 23, 42, 0.1) !important;
   border-color: rgba(225, 29, 72, 0.25) !important;
+}
+
+/* ==========================================================================
+   Interactive Operations Telemetry Console
+   ========================================================================== */
+.interactive-terminal-box {
+  background: rgba(255, 255, 255, 0.84) !important;
+  border-radius: 1.25rem !important;
+}
+
+.pulse-terminal-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background-color: var(--pulse-primary, #e11d48);
+  box-shadow: 0 0 8px rgba(225, 29, 72, 0.6);
+  animation: dot-pulse 2s infinite ease-in-out;
+}
+
+@keyframes dot-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.5; transform: scale(0.85); }
+}
+
+.terminal-tab-btn {
+  border: none;
+  background: transparent;
+  padding: 3px 10px;
+  border-radius: 9999px;
+  font-size: 0.68rem;
+  font-weight: 600;
+  color: #64748b;
+  transition: all 0.18s ease;
+}
+
+.terminal-tab-btn:hover {
+  color: #0f172a;
+}
+
+.terminal-tab-btn.active {
+  background-color: #ffffff;
+  color: var(--pulse-primary, #e11d48);
+  box-shadow: 0 1px 4px rgba(15, 23, 42, 0.08);
+}
+
+.terminal-content-panel {
+  animation: fadeIn 0.2s ease-out;
+}
+
+.telegram-ping-glow {
+  animation: ping-glow 1s ease-in-out infinite alternate;
+}
+
+@keyframes ping-glow {
+  0% { box-shadow: 0 0 0 rgba(34, 197, 94, 0); }
+  100% { box-shadow: 0 0 14px rgba(34, 197, 94, 0.4); border-color: #86efac !important; }
+}
+
+/* ==========================================================================
+   Remembered Session Cache Card
+   ========================================================================== */
+.remembered-session-card {
+  background: rgba(255, 255, 255, 0.95);
+  border: 1.5px solid #fda4af !important;
+  animation: fadeIn 0.25s ease-out;
+}
+
+.remembered-avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--pulse-primary), #9f1239);
+  font-size: 0.85rem;
+  flex-shrink: 0;
 }
 
 /* ==========================================================================
