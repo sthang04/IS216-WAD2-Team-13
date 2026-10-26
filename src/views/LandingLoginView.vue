@@ -18,17 +18,50 @@ const showDemoLogins = ref(false)
 const rememberedAccount = ref(null)
 const isSwitchingAccount = ref(false)
 
-// Loading Screen with Fun Facts & Mascot
+// Sims 4-Style 3-Round Rotating Loading Screen with 12 Fun Fact Templates
 const isAuthenticating = ref(false)
 const authProgress = ref(0)
-const currentFactIndex = ref(0)
+const currentRound = ref(1) // Round 1, 2, or 3
+const activeRoundFacts = ref([])
+const loadingStageText = ref('Verifying SMU ExCo Credentials & Whitelist...')
 
-const funFacts = [
-  "👑 Supreme Leader Kyong: Legend says Prof Kyong commands WAD2 with supreme wisdom and an army of adorable cats! 🐱",
-  "🐱 Jerica's Mascot Cat has stamped your session as 100% genuine and ready for the live demo!",
-  "🏃 Singapore Management University (SMU) Trivia: Running from SMU Connexion to Li Ka Shing B1 is 650m (~8 min brisk walk). Perfect transit buffer for OneMap!",
-  "🎭 ACF Eurhythmix & Samba Masala maintain a 100% compliance record on weekend studio handovers under OSL Clause 9.1(c).",
-  "✨ A+ Rubric Secret: A seamless live demo with 1-click evaluator logins saves crucial minutes during the 12m finals presentation!"
+// 12 Customizable Fun Fact Templates (Team can easily edit or add facts here)
+const FUN_FACT_TEMPLATES = [
+  // 1. Prof Kyong & Her Orange Cat
+  "🐱 Prof Kyong & Her Orange Cat: Legend says Prof Kyong's orange cat inspects every line of WAD2 frontend code from her desk!",
+  
+  // 2. Orange Cat Superpowers
+  "✨ Orange Cat Superpowers: Prof Kyong's orange cat is officially rated as the sweetest, most supreme debugging assistant.",
+  
+  // 3. Orange Cat & Live Demo Luck
+  "🐾 Orange Cat Charm: Rumour has it that mentioning an orange cat during a live demo grants +10 charisma on the rubric!",
+  
+  // 4. Jerica's Mascot Approval
+  "🐱 Jerica's Mascot Cat: Approved! Jerica's mascot has officially stamped your session as genuine and ready for the demo.",
+  
+  // 5. SMU Connexion to LKS Walk
+  "🏃 Campus Speedrun: A brisk walk from SMU Connexion to Li Ka Shing B1 is exactly 650m (~8 mins) — 85% sheltered via concourse!",
+  
+  // 6. ACF Handover Record
+  "🎭 ACF Handover Excellence: Eurhythmix and Samba Masala boast a 100% compliant handover rate under OSL Clause 9.1(c).",
+  
+  // 7. BOSS Credit Hack
+  "💡 BOSS Credit Preservation: Peer-to-peer studio handovers allow approved CCAs to trade slots without forfeiting bidding credits.",
+  
+  // 8. Acoustic Sound Isolation
+  "🎧 Soundproof Secrets: SOA Basement Acoustic Rooms are built with 48dB noise isolation — ideal for loud percussion rehearsals.",
+  
+  // 9. Late-Night Fuel
+  "☕ Connexion Project Fuel: Over 4,200 cups of iced latte are consumed at SMU Connexion during project crunch week.",
+  
+  // 10. Telegram Bot Speed
+  "🤖 Telegram @SMUPulseBot: Webhook notifications alert 40+ stage performers within 1.5 seconds of a venue slot release.",
+  
+  // 11. Liquid Glass & Zero Dark Mode
+  "👑 Supreme Emixers Lore: Group 13 designed Pulse with zero dark mode and 100% pure liquid glass aesthetics!",
+  
+  // 12. 12-Minute Demo Pro-Tip
+  "🎯 12-Min Presentation Pro-Tip: 1-click persona switching saves precious minutes during the live finals presentation!"
 ];
 
 async function handleQuickLogin(personaKey) {
@@ -145,36 +178,56 @@ async function resumeRememberedLogin() {
   await completeLogin(rememberedAccount.value.email, DEMO_PASSWORD)
 }
 
-// All sign-in paths go through the auth service with fun loading screen & cache update
+// All sign-in paths go through the auth service with Sims 4-style 3-round fun facts loading screen (~5.5s)
 async function completeLogin(loginEmail, loginPassword) {
   errorMsg.value = ''
   isSubmitting.value = true
   
-  // Pick a random fun fact to display
-  currentFactIndex.value = Math.floor(Math.random() * funFacts.length)
-  
+  // Pick 3 random distinct facts from the 12 templates for this login session
+  const shuffled = [...FUN_FACT_TEMPLATES].sort(() => 0.5 - Math.random())
+  activeRoundFacts.value = shuffled.slice(0, 3)
+  currentRound.value = 1
+  loadingStageText.value = 'Verifying SMU ExCo Credentials & Whitelist...'
+
   let progressInterval = null
+  let roundTimer1 = null
+  let roundTimer2 = null
+
   try {
     const authPromise = signIn(loginEmail, loginPassword)
     
-    // Trigger fun loading screen
+    // Trigger fun loading screen (Sims 4 style: 3 rounds over ~5.5s)
     isAuthenticating.value = true
-    authProgress.value = 15
-    
-    // Smooth progress ticker over ~1.4s
+    authProgress.value = 10
+
+    // Smooth progress bar update over 5.5s
     progressInterval = setInterval(() => {
-      if (authProgress.value < 88) {
-        authProgress.value += 18
+      if (authProgress.value < 94) {
+        authProgress.value += 1
       }
-    }, 180)
-    
+    }, 60)
+
+    // Round 2 rotation at ~1.85s
+    roundTimer1 = setTimeout(() => {
+      currentRound.value = 2
+      loadingStageText.value = 'Syncing Studio Schedules & OneMap Transit SLA...'
+    }, 1850)
+
+    // Round 3 rotation at ~3.70s
+    roundTimer2 = setTimeout(() => {
+      currentRound.value = 3
+      loadingStageText.value = 'Preparing Real-Time CCA Operations Dashboard...'
+    }, 3700)
+
+    // Wait for auth promise + comfortable ~5.5s reading time (3 rounds of facts)
     const [persona] = await Promise.all([
       authPromise,
-      new Promise(resolve => setTimeout(resolve, 1300)) // smooth ~1.3s delay to read fun fact
+      new Promise(resolve => setTimeout(resolve, 5500))
     ])
-    
+
     clearInterval(progressInterval)
     authProgress.value = 100
+    loadingStageText.value = 'Authentication Complete ✓'
 
     // Store in Session Cache for repeated visits
     if (persona) {
@@ -196,10 +249,12 @@ async function completeLogin(loginEmail, loginPassword) {
     setTimeout(() => {
       isAuthenticating.value = false
       emit('login', persona)
-    }, 280)
-    
+    }, 350)
+
   } catch (err) {
     if (progressInterval) clearInterval(progressInterval)
+    if (roundTimer1) clearTimeout(roundTimer1)
+    if (roundTimer2) clearTimeout(roundTimer2)
     isAuthenticating.value = false
     authProgress.value = 0
     errorMsg.value = err.message
@@ -210,7 +265,7 @@ async function completeLogin(loginEmail, loginPassword) {
 
 async function handleManualLogin() {
   if (!email.value.trim()) {
-    errorMsg.value = 'Please enter your Singapore Management University (SMU) institutional email.'
+    errorMsg.value = 'Please enter your SMU institutional email.'
     return
   }
   if (!isSmuEmail.value) {
@@ -237,21 +292,26 @@ async function handleManualLogin() {
     <div class="liquid-mesh-grid"></div>
 
     <!-- Cohesive Enterprise Container: Desktop & Laptop Dimension Optimized -->
-    <div class="container-fluid position-relative" style="max-width: 1240px; z-index: 1;">
+    <div class="container-fluid position-relative" style="max-width: 1320px; z-index: 1;">
       <div class="row align-items-center g-4 g-xl-5">
         
         <!-- Left Column: Unified Value Proposition & Interactive Live Operations Telemetry -->
         <div class="col-12 col-lg-6 col-xl-6">
           <div class="pe-lg-4">
             
-            <!-- Dignified Institutional Badge with Full University Name & Acronym -->
-            <div class="d-inline-flex align-items-center gap-2.5 px-3.5 py-1.5 rounded-pill liquid-glass-tag mb-3 shadow-sm border" style="padding: 6px 14px 6px 8px;">
-              <span class="badge rounded-pill bg-danger bg-opacity-10 text-danger border border-danger-subtle px-2.5 py-1 fw-bold" style="font-size: 0.68rem; letter-spacing: 0.05em; line-height: 1.25;">
+            <!-- Dignified Institutional Badge with Full University Name & Acronym (Mentioned Once) -->
+            <div class="d-inline-flex align-items-center gap-3 px-3.5 py-2 rounded-4 liquid-glass-tag mb-3 shadow-sm border" style="background: rgba(255, 255, 255, 0.88); backdrop-filter: blur(12px);">
+              <span class="badge rounded-pill bg-danger bg-opacity-10 text-danger border border-danger-subtle px-2.5 py-1.5 fw-bold flex-shrink-0" style="font-size: 0.68rem; letter-spacing: 0.05em; line-height: 1.2;">
                 OFFICIAL PORTAL
               </span>
-              <span class="fw-semibold text-dark pe-1" style="font-size: 0.78rem;">
-                Singapore Management University (SMU) • Office of Student Life
-              </span>
+              <div class="text-start pe-2" style="line-height: 1.25;">
+                <span class="d-block fw-bold text-dark" style="font-size: 0.82rem; letter-spacing: -0.01em;">
+                  Singapore Management University (SMU)
+                </span>
+                <span class="text-muted d-block" style="font-size: 0.7rem; font-weight: 500;">
+                  Office of Student Life • Facilities Portal
+                </span>
+              </div>
             </div>
 
             <h1 class="display-6 fw-bold tracking-tight mb-3" style="color: var(--pulse-ink); line-height: 1.15;">
@@ -260,7 +320,7 @@ async function handleManualLogin() {
             </h1>
 
             <p class="text-muted mb-4" style="font-size: 0.95rem; line-height: 1.6;">
-              The official co-curricular management platform for <strong>Singapore Management University (SMU)</strong> student clubs, performance groups, and Office of Student Life (OSL) administrators. Simplifies arts studio handovers, automates waitlists for in-demand venues, and streamlines rehearsal logistics across the city campus.
+              The official co-curricular management platform for <strong>SMU</strong> student clubs, performance groups, and Office of Student Life (OSL) administrators. Simplifies arts studio handovers, automates waitlists for in-demand venues, and streamlines rehearsal logistics across the city campus.
             </p>
 
             <!-- Creative Glanceable Campus Operations Showcase (Instant 2-Second Preview) -->
@@ -369,13 +429,13 @@ async function handleManualLogin() {
 
             </div>
 
-            <!-- Security Assurance Note with Full University Name -->
+            <!-- Security Assurance Note -->
             <div class="d-flex align-items-center gap-2 text-muted small" style="font-size: 0.775rem;">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
                 <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
               </svg>
-              <span>Sign-in restricted to Singapore Management University (SMU) ExCos & OSL staff (@*.smu.edu.sg)</span>
+              <span>Sign-in restricted to SMU ExCos & OSL staff (@*.smu.edu.sg)</span>
             </div>
 
           </div>
@@ -383,7 +443,7 @@ async function handleManualLogin() {
 
         <!-- Right Column: Liquid Glass Sign-In Portal -->
         <div class="col-12 col-lg-6 col-xl-6 d-flex justify-content-center justify-content-lg-end">
-          <div class="pulse-card liquid-glass-card p-4 p-xl-4 shadow-lg border w-100 position-relative" style="max-width: 500px;">
+          <div class="pulse-card liquid-glass-card p-4 p-xl-4 shadow-lg border w-100 position-relative" style="max-width: 560px;">
             
             <!-- Sleek Enterprise Header (Clean Dimensions, No Overlapping Pulsing Dots) -->
             <div class="d-flex align-items-center justify-content-between mb-3 pb-3 border-bottom flex-wrap gap-2">
@@ -417,7 +477,7 @@ async function handleManualLogin() {
 
                 <div>
                   <h4 class="fw-bold mb-0 tracking-tight" style="color: var(--pulse-ink);">Sign In to Pulse</h4>
-                  <p class="text-muted small mb-0" style="font-size: 0.8rem;">Singapore Management University (SMU) Facilities Portal</p>
+                  <p class="text-muted small mb-0" style="font-size: 0.8rem;">SMU Facilities & Operations Portal</p>
                 </div>
               </div>
 
@@ -671,19 +731,19 @@ async function handleManualLogin() {
             <div class="mt-4 pt-3 border-top">
               <button 
                 type="button" 
-                class="btn btn-sm w-100 py-2.5 px-3 rounded-3 d-flex align-items-center justify-content-between demo-toggle-bar"
+                class="btn btn-sm w-100 py-2.5 px-3 rounded-3 d-flex align-items-center justify-content-between demo-toggle-bar text-start"
                 :class="showDemoLogins ? 'demo-toggle-active' : 'demo-toggle-inactive'"
                 @click="showDemoLogins = !showDemoLogins"
               >
-                <div class="d-flex align-items-center gap-2">
-                  <span class="badge rounded-pill px-2 py-0.5 demo-badge" style="font-size: 0.67rem; font-weight: 700;">
+                <div class="d-flex align-items-center gap-2.5 text-start flex-grow-1 min-w-0">
+                  <span class="badge rounded-pill px-2.5 py-1 demo-badge flex-shrink-0" style="font-size: 0.67rem; font-weight: 700;">
                     ⚡ 1-Click
                   </span>
-                  <span class="fw-bold small text-dark" style="font-size: 0.78rem;">
+                  <span class="fw-bold text-dark text-start" style="font-size: 0.81rem; letter-spacing: -0.01em; white-space: nowrap;">
                     Click here for 1-Click Login for different personas
                   </span>
                 </div>
-                <div class="d-flex align-items-center gap-1 small text-muted" style="font-size: 0.72rem;">
+                <div class="d-flex align-items-center gap-1.5 small text-muted flex-shrink-0 ms-2" style="font-size: 0.72rem; font-weight: 500;">
                   <span>{{ showDemoLogins ? 'Hide' : 'Expand' }}</span>
                   <svg 
                     width="13" 
@@ -819,24 +879,37 @@ async function handleManualLogin() {
                 </div>
 
                 <h5 class="fw-bold mb-1 text-dark" style="letter-spacing: -0.02em;">Authenticating Session...</h5>
-                <p class="text-muted small mb-3" style="font-size: 0.78rem;">Connecting with Singapore Management University (SMU) Supabase Cloud</p>
+                <p class="text-muted small mb-3" style="font-size: 0.78rem;">{{ loadingStageText }}</p>
 
-                <!-- Progress Bar -->
-                <div class="progress w-100 rounded-pill mb-3" style="height: 6px; max-width: 280px; background-color: rgba(226, 232, 240, 0.8);">
-                  <div class="progress-bar progress-bar-striped progress-bar-animated bg-danger" :style="{ width: `${authProgress}%`, transition: 'width 0.2s linear' }"></div>
+                <!-- Sims 4 Style Smooth Progress Bar -->
+                <div class="progress w-100 rounded-pill mb-3" style="height: 6px; max-width: 320px; background-color: rgba(226, 232, 240, 0.8);">
+                  <div class="progress-bar progress-bar-striped progress-bar-animated bg-danger" :style="{ width: `${authProgress}%`, transition: 'width 0.15s ease-out' }"></div>
                 </div>
 
-                <!-- Fun Facts Card -->
-                <div class="p-3 rounded-3 bg-white border shadow-sm w-100 text-start" style="max-width: 380px;">
-                  <div class="d-flex align-items-center justify-content-between mb-1.5">
-                    <span class="badge bg-danger bg-opacity-10 text-danger border border-danger-subtle px-2 py-0.5" style="font-size: 0.65rem; font-weight: 700;">
-                      💡 SINGAPORE MANAGEMENT UNIVERSITY (SMU) TRIVIA
-                    </span>
-                    <span class="text-muted" style="font-size: 0.65rem;">Tip #{{ currentFactIndex + 1 }}</span>
+                <!-- Sims 4 Style 3-Round Rotating Trivia Card -->
+                <div class="p-3 rounded-3 bg-white border shadow-sm w-100 text-start sims-tip-card position-relative overflow-hidden" style="max-width: 440px;">
+                  <div class="d-flex align-items-center justify-content-between mb-2">
+                    <div class="d-flex align-items-center gap-1.5">
+                      <span class="badge bg-danger bg-opacity-10 text-danger border border-danger-subtle px-2 py-0.5" style="font-size: 0.65rem; font-weight: 700;">
+                        💡 CAMPUS TRIVIA
+                      </span>
+                      <span class="badge bg-light text-dark border px-2 py-0.5 ms-1" style="font-size: 0.65rem; font-weight: 600;">
+                        Round {{ currentRound }} of 3
+                      </span>
+                    </div>
+                    <!-- 3 Round Indicator Dots -->
+                    <div class="d-flex align-items-center gap-1">
+                      <span class="sims-tip-dot" :class="{ active: currentRound === 1 }"></span>
+                      <span class="sims-tip-dot" :class="{ active: currentRound === 2 }"></span>
+                      <span class="sims-tip-dot" :class="{ active: currentRound === 3 }"></span>
+                    </div>
                   </div>
-                  <p class="text-dark small mb-0 fw-medium" style="font-size: 0.76rem; line-height: 1.45;">
-                    {{ funFacts[currentFactIndex] }}
-                  </p>
+
+                  <transition name="sims-tip-swap" mode="out-in">
+                    <p :key="currentRound" class="text-dark small mb-0 fw-medium sims-tip-text" style="font-size: 0.77rem; line-height: 1.5; min-height: 48px;">
+                      {{ activeRoundFacts[currentRound - 1] || 'Loading SMU facts...' }}
+                    </p>
+                  </transition>
                 </div>
               </div>
             </transition>
@@ -1249,6 +1322,7 @@ input:-webkit-autofill:active {
   background: rgba(255, 255, 255, 0.7);
   border: 1px dashed #cbd5e1;
   transition: all 0.2s ease;
+  text-align: left !important;
 }
 
 .demo-toggle-bar:hover {
@@ -1372,5 +1446,43 @@ input:-webkit-autofill:active {
 .loading-fade-enter-from,
 .loading-fade-leave-to {
   opacity: 0;
+}
+
+/* Sims 4-Style 3-Round Rotating Trivia Card */
+.sims-tip-card {
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(8px);
+  border: 1px solid rgba(226, 232, 240, 0.95) !important;
+  box-shadow: 0 4px 18px rgba(15, 23, 42, 0.06);
+}
+
+.sims-tip-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background-color: #cbd5e1;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  display: inline-block;
+}
+
+.sims-tip-dot.active {
+  width: 18px;
+  border-radius: 4px;
+  background-color: #e11d48;
+}
+
+.sims-tip-swap-enter-active,
+.sims-tip-swap-leave-active {
+  transition: all 0.28s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.sims-tip-swap-enter-from {
+  opacity: 0;
+  transform: translateY(8px);
+}
+
+.sims-tip-swap-leave-to {
+  opacity: 0;
+  transform: translateY(-8px);
 }
 </style>
