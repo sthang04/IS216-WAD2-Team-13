@@ -1,4 +1,5 @@
 import { supabase, isSupabaseConfigured }  from "../supabase"
+import { assertCanActForClub, assertCanApproveTransfers, assertCanResetDemo } from "./authService"
 
 // Sample records: venues follow the ACF booking sheet (locations and types are provisional).
 const DEFAULT_SLOTS = [
@@ -112,6 +113,7 @@ export const facilityService = {
 
     // Release owned booking into Campus Marketplace for peer transfer
     async releaseSlot(id, actingClub) {
+        assertCanActForClub(actingClub)
         // ADDED: verify this is the acting club's own BOOKED slot.
         const current = await findSlot(id)
         if (!current || (current.status !== 'Booked' && current.status !== 'Officially Confirmed') || current.owner_club !== actingClub) {
@@ -140,6 +142,7 @@ export const facilityService = {
 
     // Claim a released slot from another club (goes into Pending Admin Sign-off)
     async claimSlot(id, claimingClub) {
+        assertCanActForClub(claimingClub)
         // ADDED: a club cannot claim its own booking or an unavailable slot.
         const current = await findSlot(id)
         if (!current || current.status !== 'Proposed Peer Transfer' ||
@@ -169,6 +172,7 @@ export const facilityService = {
 
     // Admin confirms the transfer: stay within the 3 agreed statuses.
     async confirmPeerTransfer(id) {
+        assertCanApproveTransfers()
         // CHANGED: use the real claiming club, NOT the local sample cache.
         const slotTarget = await findSlot(id)
         if (!slotTarget || slotTarget.status !== 'Pending Admin Sign-off' || !slotTarget.claiming_club) {
@@ -200,6 +204,7 @@ export const facilityService = {
 
     // ADDED: Owner can restore an unclaimed release.
     async undoRelease(id, actingClub) {
+        assertCanActForClub(actingClub)
         const slot = await findSlot(id)
         if (!slot || slot.status !== 'Proposed Peer Transfer' || slot.claiming_club || slot.owner_club !== actingClub) {
             throw new Error('Only the owner may undo an unclaimed release.')
@@ -219,6 +224,7 @@ export const facilityService = {
 
     // ADDED: Admin rejects a claim; release remains available to other clubs.
     async rejectPeerTransfer(id) {
+        assertCanApproveTransfers()
         const slot = await findSlot(id)
         if (!slot || slot.status !== 'Pending Admin Sign-off' || !slot.claiming_club) {
             throw new Error('No pending claim to reject.')
@@ -241,6 +247,7 @@ export const facilityService = {
 
     // Reset data back to initial seeds
     async resetData() {
+        assertCanResetDemo()
         if (isSupabaseConfigured() && supabase) {
             for (const slot of DEFAULT_SLOTS) {
                 const {error} = await supabase.from('facility_slots').update({

@@ -28,6 +28,10 @@ export const ALL_CLUBS = [
   'ACF ExCo',
 ];
 
+// Shared password for the demo accounts below
+export const DEMO_PASSWORD = 'Password123!';
+
+// Demo accounts: ExCos who have already signed up (sign-in only, no emails are ever sent to these addresses)
 export const DEMO_PERSONAS = {
   rachel: {
     id: 'rachel',
@@ -68,7 +72,7 @@ export const DEMO_PERSONAS = {
   chloe: {
     id: 'chloe',
     name: 'Chloe Ang',
-    email: 'chloe.ang@smu.edu.sg',
+    email: 'chloe.osl@smu.edu.sg',
     role: 'admin',
     roleLabel: 'OSL Facility Administrator',
     cca: 'Office of Student Life',
@@ -89,26 +93,18 @@ export const DEMO_PERSONAS = {
     sector: 'System Administration',
     smartSearches: ['All Venues', 'Studio L7.2', 'Pending Admin Sign-off', 'Waitlist > 1', 'Dance Studio'],
   },
-  john: {
-    id: 'john',
-    name: 'John Doe',
-    email: 'john.doe.2025@scis.smu.edu.sg',
-    role: 'club',
-    roleLabel: 'General Student Member',
-    cca: 'Eurhythmix',
-    allowedClubs: ['Eurhythmix'],
-    isDev: false,
-    sector: 'Student Body',
-    smartSearches: ['Dance Studio', 'SCIS Sound Studio', 'All Venues'],
-  },
 };
 
-export function getPersonaByEmail(email) {
-  const normalized = email.trim().toLowerCase();
-  if (normalized.includes('darren') || normalized.includes('samba')) return DEMO_PERSONAS.darren;
-  if (normalized.includes('marcus') || normalized.includes('symphonia')) return DEMO_PERSONAS.marcus;
-  if (normalized.includes('chloe') || normalized.includes('osl') || normalized.includes('admin@smu')) return DEMO_PERSONAS.chloe;
-  if (normalized.includes('dev') || normalized.includes('super')) return DEMO_PERSONAS.dev;
-  if (normalized.includes('john') || normalized.includes('doe')) return DEMO_PERSONAS.john;
-  return DEMO_PERSONAS.rachel;
-}
+// Anyone exploring without signing in: can view, cannot act
+export const GUEST_PERSONA = {
+  id: 'guest',
+  name: 'Guest',
+  email: null,
+  role: 'guest',
+  roleLabel: 'Guest (View Only)',
+  cca: null,
+  allowedClubs: [],
+  isDev: false,
+  sector: 'Public',
+  smartSearches: ['Dance Studio', 'Acoustic Room', 'All Venues'],
+};

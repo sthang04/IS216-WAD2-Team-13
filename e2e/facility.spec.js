@@ -3,6 +3,9 @@ import { test, expect } from '@playwright/test';
 test('Facility page loads with 6 slots', async ({ page }) => {
   await page.goto('http://localhost:5173/');
 
+  // The app opens on the login page, so explore as a guest (view only)
+  await page.getByRole('button', { name: /explore live facility calendar as guest/i }).click();
+
   // Check that the facility page loads
   await expect(
     page.getByRole('heading', {
