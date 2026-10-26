@@ -319,8 +319,8 @@ body {
    Buttons & Interactive Elements
    ========================================================================== */
 .btn-pulse-primary {
-  background: linear-gradient(135deg, var(--pulse-primary), var(--pulse-primary-hover));
-  color: #ffffff;
+  background: linear-gradient(135deg, var(--pulse-primary), var(--pulse-primary-hover)) !important;
+  color: #ffffff !important;
   border: none;
   font-weight: 700;
   border-radius: 0.65rem;
@@ -329,11 +329,19 @@ body {
   transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-.btn-pulse-primary:hover {
-  background: linear-gradient(135deg, var(--pulse-primary-hover), #9f1239);
-  color: #ffffff;
+.btn-pulse-primary:hover,
+.btn-pulse-primary:focus,
+.btn-pulse-primary:active {
+  background: linear-gradient(135deg, var(--pulse-primary-hover), #9f1239) !important;
+  color: #ffffff !important;
   transform: translateY(-1px);
   box-shadow: 0 6px 18px rgba(225, 29, 72, 0.35);
+}
+
+.btn-pulse-primary:disabled {
+  background: #f43f5e !important;
+  color: rgba(255, 255, 255, 0.85) !important;
+  opacity: 0.65;
 }
 
 .btn-pulse-outline {
