@@ -1,6 +1,6 @@
 <script setup>
 import { ref, computed, onMounted, onUnmounted } from 'vue';
-import { DEMO_PERSONAS } from '../services/authProfiles';
+import { DEMO_PERSONAS, DEMO_PASSWORD } from '../services/authProfiles';
 import { signIn, isSmuEmail as checkSmuEmail, findPersonaByEmail } from '../services/authService';
 import PasswordVisibilityToggle from '../components/PasswordVisibilityToggle.vue';
 
@@ -12,6 +12,14 @@ const isPasswordFocused = ref(false)
 const showPassword = ref(false)
 const errorMsg = ref('')
 const isSubmitting = ref(false)
+
+async function handleQuickLogin(personaKey) {
+  const p = DEMO_PERSONAS[personaKey];
+  if (!p) return;
+  email.value = p.email;
+  password.value = DEMO_PASSWORD;
+  await completeLogin(p.email, DEMO_PASSWORD);
+}
 
 // Cursor tracking for Pulse Beacon
 const mouseX = ref(0)
@@ -253,10 +261,11 @@ async function handleManualLogin() {
               </div>
             </div>
 
-            <!-- Credentials Form -->
+            <!-- Credentials Form & Evaluator Quick Logins -->
             <div class="row g-4 align-items-stretch">
               
-              <div class="col-12 d-flex flex-column justify-content-between">
+              <!-- Left Column: Manual Form -->
+              <div class="col-12 col-md-7 d-flex flex-column justify-content-between">
                 <div>
                   <!-- Error Banner -->
                   <div v-if="errorMsg" class="alert alert-danger py-2 px-3 small rounded-3 mb-2" role="alert">
@@ -351,6 +360,82 @@ async function handleManualLogin() {
                 </div>
               </div>
 
+              <!-- Right Column: Evaluator 1-Click Sign-In -->
+              <div class="col-12 col-md-5 border-start-md ps-md-4 d-flex flex-column justify-content-between">
+                <div>
+                  <div class="d-flex align-items-center justify-content-between mb-2">
+                    <span class="text-uppercase fw-bold text-muted" style="font-size: 0.675rem; letter-spacing: 0.05em;">
+                      1-Click Sign-In
+                    </span>
+                    <span class="badge bg-secondary-subtle text-dark border" style="font-size: 0.65rem;">Demo Evaluator</span>
+                  </div>
+                  
+                  <p class="text-muted small mb-2" style="font-size: 0.725rem;">
+                    Instant evaluator simulation with scoped club permissions:
+                  </p>
+
+                  <div class="d-flex flex-column gap-2">
+                    
+                    <!-- Persona 1: Rachel Tan (Eurhythmix ExCo) -->
+                    <button 
+                      type="button" 
+                      class="btn btn-sm btn-outline-secondary text-start p-2 px-3 rounded-3 d-flex justify-content-between align-items-center bg-white persona-tile"
+                      :disabled="isSubmitting"
+                      @click="handleQuickLogin('rachel')"
+                    >
+                      <div class="me-2 text-truncate">
+                        <strong class="d-block text-dark text-truncate" style="font-size: 0.78rem;">Rachel Tan (Eurhythmix ExCo)</strong>
+                        <small class="text-muted d-block text-truncate" style="font-size: 0.68rem;">rachel.tan.2024@scis.smu.edu.sg</small>
+                      </div>
+                      <span class="badge bg-danger bg-opacity-10 text-danger border flex-shrink-0" style="font-size: 0.68rem;">Eurhythmix</span>
+                    </button>
+
+                    <!-- Persona 2: Darren Koh (Samba Masala ExCo) -->
+                    <button 
+                      type="button" 
+                      class="btn btn-sm btn-outline-secondary text-start p-2 px-3 rounded-3 d-flex justify-content-between align-items-center bg-white persona-tile"
+                      :disabled="isSubmitting"
+                      @click="handleQuickLogin('darren')"
+                    >
+                      <div class="me-2 text-truncate">
+                        <strong class="d-block text-dark text-truncate" style="font-size: 0.78rem;">Darren Koh (Samba Masala ExCo)</strong>
+                        <small class="text-muted d-block text-truncate" style="font-size: 0.68rem;">darren.koh.2024@business.smu.edu.sg</small>
+                      </div>
+                      <span class="badge bg-warning bg-opacity-25 text-dark border flex-shrink-0" style="font-size: 0.68rem;">Samba Masala</span>
+                    </button>
+
+                    <!-- Persona 3: Chloe Ang (OSL Facility Administrator) -->
+                    <button 
+                      type="button" 
+                      class="btn btn-sm btn-outline-secondary text-start p-2 px-3 rounded-3 d-flex justify-content-between align-items-center bg-white persona-tile"
+                      :disabled="isSubmitting"
+                      @click="handleQuickLogin('chloe')"
+                    >
+                      <div class="me-2 text-truncate">
+                        <strong class="d-block text-dark text-truncate" style="font-size: 0.78rem;">Chloe Ang (OSL Facility Admin)</strong>
+                        <small class="text-muted d-block text-truncate" style="font-size: 0.68rem;">chloe.osl@smu.edu.sg</small>
+                      </div>
+                      <span class="badge bg-dark text-white flex-shrink-0" style="font-size: 0.68rem;">OSL Staff</span>
+                    </button>
+
+                    <!-- Persona 4: Dev / Super Admin (All CCAs View) -->
+                    <button 
+                      type="button" 
+                      class="btn btn-sm btn-outline-secondary text-start p-2 px-3 rounded-3 d-flex justify-content-between align-items-center bg-white persona-tile"
+                      :disabled="isSubmitting"
+                      @click="handleQuickLogin('dev')"
+                    >
+                      <div class="me-2 text-truncate">
+                        <strong class="d-block text-dark text-truncate" style="font-size: 0.78rem;">Dev Administrator (All CCAs)</strong>
+                        <small class="text-muted d-block text-truncate" style="font-size: 0.68rem;">dev.admin@smu.edu.sg</small>
+                      </div>
+                      <span class="badge text-white flex-shrink-0" style="background-color: var(--pulse-purple-transit); font-size: 0.68rem;">Dev View</span>
+                    </button>
+
+                  </div>
+                </div>
+              </div>
+
             </div>
 
             <!-- Guest Explorer Link (Card Footer) -->
@@ -423,34 +508,5 @@ async function handleManualLogin() {
     opacity: 0.8;
     transform: scale(1.05);
   }
-}
-
-:deep(body.dark-mode) .border-end-md {
-  border-right-color: rgba(51, 65, 85, 0.8) !important;
-}
-
-:deep(body.dark-mode) .persona-tile {
-  background-color: #1e293b !important;
-  border-color: #334155;
-  color: #f1f5f9;
-}
-
-:deep(body.dark-mode) .persona-tile strong {
-  color: #f8fafc !important;
-}
-
-:deep(body.dark-mode) .persona-tile:hover:not(:disabled) {
-  background-color: #0f172a !important;
-  border-color: var(--pulse-primary, #e11d48);
-}
-
-:deep(body.dark-mode) .sso-btn {
-  background-color: #1e293b !important;
-  border-color: #334155;
-  color: #f1f5f9;
-}
-
-:deep(body.dark-mode) .sso-btn span.text-dark {
-  color: #f1f5f9 !important;
 }
 </style>
