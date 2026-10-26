@@ -302,14 +302,14 @@ async function handleManualLogin() {
             <!-- Dignified Institutional Badge with Full University Name & Acronym (Mentioned Once) -->
             <div class="d-inline-flex align-items-center rounded-4 liquid-glass-tag mb-3 shadow-sm border" style="background: rgba(255, 255, 255, 0.92); backdrop-filter: blur(12px); padding: 8px 18px 8px 10px; gap: 14px;">
               <span class="badge rounded-pill bg-danger bg-opacity-10 text-danger border border-danger-subtle fw-bold flex-shrink-0" style="font-size: 0.7rem; letter-spacing: 0.05em; line-height: 1.2; padding: 6px 12px;">
-                OFFICIAL PORTAL
+                CAMPUS PORTAL
               </span>
               <div class="text-start pe-2" style="line-height: 1.3;">
                 <span class="d-block fw-bold text-dark" style="font-size: 0.83rem; letter-spacing: -0.01em;">
                   Singapore Management University (SMU)
                 </span>
                 <span class="text-muted d-block" style="font-size: 0.71rem; font-weight: 500; margin-top: 2px;">
-                  Office of Student Life • Facilities Portal
+                  Co-Curricular Facilities & Operations
                 </span>
               </div>
             </div>
@@ -320,7 +320,7 @@ async function handleManualLogin() {
             </h1>
 
             <p class="text-muted mb-4" style="font-size: 0.95rem; line-height: 1.6;">
-              The official co-curricular management platform for <strong>SMU</strong> student clubs, performance groups, and Office of Student Life (OSL) administrators. Simplifies arts studio handovers, automates waitlists for in-demand venues, and streamlines rehearsal logistics across the city campus.
+              A centralised co-curricular management platform for <strong>SMU</strong> student clubs, performance groups, and Office of Student Life (OSL) administrators. Simplifies arts studio handovers, automates waitlists for in-demand venues, and streamlines rehearsal logistics across the city campus.
             </p>
 
             <!-- Creative Glanceable Campus Operations Showcase (Instant 2-Second Preview) -->
@@ -409,22 +409,6 @@ async function handleManualLogin() {
                   </p>
                 </div>
 
-              </div>
-
-              <!-- Campus Stats Micro-Strip at Bottom of Glance Card -->
-              <div class="d-flex align-items-center justify-content-between pt-2.5 mt-2.5 border-top flex-wrap gap-2 text-muted" style="font-size: 0.7rem;">
-                <div class="d-flex align-items-center gap-1.5">
-                  <span class="text-success fw-bold">✓</span>
-                  <span>28 Approved SMU CCAs</span>
-                </div>
-                <div class="d-flex align-items-center gap-1.5">
-                  <span class="text-primary fw-bold">⚡</span>
-                  <span>0 Demerit Point Record</span>
-                </div>
-                <div class="d-flex align-items-center gap-1.5">
-                  <span class="text-danger fw-bold">🏛️</span>
-                  <span>Direct OSL Whitelist</span>
-                </div>
               </div>
 
             </div>
