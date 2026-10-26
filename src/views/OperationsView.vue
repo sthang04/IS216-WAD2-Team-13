@@ -105,51 +105,24 @@ const filteredPerformers = computed(() => {
   )
 })
 
-const isEndorsedToSlims = ref(false)
-const slimsEndorseTimestamp = ref('')
-
-function markPerformerPresent(performer) {
-  if (blockedForGuest()) return
-  performer.status = 'Checked In'
-  performer.eta = 'On Site ✓'
-  const now = new Date()
-  const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-  performer.checkinTime = `${timeStr} SGT`
-  performer.checkinMethod = 'ExCo Rehearsal Call Sheet'
-  toastMsg.value = `Marked Present: ${performer.name} is on site at Li Ka Shing B1.`
-  setTimeout(() => { toastMsg.value = '' }, 4000)
-}
-
-function markPerformerLate(performer) {
+function reportLateETA(performer) {
   if (blockedForGuest()) return
   performer.status = 'Delayed'
-  performer.eta = '+15m Late (In Transit)'
-  toastMsg.value = `Flagged Late: ${performer.name} running 15 mins behind. Downstream cues updated.`
+  performer.eta = '+15m Late (SOE Class)'
+  toastMsg.value = `Updated ETA for ${performer.name}: +15m late from SOE. Act 2 soundcheck cues auto-flagged on timeline!`
   setTimeout(() => { toastMsg.value = '' }, 4500)
 }
 
 function checkInPerformer(performer, isManualOverride = false) {
-  markPerformerPresent(performer)
-}
-
-function reportLateETA(performer) {
-  markPerformerLate(performer)
-}
-
-function endorseAttendanceToSLiMS() {
   if (blockedForGuest()) return
-  isEndorsedToSlims.value = true
-  const now = new Date()
-  const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-  slimsEndorseTimestamp.value = `${timeStr} SGT`
-  toastMsg.value = `Attendance officially signed by ExCo! Synced to SMU SLiMS attendance registry for CCA transcript credit.`
-  setTimeout(() => { toastMsg.value = '' }, 5000)
-}
-
-function broadcastTelegramCallSheet() {
-  if (blockedForGuest()) return
-  toastMsg.value = `Telegram Bot broadcasted call sheet & cue updates to all performers and crew via linked chat!`
-  setTimeout(() => { toastMsg.value = '' }, 4500)
+  performer.status = 'Checked In'
+  performer.eta = 'On Site ✓'
+  performer.checkinTime = '18:14 SGT'
+  performer.checkinMethod = isManualOverride ? 'ExCo Manual Override' : 'Mobile Geolocation Pin (Li Ka Shing B1)'
+  toastMsg.value = isManualOverride 
+    ? `ExCo Override: ${performer.name} manually marked as Present on site.`
+    : `Mobile Geolocation Verified: ${performer.name} checked in via HTML5 Geolocation (within 50m of venue)!`
+  setTimeout(() => { toastMsg.value = '' }, 4000)
 }
 
 // One-Click Delay Cascade (+15 mins)
@@ -537,30 +510,22 @@ function parseNoticeWithAi() {
         </div>
       </div>
 
-      <!-- Right: ExCo Rehearsal Call Sheet & SLiMS Endorsement Board -->
+      <!-- Right: Performer Attendance & 1-Tap Late ETA Check-In Board -->
       <div class="col-lg-4">
         <div class="pulse-card p-4 shadow-sm">
           <div class="d-flex justify-content-between align-items-center mb-2">
             <div>
-              <div class="text-uppercase fw-bold text-danger small" style="font-size: 0.65rem;">ExCo Day-Of Operations</div>
-              <h5 class="fw-bold mb-0">Rehearsal Call Sheet</h5>
+              <div class="text-uppercase fw-bold text-danger small" style="font-size: 0.65rem;">Sprint 2 Innovation</div>
+              <h5 class="fw-bold mb-0">Performer Attendance</h5>
             </div>
             <span class="badge bg-success bg-opacity-10 text-success border border-success-subtle small d-flex align-items-center gap-1">
               <span class="pulse-status-dot" style="background-color: #16a34a; width: 6px; height: 6px;"></span>
-              SLiMS & Telegram Synced
+              Geolocation Self-Checkin Active
             </span>
           </div>
-          <p class="text-muted small mb-3" style="font-size: 0.75rem;">
-            General members have no login accounts. The on-duty Stage Manager / Dance ExCo verifies performer roll-call on-site and endorses attendance directly for SMU SLiMS transcript credits.
+          <p class="text-muted small mb-3">
+            Performers self-check-in on mobile when within 50m of venue via HTML5 Geolocation API. Stage manager monitors live verified arrivals in real time.
           </p>
-
-          <!-- Attendance Stats Counter -->
-          <div class="d-flex align-items-center justify-content-between p-2 mb-3 rounded-2 bg-light border">
-            <span class="small text-muted" style="font-size: 0.72rem;">Cast Checked In:</span>
-            <span class="badge bg-dark px-2 py-1" style="font-size: 0.72rem;">
-              {{ performers.filter(p => p.status === 'Checked In').length }} / {{ performers.length }} Present
-            </span>
-          </div>
 
           <div class="d-flex flex-column gap-2 mb-3">
             <div 
@@ -579,7 +544,7 @@ function parseNoticeWithAi() {
                   }"
                   style="font-size: 0.65rem;"
                 >
-                  {{ p.status === 'Checked In' ? 'Present' : p.status }}
+                  {{ p.status }}
                 </span>
               </div>
               <div class="text-muted" style="font-size: 0.725rem;">
@@ -591,7 +556,7 @@ function parseNoticeWithAi() {
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
                   <path d="M20 6L9 17l-5-5"></path>
                 </svg>
-                <span>Present • Checked in {{ p.checkinTime || '18:14 SGT' }} (SLiMS Verified)</span>
+                <span>{{ p.checkinMethod || 'Mobile Geolocation Pin (Li Ka Shing B1)' }}</span>
               </div>
               <div v-else class="fw-bold text-secondary mt-1" style="font-size: 0.725rem;">
                 Status: {{ p.eta }}
@@ -599,97 +564,50 @@ function parseNoticeWithAi() {
 
               <!-- Action Controls -->
               <div class="d-flex gap-2 mt-2">
-                <template v-if="p.status !== 'Checked In'">
-                  <button 
-                    type="button" 
-                    class="btn btn-sm btn-outline-success flex-grow-1 py-1 d-flex align-items-center justify-content-center gap-1"
-                    style="font-size: 0.7rem; font-weight: 700;"
-                    title="Mark performer present on-site"
-                    @click="markPerformerPresent(p)"
-                  >
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-                      <path d="M20 6L9 17l-5-5"></path>
-                    </svg>
-                    <span>Mark Present</span>
-                  </button>
-                  <button 
-                    type="button" 
-                    class="btn btn-sm btn-outline-warning text-dark py-1 px-2"
-                    style="font-size: 0.7rem; font-weight: 700;"
-                    title="Flag 15m delay from classes/transit"
-                    @click="markPerformerLate(p)"
-                  >
-                    +15m Late
-                  </button>
-                  <button 
-                    type="button" 
-                    class="btn btn-sm btn-outline-danger py-1 px-2"
-                    style="font-size: 0.65rem; font-weight: 700;"
-                    title="Call On-Call Standby Replacement"
-                    @click="triggerStandbyForPerformer(p)"
-                  >
-                    Call Standby
-                  </button>
-                </template>
-                <template v-else>
-                  <button 
-                    type="button" 
-                    class="btn btn-sm btn-light border py-1 px-2 text-muted"
-                    style="font-size: 0.65rem;"
-                    title="Update to late/delayed"
-                    @click="markPerformerLate(p)"
-                  >
-                    Mark Delayed
-                  </button>
-                  <button 
-                    type="button" 
-                    class="btn btn-sm btn-outline-dark py-1 px-2"
-                    style="font-size: 0.65rem; font-weight: 700;"
-                    title="Call On-Call Standby Replacement"
-                    @click="triggerStandbyForPerformer(p)"
-                  >
-                    Call Standby
-                  </button>
-                </template>
+                <button 
+                  v-if="p.status !== 'Checked In'"
+                  type="button" 
+                  class="btn btn-sm btn-outline-success flex-grow-1 py-1 d-flex align-items-center justify-content-center gap-1"
+                  style="font-size: 0.7rem; font-weight: 700;"
+                  title="Simulate mobile arrival within 50m geofence"
+                  @click="checkInPerformer(p, false)"
+                >
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path>
+                    <circle cx="12" cy="10" r="3"></circle>
+                  </svg>
+                  <span>Simulate Mobile Geo Check-in</span>
+                </button>
+                <button 
+                  v-if="p.status !== 'Checked In'"
+                  type="button" 
+                  class="btn btn-sm btn-light border py-1 px-2 text-muted"
+                  style="font-size: 0.65rem;"
+                  title="Manual ExCo fallback if member device battery died"
+                  @click="checkInPerformer(p, true)"
+                >
+                  Override
+                </button>
+                <button 
+                  v-if="p.status !== 'Checked In'"
+                  type="button" 
+                  class="btn btn-sm btn-outline-danger py-1"
+                  style="font-size: 0.7rem; font-weight: 700;"
+                  @click="reportLateETA(p)"
+                >
+                  +15m Late
+                </button>
+                <button 
+                  type="button" 
+                  class="btn btn-sm btn-outline-dark py-1 px-2"
+                  style="font-size: 0.65rem; font-weight: 700;"
+                  title="Call On-Call Standby Replacement"
+                  @click="triggerStandbyForPerformer(p)"
+                >
+                  Call Standby
+                </button>
               </div>
             </div>
-          </div>
-
-          <!-- SLiMS Endorsement & Broadcast CTA -->
-          <div class="d-flex flex-column gap-2 mb-3">
-            <button 
-              type="button" 
-              class="btn btn-sm w-100 py-2 rounded-3 fw-bold d-flex align-items-center justify-content-center gap-2"
-              :class="isEndorsedToSlims ? 'btn-success' : 'btn-pulse-primary'"
-              @click="endorseAttendanceToSLiMS"
-            >
-              <svg v-if="isEndorsedToSlims" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-                <path d="M20 6L9 17l-5-5"></path>
-              </svg>
-              <svg v-else width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
-                <polyline points="14 2 14 8 20 8"></polyline>
-                <line x1="16" y1="13" x2="8" y2="13"></line>
-                <line x1="16" y1="17" x2="8" y2="17"></line>
-                <polyline points="10 9 9 9 8 9"></polyline>
-              </svg>
-              <span style="font-size: 0.78rem;">
-                {{ isEndorsedToSlims ? `Attendance Endorsed (${slimsEndorseTimestamp})` : 'Endorse Attendance to SMU SLiMS' }}
-              </span>
-            </button>
-
-            <button 
-              type="button" 
-              class="btn btn-sm btn-outline-secondary w-100 py-1 rounded-3 d-flex align-items-center justify-content-center gap-1"
-              style="font-size: 0.725rem;"
-              @click="broadcastTelegramCallSheet"
-            >
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <line x1="22" y1="2" x2="11" y2="13"></line>
-                <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
-              </svg>
-              <span>Broadcast Call Sheet via Telegram</span>
-            </button>
           </div>
 
           <div class="p-2 rounded-2 bg-light border text-center small text-muted">
@@ -697,7 +615,7 @@ function parseNoticeWithAi() {
               SLiMS Verification & Emergency Escalation Protocol
             </div>
             <div style="font-size: 0.7rem;">
-              Attendance signed by ExCo syncs to official SMU SLiMS CCA transcripts.
+              Performers tap Pin Check-In on mobile to auto-verify for official SLiMS CCA transcripts.
               In case of facility defect or incident, contact <strong>OCIS Campus Security</strong> at <strong>+65 6828 0345 (Ext 7777)</strong> or OSL Advisor <strong>Chloe Ang</strong>.
             </div>
           </div>

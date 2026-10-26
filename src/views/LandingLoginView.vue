@@ -178,7 +178,7 @@ async function resumeRememberedLogin() {
   await completeLogin(rememberedAccount.value.email, DEMO_PASSWORD)
 }
 
-// All sign-in paths go through the auth service with Sims 4-style 3-round fun facts loading screen (~5.5s)
+// All sign-in paths go through the auth service with Sims 4-style 3-round fun facts loading screen (~3.5s)
 async function completeLogin(loginEmail, loginPassword) {
   errorMsg.value = ''
   isSubmitting.value = true
@@ -196,33 +196,33 @@ async function completeLogin(loginEmail, loginPassword) {
   try {
     const authPromise = signIn(loginEmail, loginPassword)
     
-    // Trigger fun loading screen (Sims 4 style: 3 rounds over ~5.5s)
+    // Trigger fun loading screen (Sims 4 style: 3 rounds over ~3.5s)
     isAuthenticating.value = true
     authProgress.value = 10
 
-    // Smooth progress bar update over 5.5s
+    // Smooth progress bar update over 3.5s
     progressInterval = setInterval(() => {
       if (authProgress.value < 94) {
         authProgress.value += 1
       }
-    }, 60)
+    }, 38)
 
-    // Round 2 rotation at ~1.85s
+    // Round 2 rotation at ~1.15s
     roundTimer1 = setTimeout(() => {
       currentRound.value = 2
       loadingStageText.value = 'Syncing Studio Schedules & OneMap Transit SLA...'
-    }, 1850)
+    }, 1150)
 
-    // Round 3 rotation at ~3.70s
+    // Round 3 rotation at ~2.30s
     roundTimer2 = setTimeout(() => {
       currentRound.value = 3
       loadingStageText.value = 'Preparing Real-Time CCA Operations Dashboard...'
-    }, 3700)
+    }, 2300)
 
-    // Wait for auth promise + comfortable ~5.5s reading time (3 rounds of facts)
+    // Wait for auth promise + snappy ~3.5s reading time (3 rounds of facts)
     const [persona] = await Promise.all([
       authPromise,
-      new Promise(resolve => setTimeout(resolve, 5500))
+      new Promise(resolve => setTimeout(resolve, 3500))
     ])
 
     clearInterval(progressInterval)

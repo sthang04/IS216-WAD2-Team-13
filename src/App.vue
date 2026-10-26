@@ -465,6 +465,12 @@ async function handleSignOut() {
 }
 
 onMounted(async () => {
+  // Clean enterprise light theme enforcement
+  document.body.classList.remove('dark-mode')
+  try {
+    localStorage.removeItem('pulse_theme')
+  } catch {}
+
   try {
     try {
       const persona = await restoreSession()
