@@ -445,6 +445,22 @@ function handleGuestExplore() {
 // New ExCo finished sign-up (already signed in by authService)
 function handleSignUpDone(persona) {
   showSignUp.value = false
+  if (persona) {
+    try {
+      const now = new Date()
+      const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+      const resolvedCca = persona.cca || persona.club || 'SMU ExCo'
+      localStorage.setItem('pulse_remembered_account', JSON.stringify({
+        email: persona.email,
+        name: persona.name,
+        roleLabel: persona.roleLabel,
+        cca: resolvedCca,
+        club: resolvedCca,
+        lastLoginAt: `Today, ${timeStr}`,
+        isDemo: false
+      }))
+    } catch {}
+  }
   applySession(persona)
   toast.value = `Welcome to Pulse, ${persona.name}! You're signed in as ${persona.roleLabel}.`
   toastType.value = 'success'
