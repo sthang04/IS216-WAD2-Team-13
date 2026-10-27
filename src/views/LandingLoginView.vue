@@ -17,6 +17,13 @@ const showDemoLogins = ref(false)
 // Session Cache: Remembered repeated accounts
 const rememberedAccount = ref(null)
 const isSwitchingAccount = ref(false)
+const rememberedPassword = ref('')
+const showRememberedPassword = ref(false)
+
+const isRememberedDemo = computed(() => {
+  if (!rememberedAccount.value?.email) return false
+  return !!findPersonaByEmail(rememberedAccount.value.email)
+})
 
 // Sims 4-Style 3-Round Rotating Loading Screen with 12 Fun Fact Templates
 const isAuthenticating = ref(false)
@@ -141,7 +148,12 @@ onMounted(() => {
   try {
     const cached = localStorage.getItem('pulse_remembered_account')
     if (cached) {
-      rememberedAccount.value = JSON.parse(cached)
+      const parsed = JSON.parse(cached)
+      const demo = findPersonaByEmail(parsed.email)
+      const resolvedCca = parsed.cca || parsed.club || demo?.cca || 'SMU ExCo'
+      parsed.club = resolvedCca
+      parsed.cca = resolvedCca
+      rememberedAccount.value = parsed
     }
   } catch (err) {
     console.error('Session cache load error', err)
@@ -159,6 +171,8 @@ function switchAccount() {
   isSwitchingAccount.value = true
   email.value = ''
   password.value = ''
+  rememberedPassword.value = ''
+  errorMsg.value = ''
 }
 
 function forgetRememberedAccount() {
@@ -169,13 +183,31 @@ function forgetRememberedAccount() {
   isSwitchingAccount.value = false
   email.value = ''
   password.value = ''
+  rememberedPassword.value = ''
+  errorMsg.value = ''
 }
 
 async function resumeRememberedLogin() {
   if (!rememberedAccount.value) return
+  errorMsg.value = ''
+  // Demo personas share DEMO_PASSWORD; real accounts enter their password
+  if (isRememberedDemo.value) {
+    email.value = rememberedAccount.value.email
+    password.value = DEMO_PASSWORD
+    await completeLogin(rememberedAccount.value.email, DEMO_PASSWORD)
+  }
+}
+
+async function handleResumeWithPassword() {
+  if (!rememberedAccount.value) return
+  errorMsg.value = ''
+  if (!rememberedPassword.value) {
+    errorMsg.value = 'Please enter your password to sign in.'
+    return
+  }
   email.value = rememberedAccount.value.email
-  password.value = DEMO_PASSWORD
-  await completeLogin(rememberedAccount.value.email, DEMO_PASSWORD)
+  password.value = rememberedPassword.value
+  await completeLogin(rememberedAccount.value.email, rememberedPassword.value)
 }
 
 // All sign-in paths go through the auth service with Sims 4-style 3-round fun facts loading screen (~3.5s)
@@ -233,12 +265,15 @@ async function completeLogin(loginEmail, loginPassword) {
     if (persona) {
       const now = new Date()
       const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+      const resolvedCca = persona.cca || persona.club || 'SMU ExCo'
       const cached = {
         email: persona.email,
         name: persona.name,
         roleLabel: persona.roleLabel,
-        club: persona.club,
-        lastLoginAt: `Today, ${timeStr}`
+        cca: resolvedCca,
+        club: resolvedCca,
+        lastLoginAt: `Today, ${timeStr}`,
+        isDemo: !!findPersonaByEmail(persona.email)
       }
       try {
         localStorage.setItem('pulse_remembered_account', JSON.stringify(cached))
@@ -503,11 +538,12 @@ async function handleManualLogin() {
                   <small class="text-muted d-block text-truncate" style="font-size: 0.72rem;">{{ rememberedAccount.email }}</small>
                 </div>
                 <span class="badge bg-secondary-subtle text-dark border flex-shrink-0" style="font-size: 0.65rem;">
-                  {{ rememberedAccount.club || 'SMU ExCo' }}
+                  {{ rememberedAccount.cca || rememberedAccount.club || 'SMU ExCo' }}
                 </span>
               </div>
 
-              <div class="d-flex gap-2">
+              <!-- Case A: Demo Account (1-Click Fast Sign-In with Demo Password) -->
+              <div v-if="isRememberedDemo" class="d-flex gap-2">
                 <button 
                   type="button" 
                   class="btn btn-sm btn-pulse-primary flex-grow-1 py-1.5 fw-bold text-white shadow-sm d-flex align-items-center justify-content-center gap-1.5"
@@ -525,6 +561,53 @@ async function handleManualLogin() {
                 >
                   Switch
                 </button>
+              </div>
+
+              <!-- Case B: Real ExCo Account (Requires User's Own Password) -->
+              <div v-else class="mt-2 pt-2 border-top">
+                <div class="mb-2">
+                  <label class="form-label small fw-semibold text-dark mb-1" style="font-size: 0.72rem;">
+                    Enter password for {{ rememberedAccount.name.split(' ')[0] }}:
+                  </label>
+                  <div class="input-group input-group-sm">
+                    <input 
+                      v-model="rememberedPassword" 
+                      :type="showRememberedPassword ? 'text' : 'password'"
+                      class="form-control" 
+                      placeholder="Password" 
+                      autocomplete="current-password"
+                      :disabled="isSubmitting"
+                      @keyup.enter="handleResumeWithPassword"
+                    />
+                    <button 
+                      type="button" 
+                      class="btn btn-outline-secondary" 
+                      tabindex="-1"
+                      @click="showRememberedPassword = !showRememberedPassword"
+                    >
+                      <span style="font-size: 0.725rem;">{{ showRememberedPassword ? 'Hide' : 'Show' }}</span>
+                    </button>
+                  </div>
+                </div>
+                <div class="d-flex gap-2">
+                  <button 
+                    type="button" 
+                    class="btn btn-sm btn-pulse-primary flex-grow-1 py-1.5 fw-bold text-white shadow-sm d-flex align-items-center justify-content-center gap-1.5"
+                    :disabled="isSubmitting || !rememberedPassword"
+                    @click="handleResumeWithPassword"
+                  >
+                    <span>Sign In as {{ rememberedAccount.name.split(' ')[0] }}</span>
+                    <span>→</span>
+                  </button>
+                  <button 
+                    type="button" 
+                    class="btn btn-sm btn-outline-secondary py-1.5 px-2.5" 
+                    title="Switch to another SMU account" 
+                    @click="switchAccount"
+                  >
+                    Switch
+                  </button>
+                </div>
               </div>
               
               <div class="text-end mt-1.5">
