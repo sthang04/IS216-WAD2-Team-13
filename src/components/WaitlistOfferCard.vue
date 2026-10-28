@@ -1,6 +1,6 @@
 <script setup>
 import { ref, computed, onMounted, onUnmounted } from 'vue'
-import { formatDate, formatTime } from '../services/facilityCalendarService'
+import { formatDate, formatTime } from '../services/facilityService'
 import { secondsLeft, formatCountdown } from '../services/waitlistService'
 
 const props = defineProps({

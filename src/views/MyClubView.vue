@@ -17,7 +17,7 @@ import {
   STATUSES, fetchCalendar, fetchClubTransfers, releaseBooking, undoRelease,
   listenForCalendarChanges, bookingActions, defaultWeekStart, weekStartOf, addDays,
   formatDate, formatTime
-} from '../services/facilityCalendarService'
+} from '../services/facilityService'
 import { fetchActiveClubEntries } from '../services/waitlistService'
 import { requestOslEmail } from '../services/transferService'
 

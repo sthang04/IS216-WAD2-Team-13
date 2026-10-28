@@ -10,7 +10,7 @@ import PageHero from '../components/PageHero.vue'
 import FacilityTabs from '../components/FacilityTabs.vue'
 import ConfirmActionModal from '../components/ConfirmActionModal.vue'
 import { session, showToast } from '../services/sessionState'
-import { listenForCalendarChanges, formatDate, formatTime } from '../services/facilityCalendarService'
+import { listenForCalendarChanges, formatDate, formatTime } from '../services/facilityService'
 import { fetchPendingTransfers, fetchRecentDecisions, fetchAuditHistory, approveTransfer, rejectTransfer } from '../services/transferService'
 
 const route = useRoute()

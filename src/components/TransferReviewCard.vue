@@ -1,7 +1,7 @@
 <script setup>
 import { ref, computed } from 'vue'
 import BookingStatusBadge from './BookingStatusBadge.vue'
-import { formatDate, formatTime } from '../services/facilityCalendarService'
+import { formatDate, formatTime } from '../services/facilityService'
 import { AUDIT_ACTION_LABELS } from '../services/transferService'
 
 const props = defineProps({

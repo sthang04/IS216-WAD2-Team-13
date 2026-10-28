@@ -3,7 +3,7 @@ import { ref, computed, watch } from 'vue'
 import {
   addDays, weekStartOf, formatWeekLabel, defaultWeekStart, singaporeToday, formatDate,
   transferCutoffDate, CALENDAR_END
-} from '../services/facilityCalendarService'
+} from '../services/facilityService'
 
 // Drawn like a desk calendar: a header with binder rings, then one tile per day.
 const props = defineProps({
