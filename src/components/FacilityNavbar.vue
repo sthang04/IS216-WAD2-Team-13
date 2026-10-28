@@ -15,7 +15,7 @@ import {
   showToast
 } from '../services/sessionState'
 import { startNotifications } from '../services/notificationStore'
-import { resetDemoData } from '../services/facilityCalendarService'
+import { resetDemoData } from '../services/facilityService'
 
 // embedded = running inside the team app, which owns sign-in, the theme and the main navbar
 const props = defineProps({ embedded: { type: Boolean, default: false } })

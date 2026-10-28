@@ -1,7 +1,7 @@
 <script setup>
 import { computed } from 'vue'
 import BookingStatusBadge from './BookingStatusBadge.vue'
-import { formatDate, formatTime } from '../services/facilityCalendarService'
+import { formatDate, formatTime } from '../services/facilityService'
 
 const props = defineProps({
   booking: { type: Object, required: true },

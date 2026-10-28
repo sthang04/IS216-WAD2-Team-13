@@ -17,7 +17,7 @@ import {
   STATUSES, fetchFacilities, fetchCalendar, releaseBooking, undoRelease, claimBooking,
   listenForCalendarChanges, bookingActions, defaultWeekStart, weekStartOf, addDays,
   formatWeekLabel, formatDate, formatTime
-} from '../services/facilityCalendarService'
+} from '../services/facilityService'
 import { fetchActiveClubEntries, joinWaitlist, leaveWaitlist } from '../services/waitlistService'
 
 const route = useRoute()

@@ -228,6 +228,15 @@ export async function initSession() {
       return
     }
  
+    // No Supabase keys (supabase.js exports null): the facility calendar needs
+    // the database, so everyone is a Public viewer. Stop before any supabase call.
+    if (!supabase) {
+      session.value.authUserId = null
+      session.value.personas = []
+      applyMember(null)
+      return
+    }
+ 
     // Also get the Supabase login itself, for its user id
     const authResponse = await supabase.auth.getSession()
     if (authResponse.error) {
@@ -362,13 +371,16 @@ export function showToast(message, type = 'info') {
  
 // Reload the facility session when someone signs in or out anywhere in the app.
 // onAuthStateChange runs our function on every login event of the shared Supabase client.
-supabase.auth.onAuthStateChange((event) => {
-  if (session.value.ready && (event === 'SIGNED_IN' || event === 'SIGNED_OUT')) {
-    // Supabase can freeze if we make another Supabase call INSIDE this callback.
-    // setTimeout(..., 0) runs initSession just after the callback has finished, which avoids that.
-    setTimeout(() => {
-      initSession().catch((error) => console.log(error.message))
-    }, 0)
-  }
-})
+// supabase is null when the keys are missing, so only listen when it exists.
+if (supabase) {
+  supabase.auth.onAuthStateChange((event) => {
+    if (session.value.ready && (event === 'SIGNED_IN' || event === 'SIGNED_OUT')) {
+      // Supabase can freeze if we make another Supabase call INSIDE this callback.
+      // setTimeout(..., 0) runs initSession just after the callback has finished, which avoids that.
+      setTimeout(() => {
+        initSession().catch((error) => console.log(error.message))
+      }, 0)
+    }
+  })
+}
  

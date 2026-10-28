@@ -10,7 +10,7 @@ import WaitlistOfferCard from '../components/WaitlistOfferCard.vue'
 import ConfirmActionModal from '../components/ConfirmActionModal.vue'
 import { loadOffers } from '../services/notificationStore'
 import { session, activeClubName, canManageActiveClub, showToast } from '../services/sessionState'
-import { claimBooking, listenForCalendarChanges, formatDate, formatTime } from '../services/facilityCalendarService'
+import { claimBooking, listenForCalendarChanges, formatDate, formatTime } from '../services/facilityService'
 import { fetchClubWaitlist, fetchQueue, leaveWaitlist } from '../services/waitlistService'
 
 const entries = ref([])
