@@ -1,6 +1,7 @@
 <script setup>
 import { ref, onMounted, computed } from 'vue';
 import { facilityService } from './services/facilityService';
+import WhatIfSimulator from './components/WhatIfSimulator.vue'
 
 const slots = ref([])
 const loading = ref(true)
@@ -59,8 +60,8 @@ function selectProfile(role) {
   toast.value = ''
 }
 async function loadSlots() {
-  const res = await facilityService.getSlots()
-  slots.value = res.data || []
+  const res = await facilityService.getSlots();
+  slots.value = res.data || [];
 }
 
 //handles different facility actions
@@ -125,6 +126,7 @@ onMounted(async () => {
 
 <template>
   <div class="container py-4">
+    <WhatIfSimulator />
     <div class="d-flex justify-content-between align-items-center mb-4 gap-3">
       <div class="text-start">
         <h2 class="fw-bold mb-0">Pulse - Master Facility Calendar</h2>
