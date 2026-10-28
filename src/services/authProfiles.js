@@ -1,0 +1,110 @@
+// src/services/authProfiles.js
+// Institutional User Profiles & CCA Scoping Definition for SMU Pulse
+
+export const ALL_CLUBS = [
+  'Ardiente',
+  'Artdicted',
+  'Ballare',
+  'Broadcast & Entertainment',
+  'Caderas Latinas',
+  'Chamber Choir',
+  'Chinese Orchestra',
+  'Eurhythmix',
+  'Funk Movement',
+  'Guitarissimo',
+  'INDANCITY',
+  'Ivory Keys',
+  'Literati',
+  'Malay Language & Cultural Club',
+  'SMUSAIC',
+  'Samba Masala',
+  'SoundFoundry',
+  'Stageit',
+  'Stereometa',
+  'Symphonia',
+  'VOIX',
+  'SMU Red Cross',
+  'Rotaract Club',
+  'ACF ExCo',
+];
+
+// Shared password for the demo accounts below
+export const DEMO_PASSWORD = 'Password123!';
+
+// Demo accounts: ExCos who have already signed up (sign-in only, no emails are ever sent to these addresses)
+export const DEMO_PERSONAS = {
+  rachel: {
+    id: 'rachel',
+    name: 'Rachel Tan',
+    email: 'rachel.tan.2024@scis.smu.edu.sg',
+    role: 'club',
+    roleLabel: 'Eurhythmix ExCo',
+    cca: 'Eurhythmix',
+    allowedClubs: ['Eurhythmix'],
+    isDev: false,
+    sector: 'ACF • Arts & Culture',
+    smartSearches: ['Studio L7.2', 'Dance Studio', 'Sprung Floor', 'Connexion', 'Evening Slots'],
+  },
+  darren: {
+    id: 'darren',
+    name: 'Darren Koh',
+    email: 'darren.koh.2024@business.smu.edu.sg',
+    role: 'club',
+    roleLabel: 'Samba Masala ExCo',
+    cca: 'Samba Masala',
+    allowedClubs: ['Samba Masala'],
+    isDev: false,
+    sector: 'ACF • Arts & Culture',
+    smartSearches: ['Percussion Hall', 'Acoustic Room', 'SOA Basement', 'Weekend Rehearsal'],
+  },
+  marcus: {
+    id: 'marcus',
+    name: 'Marcus Lim',
+    email: 'marcus.lim.2024@socsc.smu.edu.sg',
+    role: 'club',
+    roleLabel: 'SMU Symphonia ExCo',
+    cca: 'Symphonia',
+    allowedClubs: ['Symphonia'],
+    isDev: false,
+    sector: 'ACF • Arts & Culture',
+    smartSearches: ['SMU Hall', 'Acoustic Room', 'Instrument Storage', 'Connexion'],
+  },
+  chloe: {
+    id: 'chloe',
+    name: 'Chloe Ang',
+    email: 'chloe.osl@smu.edu.sg',
+    role: 'admin',
+    roleLabel: 'OSL Facility Administrator',
+    cca: 'Office of Student Life',
+    allowedClubs: ['ACF ExCo', 'Office of Student Life'],
+    isDev: false,
+    sector: 'Campus Administration',
+    smartSearches: ['Pending Admin Sign-off', 'Proposed Peer Transfer', 'Studio L7.2', 'Connexion'],
+  },
+  dev: {
+    id: 'dev',
+    name: 'Dev Administrator',
+    email: 'dev.admin@smu.edu.sg',
+    role: 'dev',
+    roleLabel: 'Developer / Super Admin',
+    cca: 'Eurhythmix',
+    allowedClubs: ALL_CLUBS,
+    isDev: true,
+    sector: 'System Administration',
+    smartSearches: ['All Venues', 'Studio L7.2', 'Pending Admin Sign-off', 'Waitlist > 1', 'Dance Studio'],
+  },
+};
+
+// Anyone exploring without signing in: can view, cannot act
+export const GUEST_PERSONA = {
+  id: 'guest',
+  name: 'Guest',
+  email: null,
+  role: 'guest',
+  roleLabel: 'Guest (View Only)',
+  cca: null,
+  allowedClubs: [],
+  isDev: false,
+  sector: 'Public',
+  smartSearches: ['Dance Studio', 'Acoustic Room', 'All Venues'],
+};
