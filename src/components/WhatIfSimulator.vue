@@ -1,8 +1,8 @@
 <script setup>
-import { ref, computed, watch } from 'vue'
+import { ref, shallowRef, computed, watch, onMounted } from 'vue'
 
-// Get temporary test data until Supabase RBAC is ready.
-import { getSimulationTestData } from '../data/simulationTestData.js'
+// Load simulation data from either local test data or authorised Supabase records.
+import { loadSimulationData } from '../services/simulationDataService.js'
 
 // Reuse the simulation engine we already built.
 import { runCompleteSimulation } from '../services/simulationService.js'
@@ -11,21 +11,72 @@ import { runCompleteSimulation } from '../services/simulationService.js'
 import PipMascot from './PipMascot.vue'
 
 
+
+// ============================================
 // STEP 1: LOAD EVENT DATA
+// ============================================
 
-// Later, this data source will be replace with an authorised Supabase event snapshot.
+// LIVE MODE ONLY:
+// Load real event data from Supabase.
+const dataSource = 'supabase'
 
-const data = getSimulationTestData()
+// Store the loaded data.
+//
+// shallowRef keeps the data as a plain JavaScript object.
+// This is important because our simulation engine
+// uses structuredClone() to create a safe copy.
+const data = shallowRef({
+  events: [],
+  members: [],
+  event_segments: [],
+  segment_assignments: [],
+  segment_dependencies: [],
+  segment_facility_slots: [],
+  facility_slots: []
+})
+
+// Track whether the data is still loading.
+const loadingData = ref(true)
+
+// Store any data-loading errors.
+const dataLoadError = ref('')
 
 // Get all available events.
-const events = data.events
+const events = computed(() => data.value.events)
 
 // Store the event currently selected by ExCo.
-const selectedEventId = ref(events[0]?.id ?? null)
+const selectedEventId = ref(null)
 
 // Store the simulation result and errors.
 const result = ref(null)
 const errorMessage = ref('')
+
+// Load data when the simulator opens.
+onMounted(async () => {
+  loadingData.value = true
+  dataLoadError.value = ''
+
+  try {
+    // Load local test data by default.
+    const loadedData = await loadSimulationData({
+      source: dataSource
+    })
+
+    // Store the data for the simulation engine.
+    data.value = loadedData
+
+    // Automatically select the first available event.
+    selectedEventId.value = loadedData.events[0]?.id ?? null
+
+  } catch (error) {
+    dataLoadError.value = error.message
+    console.error('Simulation data loading failed:', error)
+
+  } finally {
+    loadingData.value = false
+  }
+})
+
 
 
 // ============================================
@@ -34,12 +85,12 @@ const errorMessage = ref('')
 
 // Find the selected event.
 const selectedEvent = computed(() =>
-  events.find(e => e.id === selectedEventId.value)
+  events.value.find(e => e.id === selectedEventId.value)
 )
 
 // Find all activities belonging to the event.
 const eventSegments = computed(() =>
-  data.event_segments.filter(
+  data.value.event_segments.filter(
     s => s.event_id === selectedEventId.value
   )
 )
@@ -51,12 +102,12 @@ const eventMembers = computed(() => {
   )
 
   const memberIds = new Set(
-    data.segment_assignments
+    data.value.segment_assignments
       .filter(a => segmentIds.has(a.segment_id))
       .map(a => a.member_id)
   )
 
-  return data.members.filter(m => memberIds.has(m.id))
+  return data.value.members.filter(m => memberIds.has(m.id))
 })
 
 // Find facilities linked to the event.
@@ -67,13 +118,13 @@ const eventFacilities = computed(() => {
   )
 
   const facilityIds = new Set(
-    data.segment_facility_slots
+    data.value.segment_facility_slots
       .filter(link => segmentIds.has(link.segment_id))
       .map(link => link.facility_slot_id)
   )
 
   return [...new Set(
-    data.facility_slots
+    data.value.facility_slots
       .filter(f => facilityIds.has(f.id))
       .map(f => f.venue_name)
   )]
@@ -267,7 +318,7 @@ function run() {
     // Run the complete simulation.
     // The engine calculates impacts in memory.
     result.value = runCompleteSimulation(
-      data,
+      data.value,
       selectedEventId.value,
       scenarios
     )
@@ -339,6 +390,21 @@ function formatTime(value) {
         Test hypothetical disruptions without
         modifying confirmed event bookings.
       </p>
+      <!-- Show which data source the simulator is using -->
+      <div class="alert alert-info py-2 small">
+        <strong>Data Source:</strong>
+        {{ dataSource === 'local' ? 'Local Test Data' : 'Supabase Live Data' }}
+      </div>
+
+      <!-- Show a message while loading event data -->
+      <div v-if="loadingData" class="alert alert-secondary">
+        Loading simulation data...
+      </div>
+
+      <!-- Show errors if data cannot be loaded -->
+      <div v-if="dataLoadError" class="alert alert-danger">
+        {{ dataLoadError }}
+      </div>
 
 
       <!-- EVENT SELECTION -->
@@ -545,7 +611,7 @@ function formatTime(value) {
         <button
           type="button"
           class="btn btn-danger"
-          :disabled="!selectedEventId"
+          :disabled="loadingData || !!dataLoadError || !selectedEventId"
           @click="run"
         >
           Run Simulation ({{ disruptions.length }})
