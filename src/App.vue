@@ -18,7 +18,6 @@ import { calculateWaitlistCutoff } from './services/smuClubsDirectory';
 // App Views state
 const currentView = ref('landing') // 'landing', 'admin', 'facilities', 'schedule', 'heatmap', 'operations', 'risk'
 const apiMode = ref(false) // Toggle API badge tags on/off across all views (Default: OFF as requested)
-const isDarkMode = ref(false)
 const notificationsOpen = ref(false)
 
 const notificationsList = ref([
@@ -55,28 +54,6 @@ const unreadNotificationCount = computed(() => notificationsList.value.filter(n 
 
 function markAllNotificationsRead() {
   notificationsList.value.forEach(n => n.unread = false)
-}
-
-function initTheme() {
-  const saved = localStorage.getItem('pulse_theme')
-  if (saved === 'dark' || (!saved && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
-    isDarkMode.value = true
-    document.body.classList.add('dark-mode')
-  } else {
-    isDarkMode.value = false
-    document.body.classList.remove('dark-mode')
-  }
-}
-
-function toggleDarkMode() {
-  isDarkMode.value = !isDarkMode.value
-  if (isDarkMode.value) {
-    document.body.classList.add('dark-mode')
-    localStorage.setItem('pulse_theme', 'dark')
-  } else {
-    document.body.classList.remove('dark-mode')
-    localStorage.setItem('pulse_theme', 'light')
-  }
 }
 
 const slots = ref([])
@@ -468,6 +445,22 @@ function handleGuestExplore() {
 // New ExCo finished sign-up (already signed in by authService)
 function handleSignUpDone(persona) {
   showSignUp.value = false
+  if (persona) {
+    try {
+      const now = new Date()
+      const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+      const resolvedCca = persona.cca || persona.club || 'SMU ExCo'
+      localStorage.setItem('pulse_remembered_account', JSON.stringify({
+        email: persona.email,
+        name: persona.name,
+        roleLabel: persona.roleLabel,
+        cca: resolvedCca,
+        club: resolvedCca,
+        lastLoginAt: `Today, ${timeStr}`,
+        isDemo: false
+      }))
+    } catch {}
+  }
   applySession(persona)
   toast.value = `Welcome to Pulse, ${persona.name}! You're signed in as ${persona.roleLabel}.`
   toastType.value = 'success'
@@ -488,8 +481,13 @@ async function handleSignOut() {
 }
 
 onMounted(async () => {
+  // Clean enterprise light theme enforcement
+  document.body.classList.remove('dark-mode')
   try {
-    initTheme()
+    localStorage.removeItem('pulse_theme')
+  } catch {}
+
+  try {
     try {
       const persona = await restoreSession()
       if (persona) applySession(persona)
@@ -720,34 +718,6 @@ onUnmounted(() => {
             >
               <span class="pulse-toggle-indicator" :class="{ active: apiMode }"></span>
               <span>APIs: {{ apiMode ? 'Visible' : 'Hidden' }}</span>
-            </button>
-
-            <!-- Dark Mode Toggle Button (Requested by Teammate) -->
-            <button
-              type="button"
-              class="btn btn-sm btn-pulse-outline rounded-pill px-2 py-1 bg-white d-flex align-items-center gap-1"
-              :title="isDarkMode ? 'Switch to Light Mode' : 'Switch to Dark Mode'"
-              @click="toggleDarkMode"
-            >
-              <!-- Sun Icon when in Dark Mode -->
-              <svg v-if="isDarkMode" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <circle cx="12" cy="12" r="5"></circle>
-                <line x1="12" y1="1" x2="12" y2="3"></line>
-                <line x1="12" y1="21" x2="12" y2="23"></line>
-                <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
-                <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
-                <line x1="1" y1="12" x2="3" y2="12"></line>
-                <line x1="21" y1="12" x2="23" y2="12"></line>
-                <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
-                <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
-              </svg>
-              <!-- Moon Icon when in Light Mode -->
-              <svg v-else width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
-              </svg>
-              <span class="small fw-bold d-none d-md-inline" style="font-size: 0.725rem;">
-                {{ isDarkMode ? 'Light' : 'Dark' }}
-              </span>
             </button>
 
             <!-- Centralized Notification Bell (Anchored safely on right, zero clipping) -->

@@ -95,7 +95,7 @@ function backToEmail() {
     <div class="card border-0 shadow-sm p-4 w-100" style="max-width: 460px; border-radius: 1rem; background-color: var(--pulse-card-bg);">
 
       <div class="d-flex align-items-center gap-2 mb-1">
-        <span class="badge bg-danger rounded-pill px-3 py-1" style="font-size: 0.7rem; font-weight: 800; letter-spacing: 0.05em;">PULSE</span>
+        <span class="badge bg-danger text-white rounded-pill px-3 py-1" style="font-size: 0.7rem; font-weight: 800; letter-spacing: 0.05em;">PULSE</span>
         <span class="text-muted small">ExCo Sign Up • Step {{ step }} of 2</span>
       </div>
       <h4 class="fw-bold mb-1">Create your ExCo account</h4>
@@ -113,9 +113,9 @@ function backToEmail() {
           <label for="signupEmail" class="form-label small fw-bold text-muted mb-1">SMU email address</label>
           <input id="signupEmail" v-model="email" type="email" class="form-control" placeholder="name.2025@smu.edu.sg" autocomplete="email" required />
         </div>
-        <button type="submit" class="btn btn-pulse-primary w-100 py-2 fw-bold d-flex align-items-center justify-content-center gap-2" :disabled="isSubmitting">
-          <span v-if="isSubmitting" class="spinner-border spinner-border-sm" role="status"></span>
-          <span>Continue</span>
+        <button type="submit" class="btn btn-pulse-primary text-white w-100 py-2.5 fw-bold d-flex align-items-center justify-content-center gap-2 shadow-sm" :disabled="isSubmitting">
+          <span v-if="isSubmitting" class="spinner-border spinner-border-sm text-white" role="status"></span>
+          <span class="text-white">Continue →</span>
         </button>
       </form>
 
@@ -170,9 +170,9 @@ function backToEmail() {
           <input id="signupConfirm" v-model="confirmPassword" :type="showPassword ? 'text' : 'password'" class="form-control" autocomplete="new-password" />
         </div>
 
-        <button type="submit" class="btn btn-pulse-primary w-100 py-2 fw-bold d-flex align-items-center justify-content-center gap-2" :disabled="isSubmitting">
-          <span v-if="isSubmitting" class="spinner-border spinner-border-sm" role="status"></span>
-          <span>Create account</span>
+        <button type="submit" class="btn btn-pulse-primary text-white w-100 py-2.5 fw-bold d-flex align-items-center justify-content-center gap-2 shadow-sm" :disabled="isSubmitting">
+          <span v-if="isSubmitting" class="spinner-border spinner-border-sm text-white" role="status"></span>
+          <span class="text-white">Create account ✓</span>
         </button>
         <button type="button" class="btn btn-link w-100 text-muted small mt-1 text-decoration-none" :disabled="isSubmitting" @click="backToEmail">
           Use a different email
