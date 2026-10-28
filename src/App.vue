@@ -1,5 +1,7 @@
 <script setup>
 import { ref, onMounted, onUnmounted, computed, watch } from 'vue';
+import { useRouter, useRoute } from 'vue-router';
+import { VIEW_PATHS } from './router';
 import { facilityService, getStatusBadgeClass } from './services/facilityService';
 import { DEMO_PERSONAS, ALL_CLUBS, GUEST_PERSONA } from './services/authProfiles';
 import {
@@ -17,6 +19,19 @@ import { calculateWaitlistCutoff } from './services/smuClubsDirectory';
 
 // App Views state
 const currentView = ref('landing') // 'landing', 'admin', 'facilities', 'schedule', 'heatmap', 'operations', 'risk'
+
+// Keep currentView and the URL in step (src/router/index.js): clicking a tab
+// changes the URL, and opening or refreshing a URL opens that page.
+const router = useRouter()
+const route = useRoute()
+watch(currentView, (view) => {
+  if (route.meta.view !== view && VIEW_PATHS[view]) router.push(VIEW_PATHS[view])
+})
+watch(() => route.meta.view, (view) => {
+  if (view && isLoggedIn.value && view !== currentView.value) currentView.value = view
+})
+// /signup opens the sign-up screen
+watch(() => route.meta.signup, (signup) => { if (signup && !isLoggedIn.value) showSignUp.value = true })
 const apiMode = ref(false) // Toggle API badge tags on/off across all views (Default: OFF as requested)
 const notificationsOpen = ref(false)
 
@@ -426,7 +441,15 @@ function applySession(persona) {
   activePersona.value = persona
   selectedClub.value = persona.cca
   isLoggedIn.value = true
-  currentView.value = homeView(persona)
+  // Stay on the page in the URL (refresh, or a link someone opened) when this role can see it
+  const wanted = route.query.redirect ? router.resolve(String(route.query.redirect)) : route
+  const view = wanted.meta.view
+  if (view && view !== 'landing' && canOpenView(persona, view)) {
+    currentView.value = view
+    if (wanted.fullPath !== route.fullPath) router.replace(wanted.fullPath)
+  } else {
+    currentView.value = homeView(persona)
+  }
 }
 
 // Handle Login from LandingLoginView (the password was already checked by authService)
@@ -488,6 +511,8 @@ onMounted(async () => {
   } catch {}
 
   try {
+    await router.isReady()
+    if (route.meta.signup) showSignUp.value = true
     try {
       const persona = await restoreSession()
       if (persona) applySession(persona)
@@ -888,20 +913,6 @@ onUnmounted(() => {
                   <small class="text-muted" style="font-size: 0.7rem;">Verify compliance & issue audit ticket</small>
                 </button>
 
-                <!-- Option 5: Dev Mode -->
-                <button 
-                  type="button" 
-                  class="btn text-start mb-1 py-2 px-3 rounded-3" 
-                  :class="activePersona.id === 'dev' ? 'btn-light fw-bold text-purple' : 'btn-white'"
-                  @click="switchPersona('dev')"
-                >
-                  <div class="d-flex justify-content-between align-items-center">
-                    <span>Dev View</span>
-                    <span class="badge bg-purple text-white" style="background-color: var(--pulse-purple-transit); font-size: 0.65rem;">All 24 CCAs</span>
-                  </div>
-                  <small class="text-muted" style="font-size: 0.7rem;">Full administrative test view</small>
-                </button>
-
                 <hr class="my-1">
                 </template>
                 <button 
@@ -964,362 +975,11 @@ onUnmounted(() => {
           />
         </div>
 
-        <!-- VIEW 1: Master Facility Calendar (Default view for Playwright & live demo) -->
+        <!-- VIEW 1: Master Facility Calendar (routes /facilities, /facilities/my-club,
+             /facilities/waitlist, /facilities/admin). The earlier inline facility_slots
+             marketplace is replaced by this module. -->
         <div v-show="currentView === 'facilities'">
-          
-          <!-- Hero Banner -->
-          <section class="pulse-hero-banner mb-4">
-            <div class="row align-items-center g-3">
-              <div class="col-lg-8">
-                <div class="d-flex flex-wrap align-items-center gap-2 mb-2">
-                  <span class="badge bg-danger rounded-pill px-3 py-1" style="font-size: 0.7rem; font-weight: 800; letter-spacing: 0.05em;">SMU FACILITIES</span>
-                  <span v-if="apiMode" class="pulse-api-tag">Supabase PostgreSQL</span>
-                  <span v-if="apiMode" class="pulse-api-tag">Cloudinary Upload API</span>
-                </div>
-                <!-- REQUIRED HEADING FOR PLAYWRIGHT TEST 100% PASS -->
-                <h2 class="display-6 fw-bold mb-2 text-white">Pulse - Master Facility Calendar</h2>
-                <p class="text-white-50 mb-0" style="font-size: 0.9rem; max-width: 620px;">
-                  Unified campus logistics platform resolving facility scarcity, timetable clashes, and administrative compliance across student organizations and OSL.
-                </p>
-              </div>
-              <div class="col-lg-4 text-lg-end">
-                <div class="d-inline-flex flex-wrap gap-2 justify-content-lg-end">
-                  <div class="bg-white bg-opacity-10 rounded-3 p-2 text-center" style="min-width: 90px;">
-                    <div class="fw-bold text-white fs-5">6</div>
-                    <div class="text-white-50" style="font-size: 0.65rem; text-transform: uppercase;">Venues</div>
-                  </div>
-                  <div class="bg-white bg-opacity-10 rounded-3 p-2 text-center" style="min-width: 90px;">
-                    <div class="fw-bold text-white fs-5">1</div>
-                    <div class="text-white-50" style="font-size: 0.65rem; text-transform: uppercase;">Active Swap</div>
-                  </div>
-                  <div class="bg-white bg-opacity-10 rounded-3 p-2 text-center" style="min-width: 90px;">
-                    <div class="fw-bold text-white fs-5">100%</div>
-                    <div class="text-white-50" style="font-size: 0.65rem; text-transform: uppercase;">Compliant</div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </section>
-
-          <!-- Search & Filters with Dynamic Typing Placeholder & Smart Suggestions -->
-          <section class="card border-0 shadow-sm p-3 mb-4" style="border-radius: 1rem; background-color: var(--pulse-card-bg);">
-            <div class="row g-3 align-items-center justify-content-between">
-              
-              <!-- Venue Category Pills -->
-              <div class="col-12 col-md-auto">
-                <div class="d-flex flex-wrap gap-1">
-                  <button
-                    v-for="cat in categories"
-                    :key="cat.value"
-                    type="button"
-                    class="pulse-filter-pill"
-                    :class="{ active: selectedCategory === cat.value }"
-                    @click="selectedCategory = cat.value"
-                  >
-                    {{ cat.label }} ({{ getCategoryCount(cat.value) }})
-                  </button>
-                </div>
-              </div>
-
-              <!-- Search Input with Dynamic Animated Placeholder & Blinking Cursor -->
-              <div class="col-12 col-md-6 col-lg-5">
-                <div class="input-group input-group-sm">
-                  <span class="input-group-text border-end-0 text-muted" style="border-radius: 9999px 0 0 9999px; background-color: var(--pulse-bg);">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                      <circle cx="11" cy="11" r="8"></circle>
-                      <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
-                    </svg>
-                  </span>
-                  <input 
-                    v-model="searchQuery" 
-                    type="text" 
-                    class="form-control border-start-0" 
-                    :placeholder="searchQuery.length ? '' : searchPlaceholder"
-                    style="border-radius: 0 9999px 9999px 0; background-color: var(--pulse-bg);"
-                  />
-                  <button 
-                    v-if="searchQuery" 
-                    type="button" 
-                    class="btn btn-sm border-start-0 text-muted"
-                    style="border-radius: 0 9999px 9999px 0; background-color: var(--pulse-bg);"
-                    @click="searchQuery = ''"
-                  >
-                    ✕
-                  </button>
-                </div>
-              </div>
-
-            </div>
-
-            <!-- Smart Suggestion Chips tailored to Active Persona -->
-            <div class="d-flex flex-wrap align-items-center gap-1 mt-2 pt-2 border-top">
-              <span class="text-muted small fw-bold" style="font-size: 0.675rem; text-transform: uppercase;">
-                Suggested for {{ selectedClub || 'you' }}:
-              </span>
-              <button 
-                v-for="chip in activePersona.smartSearches" 
-                :key="chip"
-                type="button" 
-                class="btn btn-sm py-0 px-2 rounded-pill border"
-                :class="searchQuery === chip ? 'btn-danger text-white' : 'btn-light text-muted'"
-                style="font-size: 0.675rem;"
-                @click="searchQuery = searchQuery === chip ? '' : chip"
-              >
-                {{ chip }}
-              </button>
-            </div>
-          </section>
-
-          <!-- Loading Spinner -->
-          <div v-if="loading" class="text-center py-5">
-            <div class="spinner-border text-danger" role="status"></div>
-            <p class="text-muted mt-2 fw-bold" style="font-size: 0.85rem;">Connecting to Supabase Cloud Database...</p>
-          </div>
-
-          <!-- Empty State -->
-          <div v-else-if="!filteredSlots.length" class="text-center py-5 card border-0 shadow-sm" style="border-radius: 1rem; background-color: var(--pulse-card-bg);">
-            <div v-if="selectedCategory === 'Wishlist'" class="py-3 px-3">
-              <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" class="text-warning mb-3">
-                <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon>
-              </svg>
-              <h6 class="fw-bold mb-2">Your Facility Wishlist is Empty</h6>
-              <p class="text-muted small mb-3 mx-auto" style="max-width: 420px;">
-                Bookmark rehearsal studios or acoustic rooms using the Wishlist button in All Venues to receive automated notifications the moment a slot is released or proposed for peer transfer.
-              </p>
-              <button type="button" class="btn btn-sm btn-pulse-primary" @click="selectedCategory = 'All'; searchQuery = ''">
-                Browse All Venues
-              </button>
-            </div>
-            <div v-else class="py-3">
-              <p class="text-muted my-3">No facility slots found matching your criteria.</p>
-              <button type="button" class="btn btn-sm btn-pulse-outline" @click="selectedCategory = 'All'; searchQuery = ''">
-                Reset Filters
-              </button>
-            </div>
-          </div>
-
-          <!-- Facility Grid: REQUIRED (.row > .col-md-6.mb-3) PRESERVED 100% -->
-          <div v-else class="row">
-            <div v-for="slot in filteredSlots" :key="slot.id" class="col-md-6 mb-3">
-              
-              <div class="pulse-card h-100 d-flex flex-column">
-                
-                <div class="pulse-card-header d-flex justify-content-between align-items-start gap-2">
-                  <div>
-                    <div class="d-flex align-items-center gap-2 mb-1">
-                      <h5 class="fw-bold mb-0 pulse-card-title" style="font-size: 1.05rem;">{{ slot.venue_name }}</h5>
-                      <span class="pulse-tag">{{ slot.venue_type }}</span>
-
-                      <!-- Facility Wishlist Toggle Button (Student CCAs only - OSL Admin does not have a club wishlist) -->
-                      <button 
-                        v-if="!isAdmin && !isGuest"
-                        type="button" 
-                        class="btn btn-sm py-0 px-2 rounded-pill border d-inline-flex align-items-center gap-1 pulse-wishlist-btn"
-                        :class="isWishlisted(slot.id) ? 'active' : 'text-muted'"
-                        :title="isWishlisted(slot.id) ? 'In Wishlist (Click to remove)' : 'Add to Wishlist for Release Alerts'"
-                        @click.stop="toggleWishlist(slot)"
-                      >
-                        <svg width="13" height="13" viewBox="0 0 24 24" :fill="isWishlisted(slot.id) ? 'currentColor' : 'none'" stroke="currentColor" stroke-width="2">
-                          <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon>
-                        </svg>
-                        <span class="fw-semibold" style="font-size: 0.675rem;">
-                          {{ isWishlisted(slot.id) ? 'Wishlisted' : 'Wishlist' }}
-                        </span>
-                      </button>
-                    </div>
-                    <div class="text-muted small d-flex align-items-center gap-1">
-                      <!-- SVG Map Pin -->
-                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path>
-                        <circle cx="12" cy="10" r="3"></circle>
-                      </svg>
-                      <span>{{ slot.building_location }}</span>
-                    </div>
-                  </div>
-
-                  <span :class="['pulse-status', getPulseStatusClass(slot)]">
-                    <span class="pulse-status-dot"></span>
-                    <span>{{ getPulseStatusLabel(slot) }}</span>
-                  </span>
-                </div>
-
-                <div class="pulse-card-body flex-grow-1">
-                  
-                  <div class="d-flex flex-wrap gap-1 mb-3">
-                    <span v-for="tag in getVenueAmenities(slot)" :key="tag" class="pulse-tag pulse-tag-amenity">
-                      {{ tag }}
-                    </span>
-                    <span 
-                      v-if="slot.building_location.includes('Connexion') || slot.building_location.includes('Level 7')" 
-                      class="pulse-tag pulse-tag-transit"
-                      title="ACF Standing Orders: SICO risers cannot be manually pushed across campus roads. Courier transport required from LKS store."
-                    >
-                      LKS Store Delivery Rule
-                    </span>
-                  </div>
-
-                  <div class="p-3 rounded-3 mb-3 pulse-meta-box">
-                    <div class="d-flex justify-content-between align-items-center mb-2">
-                      <span class="text-muted small fw-semibold d-flex align-items-center gap-1">
-                        <!-- SVG Calendar -->
-                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                          <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
-                          <line x1="16" y1="2" x2="16" y2="6"></line>
-                          <line x1="8" y1="2" x2="8" y2="6"></line>
-                          <line x1="3" y1="10" x2="21" y2="10"></line>
-                        </svg>
-                        Schedule:
-                      </span>
-                      <span class="fw-bold small pulse-meta-val">Friday, 16 Oct • {{ slot.time_slot }}</span>
-                    </div>
-
-                    <div class="d-flex justify-content-between align-items-center mb-1">
-                      <span class="text-muted small fw-semibold">FBS Reference:</span>
-                      <span class="font-monospace small text-primary fw-bold">{{ slot.fbs_ref || 'BK-20271016-000012' }}</span>
-                    </div>
-
-                    <div class="d-flex justify-content-between align-items-center mb-1">
-                      <span class="text-muted small fw-semibold">Owner Club:</span>
-                      <span class="badge border fw-bold pulse-owner-badge">{{ slot.owner_club }}</span>
-                    </div>
-
-                    <div v-if="slot.claiming_club" class="d-flex justify-content-between align-items-center mb-1">
-                      <span class="text-muted small fw-semibold">Claiming Club:</span>
-                      <span class="badge bg-warning bg-opacity-25 text-dark border border-warning fw-bold">
-                        {{ slot.claiming_club }}
-                      </span>
-                    </div>
-
-                    <div v-if="slot.audit_ticket_id" class="d-flex justify-content-between align-items-center mt-2 pt-2 border-top">
-                      <span class="text-muted small fw-semibold">Audit Ticket:</span>
-                      <span class="pulse-audit-ticket">
-                        {{ slot.audit_ticket_id }}
-                      </span>
-                    </div>
-
-                    <!-- Dual-Stage OSL Verification Endorsement Stamp -->
-                    <div v-if="slot.status === 'Officially Confirmed'" class="d-flex align-items-center justify-content-between mt-2 pt-2 border-top text-success small" style="font-size: 0.72rem;">
-                      <span class="fw-bold d-flex align-items-center gap-1">
-                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                          <polyline points="20 6 9 17 4 12"></polyline>
-                        </svg>
-                        <span>OSL Approved Transfer</span>
-                      </span>
-                      <span class="badge bg-success-subtle text-success border border-success">
-                        FBS Endorsed
-                      </span>
-                    </div>
-
-                    <!-- SSU Clause 9.1(c) 48-Hour Advance Notice Indicator on Owned Slots -->
-                    <div v-if="canAct && (slot.status === 'Booked' || slot.status === 'Officially Confirmed') && slot.owner_club === selectedClub" class="mt-2 pt-2 border-top">
-                      <div class="d-flex align-items-center justify-content-between text-success small" style="font-size: 0.72rem;">
-                        <span class="fw-semibold">SSU 9.1(c):</span>
-                        <span class="badge bg-success-subtle text-success border border-success">
-                          >48h Release Window (Zero Demerit Risk)
-                        </span>
-                      </div>
-                    </div>
-
-                    <!-- Waitlist Cutoff Timer Badge -->
-                    <div class="d-flex justify-content-between align-items-center mt-2 pt-2 border-top" style="font-size: 0.72rem;">
-                      <span class="text-muted">Waitlist Cutoff:</span>
-                      <span class="badge bg-light text-secondary border">
-                        {{ calculateWaitlistCutoff(slot.time_slot).cutoffText }}
-                      </span>
-                    </div>
-                  </div>
-
-                  <div v-if="getWaitlistCount(slot) > 0 && slot.status === 'Booked'" class="d-flex align-items-center gap-2 p-2 rounded-2 mb-2 bg-rose-50 border border-danger-subtle text-danger small">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                      <circle cx="12" cy="12" r="10"></circle>
-                      <polyline points="12 6 12 12 16 14"></polyline>
-                    </svg>
-                    <span style="font-size: 0.75rem; font-weight: 600;">
-                      <strong>{{ getWaitlistCount(slot) }} CCAs</strong> on waitlist (Cutoff: {{ calculateWaitlistCutoff(slot.time_slot).cutoffText }}). Releasing >48h frees room and avoids demerits.
-                    </span>
-                  </div>
-                </div>
-
-                <div class="pulse-card-footer d-flex flex-wrap gap-2 justify-content-end align-items-center">
-                  
-                  <button
-                    v-if="canAct && (slot.status === 'Booked' || slot.status === 'Officially Confirmed') && slot.owner_club === selectedClub"
-                    class="btn btn-pulse-primary btn-sm"
-                    :disabled="processingId !== null || isAutoRunning"
-                    @click="handleRelease(slot)"
-                  >
-                    <span v-if="processingId === slot.id" class="spinner-border spinner-border-sm me-1" role="status"></span>
-                    Release to Marketplace
-                  </button>
-
-                  <button
-                    v-if="canAct && slot.status === 'Proposed Peer Transfer' && slot.owner_club === selectedClub"
-                    class="btn btn-pulse-outline btn-sm"
-                    :disabled="processingId !== null || isAutoRunning"
-                    @click="handleUndo(slot)"
-                  >
-                    <span v-if="processingId === slot.id" class="spinner-border spinner-border-sm me-1" role="status"></span>
-                    Undo Release
-                  </button>
-
-                  <button
-                    v-if="canAct && slot.status === 'Proposed Peer Transfer' && slot.owner_club !== selectedClub"
-                    class="btn btn-pulse-primary btn-sm"
-                    :disabled="processingId !== null || isAutoRunning"
-                    @click="handleClaim(slot)"
-                  >
-                    <span v-if="processingId === slot.id" class="spinner-border spinner-border-sm me-1" role="status"></span>
-                    Claim Facility
-                  </button>
-
-                  <button
-                    v-if="isAdmin && slot.status === 'Pending Admin Sign-off'"
-                    class="btn btn-pulse-success btn-sm"
-                    :disabled="processingId !== null || isAutoRunning"
-                    @click="handleConfirm(slot)"
-                  >
-                    <span v-if="processingId === slot.id" class="spinner-border spinner-border-sm me-1" role="status"></span>
-                    Confirm Transfer
-                  </button>
-
-                  <button
-                    v-if="isAdmin && slot.status === 'Pending Admin Sign-off'"
-                    class="btn btn-outline-danger btn-sm"
-                    :disabled="processingId !== null || isAutoRunning"
-                    @click="handleReject(slot)"
-                  >
-                    <span v-if="processingId === slot.id" class="spinner-border spinner-border-sm me-1" role="status"></span>
-                    Reject Transfer
-                  </button>
-
-                  <!-- Join Waitlist Action Button (Replaces redundant "Held by" text) -->
-                  <button 
-                    v-if="canAct && slot.status === 'Booked' && slot.owner_club !== selectedClub"
-                    type="button"
-                    class="btn btn-outline-secondary btn-sm rounded-pill d-inline-flex align-items-center gap-1"
-                    style="font-size: 0.75rem;"
-                    @click="handleJoinWaitlist(slot)"
-                  >
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                      <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path>
-                      <path d="M13.73 21a2 2 0 0 1-3.46 0"></path>
-                    </svg>
-                    <span>Join Waitlist</span>
-                  </button>
-
-                  <span 
-                    v-if="!isAdmin && slot.status === 'Pending Admin Sign-off'"
-                    class="badge bg-light text-muted border small"
-                    style="font-size: 0.725rem;"
-                  >
-                    Awaiting OSL Admin Verification
-                  </span>
-                </div>
-
-              </div>
-            </div>
-          </div>
-
+          <RouterView />
         </div>
 
         <!-- VIEW 2: Personal Schedule & Attendance -->
