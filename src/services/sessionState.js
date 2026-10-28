@@ -213,7 +213,9 @@ function applyMember(person) {
 //   3. group the rows into people
 //   4. pick who is using the page and copy them into session
 export async function initSession() {
-  session.value.ready = false
+  // Note: we don't set ready back to false here. If initSession runs again
+  // (someone signs in or out), the current page stays on screen instead of
+  // flashing back to the loading spinner.
  
   try {
     // Step 1: the team's authService decides who is signed in
@@ -373,14 +375,29 @@ export function showToast(message, type = 'info') {
 // onAuthStateChange runs our function on every login event of the shared Supabase client.
 // supabase is null when the keys are missing, so only listen when it exists.
 if (supabase) {
-  supabase.auth.onAuthStateChange((event) => {
-    if (session.value.ready && (event === 'SIGNED_IN' || event === 'SIGNED_OUT')) {
-      // Supabase can freeze if we make another Supabase call INSIDE this callback.
-      // setTimeout(..., 0) runs initSession just after the callback has finished, which avoids that.
-      setTimeout(() => {
-        initSession().catch((error) => console.log(error.message))
-      }, 0)
+  supabase.auth.onAuthStateChange((event, authSession) => {
+    if (!session.value.ready) {
+      return
     }
+    if (event !== 'SIGNED_IN' && event !== 'SIGNED_OUT') {
+      return
+    }
+ 
+    // Supabase also sends SIGNED_IN every time you come back to the browser tab,
+    // even though the same person is still signed in. Reloading then would redraw
+    // the page each time, so only reload when the signed-in person really changed.
+    let newUserId = null
+    if (authSession) {
+      newUserId = authSession.user.id
+    }
+    if (newUserId === session.value.authUserId) {
+      return
+    }
+ 
+    // Supabase can freeze if we make another Supabase call INSIDE this callback.
+    // setTimeout(..., 0) runs initSession just after the callback has finished, which avoids that.
+    setTimeout(() => {
+      initSession().catch((error) => console.log(error.message))
+    }, 0)
   })
 }
- 
