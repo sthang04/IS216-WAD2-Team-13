@@ -23,6 +23,8 @@ IMPORTANT:
 
 */
 
+// 29.10 src/data/simulationTestData.js is a development reference. It won't affect live simulator as long as nothing imports or calls it.
+
 
 // 1. EVENTS
 // Stores the event being simulated.
