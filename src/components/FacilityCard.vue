@@ -1,151 +1,64 @@
 
 <script setup>
-// Wraps the four facility pages (calendar, My Club, waitlist, OSL approvals).
-// Loads who is signed in, then shows the current page in <RouterView />.
-import { ref, onMounted } from 'vue'
-import { useRouter, useRoute } from 'vue-router'
-import FacilityNavbar from '../components/FacilityNavbar.vue'
-import PipMascot from '../components/PipMascot.vue'
-import { NOTIFICATION_LIMIT } from '../services/notificationService'
-import { DECISION_LIMIT, decisionListIsFull } from '../services/transferService'
-import { session, initSession, toast, setActiveClub } from '../services/sessionState'
-import {
-  notificationStore,
-  unreadCount,
-  soonestOfferSeconds,
-  notificationListIsFull,
-  startNotifications,
-  setPipStatic,
-  reloadAll
-} from '../services/notificationStore'
+import BookingSlotCard from './BookingSlotCard.vue'
+import { capacityLabel } from '../services/facilityService'
  
-const router = useRouter()
-const route = useRoute()
- 
-const loadError = ref('')
-const loadingSession = ref(true)
-const viewKey = ref(0) // changing this redraws the page after "Reset demo"
- 
-// Inside the team app, who you are comes from the team's sign-in,
-// so the demo persona switcher is turned off here.
-session.value.demoMode = false
- 
-async function loadSession() {
-  loadingSession.value = true
-  loadError.value = ''
-  try {
-    await initSession()
-  } catch (error) {
-    loadError.value = error.message
-    console.log(error.message)
-  } finally {
-    loadingSession.value = false
-  }
-}
- 
-function handleDataReset() {
-  viewKey.value += 1
-  reloadAll()
-}
- 
-// Pip's buttons: open the bell, or go to the waitlist offer
-function openNotifications() {
-  notificationStore.value.bellOpen = true
-}
- 
-function openOffer() {
-  router.push('/facilities/waitlist')
-}
- 
-// Telegram links end with ?club=<club id> so the page opens on that CCA
-function applyClubFromLink() {
-  if (route.query.club) {
-    setActiveClub(Number(route.query.club))
-    router.replace({ path: route.path })
-  }
-}
- 
-onMounted(async () => {
-  await loadSession()
-  applyClubFromLink()
-  startNotifications()
+defineProps({
+  facility: { type: Object, required: true },
+  bookings: { type: Array, default: () => [] },
+  actionsByBooking: { type: Object, default: () => ({}) },
+  busyBookingId: { type: Number, default: null },
+  highlightClubId: { type: Number, default: null },
+  index: { type: Number, default: 0 }
 })
+const emit = defineEmits(['action'])
+ 
+const TYPE_CLASS = {
+  'Dance Studio': 'type-dance',
+  'Acoustic Room': 'type-acoustic',
+  'Sports Court': 'type-sports',
+  'Multi-Purpose': 'type-multi'
+}
 </script>
  
 <template>
-  <div class="pulse-facility" >
-  <FacilityNavbar embedded @data-reset="handleDataReset" />
+  <article class="pulse-panel pulse-facility overflow-hidden" :class="TYPE_CLASS[facility.facility_type]" :style="{ '--i': index }" :id="`facility-${facility.id}`">
+    <header class="p-3 p-lg-4 border-bottom d-flex flex-wrap justify-content-between gap-3">
+      <div class="flex-grow-1" style="min-width: 240px;">
+        <div class="d-flex align-items-center flex-wrap gap-2 mb-1">
+          <h3 class="h5 fw-bold mb-0">{{ facility.name }}</h3>
+          <span class="pulse-type-chip">{{ facility.facility_type }}</span>
+          <span v-if="bookings.some(b => b.status === 'Proposed Peer Transfer')" class="pulse-chip pulse-chip-hot">
+            {{ bookings.filter(b => b.status === 'Proposed Peer Transfer').length }} released
+          </span>
+        </div>
+        <div class="text-muted small">{{ facility.location }}</div>
+        <div class="small mt-1">
+          Capacity: <strong>{{ capacityLabel(facility) }}</strong>
+          <span v-if="facility.capacity_is_estimate" class="text-muted"> · prototype estimate, not an official room limit</span>
+        </div>
+        <div class="d-flex flex-wrap gap-1 mt-2">
+          <span v-for="item in facility.equipment" :key="item" class="pf-tag">{{ item }}</span>
+        </div>
+      </div>
+      <figure v-if="facility.photo_url" class="mb-0 pulse-facility-photo">
+        <img :src="facility.photo_url" :alt="facility.name" loading="lazy" @error="$event.target.closest('figure').style.display = 'none'" />
+        <figcaption class="text-muted">{{ facility.photo_note }}</figcaption>
+      </figure>
+    </header>
  
-  <div class="py-3">
- 
-    <!-- Shared toast -->
-    <Transition name="toast">
-    <div
-      v-if="toast.message"
-      class="alert shadow-sm pulse-toast"
-      :class="`alert-${toast.type}`"
-      role="status"
-    >
-      {{ toast.message }}
- 
-      <button
-        type="button"
-        class="btn-close float-end"
-        aria-label="Dismiss"
-        @click="toast.message = ''"
-      ></button>
+    <div v-if="!bookings.length" class="p-3 p-lg-4 text-muted small">No bookings at this facility for the selected week.</div>
+    <div v-else>
+      <BookingSlotCard
+        v-for="(booking, i) in bookings"
+        :key="booking.booking_id"
+        :booking="booking"
+        :index="i"
+        :actions="actionsByBooking[booking.booking_id] || []"
+        :busy="busyBookingId === booking.booking_id"
+        :highlight-club-id="highlightClubId"
+        @action="(type, b) => emit('action', type, b)"
+      />
     </div>
-    </Transition>
- 
-    <!-- Connection error -->
-    <div v-if="loadError" class="alert alert-danger">
-      <strong>Could not load Pulse session.</strong>
-      <p class="mb-2">{{ loadError }}</p>
- 
-      <button
-        class="btn btn-sm btn-outline-danger"
-        @click="loadSession"
-      >
-        Retry
-      </button>
-    </div>
- 
-    <!-- Loading -->
-    <div
-      v-else-if="loadingSession || !session.ready"
-      class="text-center py-5"
-    >
-      <div class="spinner-border text-danger"></div>
-      <p class="text-muted mt-2">Loading Pulse...</p>
-    </div>
- 
-    <!-- Current route -->
-    <RouterView v-else v-slot="{ Component, route }">
-      <Transition name="page" mode="out-in">
-        <component
-          :is="Component"
-          :key="`${route.path}-${viewKey}-${session.memberId}-${session.activeClubId}`"
-        />
-      </Transition>
-    </RouterView>
- 
-  </div>
- 
-  <!-- Pip watches notifications and waitlist offers on every page -->
-  <PipMascot
-    v-if="session.ready && session.memberId"
-    mode="notifications"
-    :unanswered-count="unreadCount"
-    :offer-seconds-left="soonestOfferSeconds"
-    :list-is-full="notificationListIsFull"
-    :notification-limit="NOTIFICATION_LIMIT"
-    :decisions-full="session.isOslAdmin && decisionListIsFull"
-    :decision-limit="DECISION_LIMIT"
-    :is-static="notificationStore.pipStatic"
-    @update:is-static="setPipStatic"
-    @open-notifications="openNotifications"
-    @open-offer="openOffer"
-  />
-  </div>
+  </article>
 </template>
- 
