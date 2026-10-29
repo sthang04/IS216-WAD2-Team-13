@@ -18,8 +18,9 @@
 }
  
  
-/* Scoped to the facility module so the team's own styles are untouched. */
-.pulse-facility {
+/* Scoped to the facility module so the team's own styles are untouched.
+   (.pulse-facility on its own is a facility card, styled further down.) */
+.pulse-facility-module {
   font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
   background: var(--pf-bg);
   color: var(--pf-text);

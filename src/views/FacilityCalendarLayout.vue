@@ -2,9 +2,9 @@
 <script setup>
 // Wraps the four facility pages (calendar, My Club, waitlist, OSL approvals).
 // Loads who is signed in, then shows the current page in <RouterView />.
+// The team header in App.vue is the only navbar: it holds the club picker and the bell.
 import { ref, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
-import FacilityNavbar from '../components/FacilityNavbar.vue'
 import PipMascot from '../components/PipMascot.vue'
 import { session, initSession, toast, setActiveClub } from '../services/sessionState'
 import {
@@ -12,8 +12,7 @@ import {
   unreadCount,
   soonestOfferSeconds,
   startNotifications,
-  setPipStatic,
-  reloadAll
+  setPipStatic
 } from '../services/notificationStore'
 
 const router = useRouter()
@@ -21,7 +20,6 @@ const route = useRoute()
 
 const loadError = ref('')
 const loadingSession = ref(true)
-const viewKey = ref(0) // changing this redraws the page after "Reset demo"
 
 // Inside the team app, who you are comes from the team's sign-in,
 // so the demo persona switcher is turned off here.
@@ -38,11 +36,6 @@ async function loadSession() {
   } finally {
     loadingSession.value = false
   }
-}
-
-function handleDataReset() {
-  viewKey.value += 1
-  reloadAll()
 }
 
 // Pip's buttons: open the bell, or go to the waitlist offer
@@ -70,10 +63,9 @@ onMounted(async () => {
 </script>
 
 <template>
-  <div class="pulse-facility" >
-  <FacilityNavbar embedded @data-reset="handleDataReset" />
+  <div class="pulse-facility-module" :class="{ 'has-pip': session.ready && session.memberId }">
 
-  <div class="py-3">
+  <div class="pb-3">
 
     <!-- Shared toast -->
     <Transition name="toast">
@@ -121,7 +113,7 @@ onMounted(async () => {
       <Transition name="page" mode="out-in">
         <component
           :is="Component"
-          :key="`${route.path}-${viewKey}-${session.memberId}-${session.activeClubId}`"
+          :key="`${route.path}-${session.memberId}-${session.activeClubId}`"
         />
       </Transition>
     </RouterView>
@@ -141,3 +133,18 @@ onMounted(async () => {
   />
   </div>
 </template>
+
+<style scoped>
+/* Keep Pip (fixed, bottom-right, ~115px wide) off the page content: reserve a right
+   gutter when the screen margin beside the container is too narrow, and room at
+   the bottom so the last rows can scroll clear of it. */
+.has-pip {
+  padding-bottom: 120px;
+}
+
+@media (min-width: 768px) {
+  .has-pip {
+    padding-right: max(0px, calc(125px - (100vw - 100%) / 2));
+  }
+}
+</style>
