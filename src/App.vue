@@ -9,6 +9,9 @@ import {
   enterGuest, restoreSession, signOut,
   canActForClub, canOpenView, canResetDemo as canResetDemoFor, homeView,
 } from './services/authService';
+import { session as facilitySession, setActiveClub } from './services/sessionState';
+import { startNotifications, reloadAll } from './services/notificationStore';
+import NotificationBell from './components/NotificationBell.vue';
 import LandingLoginView from './views/LandingLoginView.vue';
 import SignUpView from './views/SignUpView.vue';
 import AvailabilityView from './views/AvailabilityView.vue';
@@ -94,6 +97,15 @@ const allowedClubs = computed(() => activePersona.value.allowedClubs || [])
 const canAct = computed(() => canActForClub(activePersona.value, selectedClub.value))
 const canSwitchPersona = computed(() => !!sessionPersona.value?.isDev)
 const canResetDemo = computed(() => canResetDemoFor(sessionPersona.value))
+ 
+// The facility pages act for the club picked in this header (their own navbar is gone)
+watch([selectedClub, () => facilitySession.value.memberships], ([club]) => {
+  const membership = facilitySession.value.memberships.find((m) => m.club_name === club)
+  if (membership && membership.club_id !== facilitySession.value.activeClubId) {
+    setActiveClub(membership.club_id)
+    startNotifications()
+  }
+})
  
 // Route protection: send users back to their home page if they open a page their role can't see
 watch(currentView, (view) => {
@@ -337,6 +349,7 @@ async function handleReject(slot) {
 async function handleResetDemo() {
   try {
     await resetDemoData()
+    reloadAll()
     await loadSlots()
     toast.value = 'Database reset to initial seeds!'
     toastType.value = 'info'
@@ -351,11 +364,16 @@ async function handleResetDemo() {
 const isAutoRunning = ref(false)
 const autoStepText = ref('')
  
-function applySession(persona) {
+// stayOnLanding: a restored sign-in opened at "/" keeps showing the landing page
+function applySession(persona, { stayOnLanding = false } = {}) {
   sessionPersona.value = persona
   activePersona.value = persona
   selectedClub.value = persona.cca
   isLoggedIn.value = true
+  if (stayOnLanding) {
+    currentView.value = 'landing'
+    return
+  }
   // Stay on the page in the URL (refresh, or a link someone opened) when this role can see it
   const wanted = route.query.redirect ? router.resolve(String(route.query.redirect)) : route
   const view = wanted.meta.view
@@ -430,7 +448,7 @@ onMounted(async () => {
     if (route.meta.signup) showSignUp.value = true
     try {
       const persona = await restoreSession()
-      if (persona) applySession(persona)
+      if (persona) applySession(persona, { stayOnLanding: route.name === 'landing' && !route.query.redirect })
     } catch (error) {
       console.warn('Could not restore session:', error.message)
     } finally {
@@ -648,8 +666,11 @@ onUnmounted(() => {
               <span>APIs: {{ apiMode ? 'Visible' : 'Hidden' }}</span>
             </button>
  
+            <!-- Facility pages: the live facility bell (Pip's "Open notifications" opens this one) -->
+            <NotificationBell v-if="currentView === 'facilities'" />
+ 
             <!-- Centralized Notification Bell (Anchored safely on right, zero clipping) -->
-            <div class="position-relative pulse-notification-wrapper">
+            <div v-else class="position-relative pulse-notification-wrapper">
               <button
                 type="button"
                 class="btn btn-sm btn-pulse-outline position-relative rounded-pill px-2 py-1 bg-white d-flex align-items-center"
