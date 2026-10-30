@@ -111,10 +111,11 @@ onMounted(async () => {
     <!-- Current route -->
     <RouterView v-else v-slot="{ Component, route }">
       <Transition name="page" mode="out-in">
-        <component
-          :is="Component"
-          :key="`${route.path}-${session.memberId}-${session.activeClubId}`"
-        />
+        <!-- The pages have several root elements, which <Transition> can't animate
+             (the next page then never appears), so give it one element to swap -->
+        <div :key="`${route.path}-${session.memberId}-${session.activeClubId}`">
+          <component :is="Component" />
+        </div>
       </Transition>
     </RouterView>
 
