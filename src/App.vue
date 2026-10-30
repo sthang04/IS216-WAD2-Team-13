@@ -1,5 +1,5 @@
 <script setup>
-import { ref, onMounted, onUnmounted, computed, watch } from 'vue';
+import { ref, onMounted, computed, watch } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 import { VIEW_PATHS } from './router';
 import { fetchCalendar, resetDemoData, singaporeToday, formatDate, formatTime, CALENDAR_END } from './services/facilityService';
@@ -7,7 +7,7 @@ import { approveTransfer, rejectTransfer } from './services/transferService';
 import { DEMO_PERSONAS, ALL_CLUBS, GUEST_PERSONA } from './services/authProfiles';
 import {
   enterGuest, restoreSession, signOut,
-  canActForClub, canOpenView, canResetDemo as canResetDemoFor, homeView,
+  canOpenView, canResetDemo as canResetDemoFor, homeView,
 } from './services/authService';
 import { session as facilitySession, setActiveClub } from './services/sessionState';
 import { startNotifications, reloadAll } from './services/notificationStore';
@@ -79,7 +79,6 @@ const loading = ref(true)
 const processingId = ref(null)
 const toast = ref('')
 const toastType = ref('info')
-const searchQuery = ref('')
  
 // User & Role State with Strict CCA Scoping
 const authReady = ref(false) // false until the saved session has been checked on load
@@ -94,7 +93,6 @@ const isAdmin = computed(() => activePersona.value.role === 'admin')
 const isDev = computed(() => activePersona.value.isDev)
 const isGuest = computed(() => activePersona.value.role === 'guest')
 const allowedClubs = computed(() => activePersona.value.allowedClubs || [])
-const canAct = computed(() => canActForClub(activePersona.value, selectedClub.value))
 const canSwitchPersona = computed(() => !!sessionPersona.value?.isDev)
 const canResetDemo = computed(() => canResetDemoFor(sessionPersona.value))
  
@@ -117,84 +115,6 @@ watch(currentView, (view) => {
   }
 })
  
-// Dynamic Animated Search Placeholder (Robust Auto-Typing with restart on clear)
-const searchPlaceholder = ref('Search venue or location...')
-let searchTimer = null
-let searchIndex = 0
-let searchCharIndex = 0
-let searchIsDeleting = false
- 
-function tickSearchPlaceholder() {
-  if (searchQuery.value && searchQuery.value.length > 0) return
- 
-  const list = activePersona.value.smartSearches && activePersona.value.smartSearches.length 
-    ? activePersona.value.smartSearches 
-    : ['Studio L7.2', 'Dance Studio', 'Sprung Floor', 'Connexion', 'Sound Studio']
-    
-  const target = list[searchIndex % list.length] || 'Studio L7.2'
- 
-  if (!searchIsDeleting) {
-    searchCharIndex++
-    searchPlaceholder.value = `Try searching: "${target.substring(0, searchCharIndex)}"`
-    if (searchCharIndex >= target.length) {
-      searchIsDeleting = true
-      searchTimer = setTimeout(tickSearchPlaceholder, 1800)
-      return
-    }
-    searchTimer = setTimeout(tickSearchPlaceholder, 50)
-  } else {
-    searchCharIndex--
-    searchPlaceholder.value = `Try searching: "${target.substring(0, searchCharIndex)}"`
-    if (searchCharIndex <= 0) {
-      searchIsDeleting = false
-      searchIndex = (searchIndex + 1) % list.length
-      searchTimer = setTimeout(tickSearchPlaceholder, 400)
-      return
-    }
-    searchTimer = setTimeout(tickSearchPlaceholder, 30)
-  }
-}
- 
-function resetSearchPlaceholder() {
-  if (searchTimer) clearTimeout(searchTimer)
-  searchIndex = 0
-  searchCharIndex = 0
-  searchIsDeleting = false
-  searchPlaceholder.value = 'Search venue or location...'
-  searchTimer = setTimeout(tickSearchPlaceholder, 300)
-}
- 
-// Watch searchQuery: if user clears or deletes their input, restart dynamic typewriter animation immediately
-watch(searchQuery, (newVal) => {
-  if (!newVal || newVal.length === 0) {
-    resetSearchPlaceholder()
-  }
-})
- 
-watch(activePersona, () => {
-  resetSearchPlaceholder()
-})
- 
-// Facility Wishlist State (save facilities to receive alerts when freed or swapped)
-const wishlistVenueIds = ref([2, 3]) // Pre-star Studio L7.1 and Studio L7.2 for demo
- 
-function isWishlisted(id) {
-  return wishlistVenueIds.value.includes(id)
-}
- 
-function toggleWishlist(slot) {
-  const idx = wishlistVenueIds.value.indexOf(slot.id)
-  if (idx > -1) {
-    wishlistVenueIds.value.splice(idx, 1)
-    toast.value = `Removed ${slot.venue_name} from your facility wishlist.`
-    toastType.value = 'info'
-  } else {
-    wishlistVenueIds.value.push(slot.id)
-    toast.value = `Added ${slot.venue_name} to your Wishlist. You will receive an instant notification when this facility becomes available.`
-    toastType.value = 'success'
-  }
-}
- 
 function handleMeetingScheduled(meeting) {
   notificationsList.value.unshift({
     id: Date.now(),
@@ -209,55 +129,6 @@ function handleMeetingScheduled(meeting) {
   toastType.value = 'success'
 }
  
-// Venue Category Filters
-// OSL Facility Administrator oversees university-wide facilities and does not require a personal club wishlist
-const categories = computed(() => {
-  const list = [
-    { label: 'All Venues', value: 'All' },
-  ]
-  if (selectedClub.value !== 'Office of Student Life' && !isGuest.value) {
-    list.push({ label: 'Wishlist', value: 'Wishlist' })
-  }
-  list.push(
-    { label: 'Dance Studios', value: 'Dance Studio' },
-    { label: 'Acoustic Rooms', value: 'Acoustic Room' },
-    { label: 'Sports Courts', value: 'Sports Court' },
-    { label: 'Multi-Purpose', value: 'Multi-Purpose' }
-  )
-  return list
-})
-const selectedCategory = ref('All')
- 
-watch(selectedClub, (newClub) => {
-  if (newClub === 'Office of Student Life' && selectedCategory.value === 'Wishlist') {
-    selectedCategory.value = 'All'
-  }
-})
- 
-function getCategoryCount(catValue) {
-  if (catValue === 'All') return slots.value.length
-  if (catValue === 'Wishlist') return wishlistVenueIds.value.length
-  return slots.value.filter(s => s.venue_type === catValue).length
-}
- 
-const filteredSlots = computed(() => {
-  return slots.value.filter((slot) => {
-    let matchesCategory = true
-    if (selectedCategory.value === 'Wishlist') {
-      matchesCategory = wishlistVenueIds.value.includes(slot.id)
-    } else if (selectedCategory.value !== 'All') {
-      matchesCategory = slot.venue_type === selectedCategory.value
-    }
-    const query = searchQuery.value.trim().toLowerCase()
-    const matchesSearch = !query || 
-      slot.venue_name.toLowerCase().includes(query) ||
-      slot.building_location.toLowerCase().includes(query) ||
-      slot.owner_club.toLowerCase().includes(query) ||
-      slot.venue_type.toLowerCase().includes(query)
-    return matchesCategory && matchesSearch
-  })
-})
- 
 // Dev-only: view the app as another persona (permissions still come from the Dev sign-in)
 function switchPersona(personaKey) {
   const p = DEMO_PERSONAS[personaKey]
@@ -265,7 +136,6 @@ function switchPersona(personaKey) {
   activePersona.value = p
   selectedClub.value = p.cca
   profileMenuOpen.value = false
-  searchQuery.value = ''
   
   if (p.role === 'admin' || !canOpenView(p, currentView.value)) {
     currentView.value = homeView(p)
@@ -455,7 +325,6 @@ onMounted(async () => {
       authReady.value = true
     }
     await loadSlots()
-    searchTimer = setTimeout(tickSearchPlaceholder, 1000)
   } catch (error) {
     toastType.value = 'danger'
     toast.value = `Error loading facilities: ${error.message}`
@@ -464,9 +333,6 @@ onMounted(async () => {
   }
 })
  
-onUnmounted(() => {
-  if (searchTimer) clearTimeout(searchTimer)
-})
 </script>
  
 <template>
