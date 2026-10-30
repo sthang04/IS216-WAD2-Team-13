@@ -845,4 +845,15 @@ body {
   box-shadow: 0 14px 30px -5px rgba(225, 29, 72, 0.12);
 }
 
+/* Keep Pip (fixed, bottom-right, ~115px wide) off the page content: reserve a right
+   gutter when the screen margin beside the container is too narrow, and room at
+   the bottom so the last rows can scroll clear of it. */
+.pulse-pip-gutter {
+  padding-bottom: 120px;
+}
 
+@media (min-width: 768px) {
+  .pulse-pip-gutter {
+    padding-right: max(0px, calc(125px - (100vw - 100%) / 2));
+  }
+}

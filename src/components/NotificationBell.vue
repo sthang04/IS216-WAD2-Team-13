@@ -5,7 +5,7 @@
 import { ref, watch, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { session, showToast } from '../services/sessionState'
-import { markRead, createTelegramLinkCode } from '../services/notificationService'
+import { markRead, createTelegramLinkCode, fetchTelegramLinked } from '../services/notificationService'
 import {
   notificationStore,
   unreadCount,
@@ -40,8 +40,28 @@ watch(() => notificationStore.value.ringTick, ring)
 watch(() => notificationStore.value.bellOpen, (isOpen) => {
   if (isOpen) {
     loadNotifications()
+    checkTelegram()
   }
 })
+
+// "Connect Telegram" turns into "Connected to Telegram" once the bot has linked this person
+const telegramLinked = ref(false)
+
+async function checkTelegram() {
+  if (!botName || !session.value.authUserId) {
+    telegramLinked.value = false
+    return
+  }
+  telegramLinked.value = await fetchTelegramLinked()
+}
+
+// Switching to the new account resets the label
+watch(() => session.value.memberId, checkTelegram, { immediate: true })
+
+// Coming back from Telegram after pressing Start: check again
+function onWindowFocus() {
+  checkTelegram()
+}
 
 // Close when pressing outside the bell, or with Escape.
 // We use pointerdown (not click) so Pip's "Open notifications" button still works.
@@ -60,12 +80,14 @@ function closeOnEscape(event) {
 onMounted(() => {
   document.addEventListener('pointerdown', closeOnOutside)
   document.addEventListener('keydown', closeOnEscape)
+  window.addEventListener('focus', onWindowFocus)
 })
 
 onUnmounted(() => {
   clearTimeout(ringTimer)
   document.removeEventListener('pointerdown', closeOnOutside)
   document.removeEventListener('keydown', closeOnEscape)
+  window.removeEventListener('focus', onWindowFocus)
 })
 
 function toggle() {
@@ -180,7 +202,16 @@ defineExpose({ reload: loadNotifications })
       </div>
       <p v-if="notificationStore.items.length" class="pulse-tiny text-muted text-center mb-0 py-1 border-top">Swipe left on a notification to delete it</p>
       <div v-if="botName" class="d-flex gap-2 px-3 py-2 border-top">
-        <button v-if="botName" type="button" class="btn btn-sm btn-outline-secondary" @click="connectTelegram">Connect Telegram</button>
+        <button
+          v-if="botName"
+          type="button"
+          class="btn btn-sm"
+          :class="telegramLinked ? 'btn-success' : 'btn-outline-secondary'"
+          :title="telegramLinked ? 'Click to link a different Telegram account instead' : ''"
+          @click="connectTelegram"
+        >
+          {{ telegramLinked ? '✓ Connected to Telegram' : 'Connect Telegram' }}
+        </button>
       </div>
     </div>
   </div>

@@ -34,11 +34,17 @@ const props = defineProps({
   isStatic: {
     type: Boolean,
     default: false
+  },
+
+  // Chosen from Pip's right-click menu: hide the speech bubble.
+  isQuiet: {
+    type: Boolean,
+    default: false
   }
 
 })
 
-const emit = defineEmits(['update:isStatic', 'open-notifications', 'open-offer'])
+const emit = defineEmits(['update:isStatic', 'update:isQuiet', 'open-notifications', 'open-offer'])
 
 // Show or hide Pip's danger summary.
 
@@ -223,6 +229,11 @@ function chooseStatic(value) {
   menu.value = null
 }
 
+function toggleQuiet() {
+  emit('update:isQuiet', !props.isQuiet)
+  menu.value = null
+}
+
 function closeMenu() {
   menu.value = null
 }
@@ -252,7 +263,7 @@ onUnmounted(() => {
 
     <!-- SPEECH BUBBLE -->
     <Transition name="pip-fade">
-      <div v-if="!panelOpen" class="pip-speech" role="status">
+      <div v-if="!panelOpen && !isQuiet" class="pip-speech" role="status">
         {{ message }}
       </div>
     </Transition>
@@ -330,7 +341,7 @@ onUnmounted(() => {
         </p>
         <small class="pip-note">
           {{ mode === 'notifications'
-            ? 'Right-click Pip to keep it still.'
+            ? 'Right-click Pip to keep it still or hide its speech bubble.'
             : 'Hypothetical simulation status only.' }}
         </small>
       </div>
@@ -547,6 +558,15 @@ onUnmounted(() => {
         @click="chooseStatic(true)"
       >
         <span class="pip-check">{{ isStatic ? '✓' : '' }}</span> Keep Pip still
+      </button>
+      <hr class="pip-menu-divider">
+      <button
+        type="button"
+        role="menuitemcheckbox"
+        :aria-checked="isQuiet"
+        @click="toggleQuiet"
+      >
+        <span class="pip-check">{{ isQuiet ? '✓' : '' }}</span> Hide speech bubble
       </button>
     </div>
   </div>
@@ -842,6 +862,11 @@ onUnmounted(() => {
 
 .pip-menu button:hover {
   background: #fff1f5;
+}
+
+.pip-menu-divider {
+  margin: 4px 0;
+  opacity: 0.15;
 }
 
 .pip-check {

@@ -345,11 +345,11 @@ export function bookingActions(booking, options) {
   // Released by another CCA
   if (booking.status === STATUSES.PROPOSED) {
     if (booking.offered_club_id === options.clubId) {
-      actions.push({ type: 'claim', label: 'Accept offer', variant: 'primary' })
+      actions.push({ type: 'claim', label: 'Accept offer', variant: 'claim' })
       return actions
     }
     if (!booking.offered_club_id) {
-      actions.push({ type: 'claim', label: 'Claim', variant: 'primary' })
+      actions.push({ type: 'claim', label: 'Claim', variant: 'claim' })
       return actions
     }
   }

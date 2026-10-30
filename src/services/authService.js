@@ -17,7 +17,7 @@ const NOT_EXCO_MESSAGE = 'Pulse sign-in is for CCA ExCos and OSL staff. Explore 
  
 // Pages each role may open
 const VIEWS_BY_ROLE = {
-  admin: ['admin', 'facilities', 'heatmap'],
+  admin: ['facilities'], // OSL: the facility calendar and its OSL Review tab
   club: ['facilities', 'schedule', 'heatmap', 'operations', 'risk'],
   dev: ['facilities', 'schedule', 'heatmap', 'operations', 'risk'],
   guest: ['facilities', 'schedule', 'heatmap', 'operations', 'risk'] // read-only
@@ -365,9 +365,6 @@ export function canOpenView(persona, view) {
 }
  
 export function homeView(persona) {
-  if (persona && persona.role === 'admin') {
-    return 'admin'
-  }
   return 'facilities'
 }
  

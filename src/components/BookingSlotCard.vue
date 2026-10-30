@@ -9,6 +9,7 @@ const props = defineProps({
   busy: { type: Boolean, default: false },
   showFacility: { type: Boolean, default: false },
   highlightClubId: { type: Number, default: null },   // the CCA the viewer is acting for
+  waitlistEntry: { type: Object, default: null },     // our CCA's place in this booking's queue (Logistics Directors only)
   index: { type: Number, default: 0 }
 })
 const emit = defineEmits(['action'])
@@ -27,6 +28,30 @@ const rowClass = computed(() => [
     'is-offered-to-me': props.highlightClubId && props.booking.offered_club_id === props.highlightClubId
   }
 ])
+
+function ccas(count) {
+  return count + ' CCA' + (count === 1 ? '' : 's')
+}
+
+// How many CCAs are in front of us in this booking's waitlist:
+// already queued -> everyone before our place (queue_position 1 = next in line);
+// can join -> everyone already queued. Only Logistics Directors get either.
+const queueNote = computed(() => {
+  if (props.waitlistEntry) {
+    if (props.waitlistEntry.status !== 'WAITING') {
+      return null
+    }
+    const ahead = Math.max(0, props.waitlistEntry.queue_position - 1)
+    return { text: ccas(ahead) + ' in front of you', queued: true }
+  }
+  const canJoin = props.actions.some((action) => action.type === 'join' && !action.disabled)
+  if (canJoin) {
+    const count = props.booking.waitlist_count || 0
+    const text = count === 0 ? '0 CCAs in the queue' : ccas(count) + ' currently in the queue'
+    return { text: text, queued: false }
+  }
+  return null
+})
 </script>
 
 <template>
@@ -42,6 +67,7 @@ const rowClass = computed(() => [
       <div v-if="booking.offered_club_name" class="small mt-1" :class="booking.offered_club_id === highlightClubId ? 'text-pulse fw-semibold' : 'text-muted'">
         {{ booking.offered_club_id === highlightClubId ? 'Offered to you (30 min)' : `Held for ${booking.offered_club_name}` }}
       </div>
+      <div v-else-if="queueNote" class="small mt-1" :class="queueNote.queued ? 'text-pulse fw-semibold' : 'text-muted'">{{ queueNote.text }}</div>
       <div v-else-if="booking.waitlist_count" class="small text-muted mt-1">{{ booking.waitlist_count }} on waitlist</div>
     </div>
 
@@ -77,7 +103,8 @@ const rowClass = computed(() => [
           :class="{
             'btn-pulse-primary': action.variant === 'primary',
             'btn-outline-secondary': action.variant === 'outline',
-            'btn-pulse-amber': action.variant === 'warning'
+            'btn-pulse-amber': action.variant === 'warning',
+            'btn-pulse-claim': action.variant === 'claim'
           }"
           :disabled="busy || action.disabled"
           :title="action.hint || ''"
