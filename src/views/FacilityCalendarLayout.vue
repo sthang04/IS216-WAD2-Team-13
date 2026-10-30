@@ -1,35 +1,26 @@
 
 <script setup>
 // Wraps the four facility pages (calendar, My Club, waitlist, OSL approvals).
-// Loads who is signed in, then shows the current page in <RouterView />.
-// The team header in App.vue is the only navbar: it holds the club picker and the bell.
-import { ref, onMounted } from 'vue'
+// App.vue loads who is signed in (initSession) and shows the bell and Pip on
+// every page; this waits for that session, then shows the current page in <RouterView />.
+import { ref, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
-import PipMascot from '../components/PipMascot.vue'
 import { session, initSession, toast, setActiveClub } from '../services/sessionState'
-import {
-  notificationStore,
-  unreadCount,
-  soonestOfferSeconds,
-  startNotifications,
-  setPipStatic
-} from '../services/notificationStore'
+import { startNotifications } from '../services/notificationStore'
 
 const router = useRouter()
 const route = useRoute()
 
 const loadError = ref('')
-const loadingSession = ref(true)
+const loadingSession = ref(false)
 
-// Inside the team app, who you are comes from the team's sign-in,
-// so the demo persona switcher is turned off here.
-session.value.demoMode = false
-
+// "Retry" after a failed load
 async function loadSession() {
   loadingSession.value = true
   loadError.value = ''
   try {
     await initSession()
+    startNotifications()
   } catch (error) {
     loadError.value = error.message
     console.log(error.message)
@@ -38,32 +29,18 @@ async function loadSession() {
   }
 }
 
-// Pip's buttons: open the bell, or go to the waitlist offer
-function openNotifications() {
-  notificationStore.value.bellOpen = true
-}
-
-function openOffer() {
-  router.push('/facilities/waitlist')
-}
-
 // Telegram links end with ?club=<club id> so the page opens on that CCA
-function applyClubFromLink() {
-  if (route.query.club) {
+watch(() => session.value.ready, (ready) => {
+  if (ready && route.query.club) {
     setActiveClub(Number(route.query.club))
+    startNotifications()
     router.replace({ path: route.path })
   }
-}
-
-onMounted(async () => {
-  await loadSession()
-  applyClubFromLink()
-  startNotifications()
-})
+}, { immediate: true })
 </script>
 
 <template>
-  <div class="pulse-facility-module" :class="{ 'has-pip': session.ready && session.memberId }">
+  <div class="pulse-facility-module">
 
   <div class="pb-3">
 
@@ -121,31 +98,5 @@ onMounted(async () => {
 
   </div>
 
-  <!-- Pip watches notifications and waitlist offers on every page -->
-  <PipMascot
-    v-if="session.ready && session.memberId"
-    mode="notifications"
-    :unanswered-count="unreadCount"
-    :offer-seconds-left="soonestOfferSeconds"
-    :is-static="notificationStore.pipStatic"
-    @update:is-static="setPipStatic"
-    @open-notifications="openNotifications"
-    @open-offer="openOffer"
-  />
   </div>
 </template>
-
-<style scoped>
-/* Keep Pip (fixed, bottom-right, ~115px wide) off the page content: reserve a right
-   gutter when the screen margin beside the container is too narrow, and room at
-   the bottom so the last rows can scroll clear of it. */
-.has-pip {
-  padding-bottom: 120px;
-}
-
-@media (min-width: 768px) {
-  .has-pip {
-    padding-right: max(0px, calc(125px - (100vw - 100%) / 2));
-  }
-}
-</style>
