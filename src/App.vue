@@ -9,9 +9,13 @@ import {
   enterGuest, restoreSession, signOut,
   canOpenView, canResetDemo as canResetDemoFor, homeView,
 } from './services/authService';
-import { session as facilitySession, setActiveClub } from './services/sessionState';
-import { startNotifications, reloadAll } from './services/notificationStore';
+import { session as facilitySession, initSession, setActiveClub } from './services/sessionState';
+import {
+  notificationStore, unreadCount, soonestOfferSeconds,
+  startNotifications, reloadAll, setPipStatic, setPipQuiet
+} from './services/notificationStore';
 import NotificationBell from './components/NotificationBell.vue';
+import PipMascot from './components/PipMascot.vue';
 import LandingLoginView from './views/LandingLoginView.vue';
 import SignUpView from './views/SignUpView.vue';
 import AvailabilityView from './views/AvailabilityView.vue';
@@ -36,44 +40,6 @@ watch(() => route.meta.view, (view) => {
 // /signup opens the sign-up screen
 watch(() => route.meta.signup, (signup) => { if (signup && !isLoggedIn.value) showSignUp.value = true })
 const apiMode = ref(false) // Toggle API badge tags on/off across all views (Default: OFF as requested)
-const notificationsOpen = ref(false)
- 
-const notificationsList = ref([
-  {
-    id: 1,
-    type: 'swap',
-    title: 'Facility Available for Swap',
-    desc: 'Chinese Orchestra listed Studio L7.1 (Music) for Fri 16 Oct (16:00 - 19:00).',
-    time: '5m ago',
-    unread: true,
-    badge: 'Marketplace'
-  },
-  {
-    id: 2,
-    type: 'transit',
-    title: 'Transit Buffer Reminder',
-    desc: 'Recommended departure to Main Hall Stage at 18:20 (8 min walk via Concourse).',
-    time: '25m ago',
-    unread: true,
-    badge: 'OneMap API'
-  },
-  {
-    id: 3,
-    type: 'waitlist',
-    title: 'Waitlist Priority Alert',
-    desc: '2 CCAs are queued for Studio L7.2. Early release frees the room for waiting clubs.',
-    time: '1h ago',
-    unread: true,
-    badge: 'Waitlist Alert'
-  }
-])
- 
-const unreadNotificationCount = computed(() => notificationsList.value.filter(n => n.unread).length)
- 
-function markAllNotificationsRead() {
-  notificationsList.value.forEach(n => n.unread = false)
-}
- 
 const slots = ref([])
 const loading = ref(true)
 const processingId = ref(null)
@@ -116,15 +82,6 @@ watch(currentView, (view) => {
 })
  
 function handleMeetingScheduled(meeting) {
-  notificationsList.value.unshift({
-    id: Date.now(),
-    type: 'meeting',
-    title: `New Meeting: ${meeting.title}`,
-    desc: `${meeting.day} (${meeting.time}) at ${meeting.venue}. Default message and agenda dispatched to 12 ExCo members on Telegram.`,
-    time: 'Just now',
-    unread: true,
-    badge: 'Telegram Broadcast'
-  })
   toast.value = `Meeting scheduled! Telegram broadcast sent to team with agenda: "${meeting.title}"`
   toastType.value = 'success'
 }
@@ -234,12 +191,40 @@ async function handleResetDemo() {
 const isAutoRunning = ref(false)
 const autoStepText = ref('')
  
+// Who you are comes from the team's sign-in, so the facility module's
+// demo persona switcher stays off
+facilitySession.value.demoMode = false
+ 
+// The bell and Pip (on every page) read the facility session's notifications,
+// so load that session whenever someone signs in or out
+async function loadNotificationSession() {
+  try {
+    await initSession()
+  } catch (error) {
+    console.log(error.message)
+  }
+  startNotifications()
+}
+ 
+const pipVisible = computed(() => isLoggedIn.value && facilitySession.value.ready && !!facilitySession.value.memberId)
+ 
+// Pip's buttons: open the bell, or go to the waitlist offer
+function openNotifications() {
+  notificationStore.value.bellOpen = true
+}
+ 
+function openOffer() {
+  currentView.value = 'facilities'
+  router.push('/facilities/waitlist')
+}
+ 
 // stayOnLanding: a restored sign-in opened at "/" keeps showing the landing page
 function applySession(persona, { stayOnLanding = false } = {}) {
   sessionPersona.value = persona
   activePersona.value = persona
   selectedClub.value = persona.cca
   isLoggedIn.value = true
+  loadNotificationSession()
   if (stayOnLanding) {
     currentView.value = 'landing'
     return
@@ -303,6 +288,7 @@ async function handleSignOut() {
     selectedClub.value = null
     currentView.value = 'landing'
     toast.value = ''
+    loadNotificationSession()
   }
 }
  
@@ -532,83 +518,8 @@ onMounted(async () => {
               <span>APIs: {{ apiMode ? 'Visible' : 'Hidden' }}</span>
             </button>
  
-            <!-- Facility pages: the live facility bell (Pip's "Open notifications" opens this one) -->
-            <NotificationBell v-if="currentView === 'facilities'" />
- 
-            <!-- Centralized Notification Bell (Anchored safely on right, zero clipping) -->
-            <div v-else class="position-relative pulse-notification-wrapper">
-              <button
-                type="button"
-                class="btn btn-sm btn-pulse-outline position-relative rounded-pill px-2 py-1 bg-white d-flex align-items-center"
-                aria-label="Notifications"
-                @click="notificationsOpen = !notificationsOpen; profileMenuOpen = false"
-              >
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path>
-                  <path d="M13.73 21a2 2 0 0 1-3.46 0"></path>
-                </svg>
-                <span 
-                  v-if="unreadNotificationCount > 0" 
-                  class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger"
-                  style="font-size: 0.575rem; padding: 0.2em 0.4em;"
-                >
-                  {{ unreadNotificationCount }}
-                </span>
-              </button>
- 
-              <!-- Centralized Notification Dropdown Panel -->
-              <div 
-                v-if="notificationsOpen"
-                class="card shadow-lg p-0 border-0 pulse-notification-panel"
-                style="z-index: 1060; border-radius: 1rem; overflow: hidden;"
-              >
-                <div class="p-3 border-bottom d-flex justify-content-between align-items-center bg-light">
-                  <div class="d-flex align-items-center gap-2">
-                    <span class="fw-bold" style="font-size: 0.85rem;">Centralized Alerts</span>
-                    <span class="badge bg-danger rounded-pill" style="font-size: 0.65rem;">
-                      {{ unreadNotificationCount }} new
-                    </span>
-                  </div>
-                  <button 
-                    v-if="unreadNotificationCount > 0"
-                    type="button" 
-                    class="btn btn-link btn-sm p-0 text-decoration-none text-muted"
-                    style="font-size: 0.7rem;"
-                    @click="markAllNotificationsRead"
-                  >
-                    Mark all read
-                  </button>
-                </div>
- 
-                <div class="p-2" style="max-height: 320px; overflow-y: auto;">
-                  <div 
-                    v-for="item in notificationsList" 
-                    :key="item.id"
-                    class="p-2 mb-1 rounded-3 transition-all"
-                    :class="item.unread ? 'bg-danger bg-opacity-10 border border-danger-subtle' : 'bg-transparent'"
-                  >
-                    <div class="d-flex justify-content-between align-items-start gap-1 mb-1">
-                      <span class="fw-bold" style="font-size: 0.775rem;">{{ item.title }}</span>
-                      <span class="badge bg-secondary bg-opacity-10 text-secondary" style="font-size: 0.6rem;">{{ item.time }}</span>
-                    </div>
-                    <p class="mb-1 text-muted" style="font-size: 0.725rem; line-height: 1.35;">{{ item.desc }}</p>
-                    <div class="d-flex justify-content-between align-items-center mt-1">
-                      <span class="badge bg-purple text-white" style="font-size: 0.6rem; background-color: var(--pulse-purple-transit);">
-                        {{ item.badge }}
-                      </span>
-                      <button 
-                        type="button" 
-                        class="btn btn-link btn-sm p-0 text-danger text-decoration-none fw-semibold"
-                        style="font-size: 0.675rem;"
-                        @click="item.unread = false; notificationsOpen = false"
-                      >
-                        Dismiss
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
+            <!-- One bell for the whole site (Pip's "Open notifications" opens it too) -->
+            <NotificationBell />
  
             <!-- Persona Switcher Dropdown (Pitch Presentation Helper) -->
             <div class="position-relative">
@@ -722,6 +633,7 @@ onMounted(async () => {
  
       <!-- Main Content Area -->
       <main class="container-xl py-4 flex-grow-1">
+        <div :class="{ 'pulse-pip-gutter': pipVisible }">
  
         <!-- Autopilot Banner -->
         <div v-if="isAutoRunning" class="alert alert-dark border-0 shadow-lg text-white mb-4 d-flex align-items-center justify-content-between p-3" style="border-radius: 1rem; background: linear-gradient(135deg, #1e1020, #2a1435);">
@@ -792,7 +704,22 @@ onMounted(async () => {
           <EventRiskView :api-mode="apiMode" :read-only="isGuest" />
         </div>
  
+        </div>
       </main>
+ 
+      <!-- Pip watches notifications and waitlist offers on every page -->
+      <PipMascot
+        v-if="pipVisible"
+        mode="notifications"
+        :unanswered-count="unreadCount"
+        :offer-seconds-left="soonestOfferSeconds"
+        :is-static="notificationStore.pipStatic"
+        @update:is-static="setPipStatic"
+        :is-quiet="notificationStore.pipQuiet"
+        @update:is-quiet="setPipQuiet"
+        @open-notifications="openNotifications"
+        @open-offer="openOffer"
+      />
  
       <!-- Footer -->
       <footer class="py-3 border-top text-muted small bg-white mt-auto">

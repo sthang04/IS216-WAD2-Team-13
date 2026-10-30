@@ -8,12 +8,22 @@ import { fetchMyNotifications, listenForNotifications, deleteNotifications, NOTI
 import { fetchActiveClubEntries, secondsLeft, listenForClubWaitlist } from './waitlistService'
  
 const PIP_STATIC_KEY = 'pulse_pip_static'
+const PIP_QUIET_KEY = 'pulse_pip_quiet'
  
-function readPipStatic() {
+// Pip's right-click choices are remembered in this browser
+function readFlag(key) {
   try {
-    return localStorage.getItem(PIP_STATIC_KEY) === 'true'
+    return localStorage.getItem(key) === 'true'
   } catch (error) {
     return false
+  }
+}
+ 
+function writeFlag(key, value) {
+  try {
+    localStorage.setItem(key, String(value))
+  } catch (error) {
+    console.log(error.message)
   }
 }
  
@@ -23,7 +33,8 @@ export const notificationStore = ref({
   offers: [],     // waitlist offers the active CCA is holding
   bellOpen: false,
   ringTick: 0,    // goes up by 1 whenever the bell should ring
-  pipStatic: readPipStatic(),
+  pipStatic: readFlag(PIP_STATIC_KEY),
+  pipQuiet: readFlag(PIP_QUIET_KEY),  // true = hide Pip's speech bubble
   now: Date.now() // updated every second while an offer countdown is showing
 })
  
@@ -119,11 +130,12 @@ export async function clearAllNotifications() {
  
 export function setPipStatic(value) {
   notificationStore.value.pipStatic = value
-  try {
-    localStorage.setItem(PIP_STATIC_KEY, String(value))
-  } catch (error) {
-    console.log(error.message)
-  }
+  writeFlag(PIP_STATIC_KEY, value)
+}
+ 
+export function setPipQuiet(value) {
+  notificationStore.value.pipQuiet = value
+  writeFlag(PIP_QUIET_KEY, value)
 }
  
 // ---------------- Live updates ----------------
