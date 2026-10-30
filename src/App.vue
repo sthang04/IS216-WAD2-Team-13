@@ -1,5 +1,5 @@
 <script setup>
-import { ref, onMounted, computed, watch } from 'vue';
+import { ref, onMounted, onUnmounted, computed, watch } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 import { VIEW_PATHS } from './router';
 import { fetchCalendar, resetDemoData, singaporeToday, formatDate, formatTime, CALENDAR_END } from './services/facilityService';
@@ -26,6 +26,8 @@ import OslAdminView from './views/OslAdminView.vue';
  
 // App Views state
 const currentView = ref('landing') // 'landing', 'admin', 'facilities', 'schedule', 'heatmap', 'operations', 'risk'
+// OSL's header has two tabs inside the facility module: the calendar and OSL Review
+const isOslReviewRoute = computed(() => route.path.startsWith('/facilities/admin'))
  
 // Keep currentView and the URL in step (src/router/index.js): clicking a tab
 // changes the URL, and opening or refreshing a URL opens that page.
@@ -53,6 +55,18 @@ const sessionPersona = ref(null) // who signed in
 const activePersona = ref(GUEST_PERSONA) // who the app is acting as (only Dev can switch this)
 const selectedClub = ref(null)
 const profileMenuOpen = ref(false)
+const profileMenu = ref(null)
+ 
+// Close the profile menu when pressing outside it, or with Escape (same as the bell)
+function closeProfileOnOutside(event) {
+  if (profileMenuOpen.value && profileMenu.value && !profileMenu.value.contains(event.target)) {
+    profileMenuOpen.value = false
+  }
+}
+ 
+function closeProfileOnEscape(event) {
+  if (event.key === 'Escape') profileMenuOpen.value = false
+}
 const showSignUp = ref(false)
  
 const isAdmin = computed(() => activePersona.value.role === 'admin')
@@ -292,6 +306,16 @@ async function handleSignOut() {
   }
 }
  
+onMounted(() => {
+  document.addEventListener('pointerdown', closeProfileOnOutside)
+  document.addEventListener('keydown', closeProfileOnEscape)
+})
+ 
+onUnmounted(() => {
+  document.removeEventListener('pointerdown', closeProfileOnOutside)
+  document.removeEventListener('keydown', closeProfileOnEscape)
+})
+ 
 onMounted(async () => {
   // Clean enterprise light theme enforcement
   document.body.classList.remove('dark-mode')
@@ -354,7 +378,7 @@ onMounted(async () => {
           
           <!-- Left: Logo & Community Switcher (Scoped per persona) -->
           <div class="d-flex align-items-center gap-3">
-            <a href="#" class="pulse-brand-logo text-decoration-none" @click.prevent="currentView = isAdmin ? 'admin' : 'facilities'">
+            <a href="#" class="pulse-brand-logo text-decoration-none" @click.prevent="router.push('/facilities')">
               <div class="pulse-logo-badge">
                 <span>P</span>
                 <span class="pulse-logo-dot"></span>
@@ -418,29 +442,21 @@ onMounted(async () => {
           <!-- Center: Navigation Tabs (Role-tailored) -->
           <!-- OSL Admin View: Administrative Oversight & Governance -->
           <nav v-if="isAdmin" class="d-none d-lg-flex align-items-center gap-1">
-            <button 
-              type="button" 
-              class="pulse-nav-pill" 
-              :class="{ active: currentView === 'admin' }"
-              @click="currentView = 'admin'"
-            >
-              OSL Approvals & Compliance
-            </button>
-            <button 
-              type="button" 
-              class="pulse-nav-pill" 
-              :class="{ active: currentView === 'facilities' }"
-              @click="currentView = 'facilities'"
+            <button
+              type="button"
+              class="pulse-nav-pill"
+              :class="{ active: currentView === 'facilities' && !isOslReviewRoute }"
+              @click="router.push('/facilities')"
             >
               Master Facility Calendar
             </button>
-            <button 
-              type="button" 
-              class="pulse-nav-pill" 
-              :class="{ active: currentView === 'heatmap' }"
-              @click="currentView = 'heatmap'"
+            <button
+              type="button"
+              class="pulse-nav-pill"
+              :class="{ active: isOslReviewRoute }"
+              @click="router.push('/facilities/admin')"
             >
-              Campus Demand Heatmap
+              OSL Review
             </button>
           </nav>
  
@@ -522,7 +538,7 @@ onMounted(async () => {
             <NotificationBell />
  
             <!-- Persona Switcher Dropdown (Pitch Presentation Helper) -->
-            <div class="position-relative">
+            <div ref="profileMenu" class="position-relative">
               <button
                 type="button"
                 class="btn btn-pulse-outline btn-sm d-flex align-items-center gap-2 rounded-pill px-3 bg-white"

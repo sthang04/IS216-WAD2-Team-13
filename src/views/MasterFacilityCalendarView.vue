@@ -386,7 +386,7 @@ async function runAction(booking, action) {
     subtitle="Find released CCA facility slots and coordinate peer transfers through one streamlined workflow."
     :stats="[
       { label: 'Booked', value: counts.booked, tone: 'plain' },
-      { label: 'Available to claim', value: counts.available, tone: 'amber' },
+      { label: 'Available to claim', value: counts.available, tone: 'green' },
       { label: 'Pending approval', value: counts.pending, tone: 'sky' }
     ]"
   />
@@ -429,6 +429,7 @@ async function runAction(booking, action) {
       :facility="group.facility"
       :bookings="group.bookings"
       :actions-by-booking="actionsByBooking"
+      :waitlist-by-booking="canManageActiveClub ? entryByBooking : {}"
       :busy-booking-id="busyBookingId"
       @action="onAction"
     />

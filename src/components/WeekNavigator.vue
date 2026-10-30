@@ -131,7 +131,7 @@ function pickDay(day) {
         <span v-if="day.today" class="pulse-cal-mark" aria-label="Today">✓</span>
         <span v-else-if="day.locked" class="pulse-cal-mark" aria-label="Locked">🔒</span>
         <span v-if="day.counts" class="pulse-cal-counts">
-          <span v-if="day.counts.available" class="pulse-cal-pill amber">{{ day.counts.available }} open</span>
+          <span v-if="day.counts.available" class="pulse-cal-pill claim">{{ day.counts.available }} open</span>
           <span v-if="day.counts.pending" class="pulse-cal-pill sky">{{ day.counts.pending }} pending</span>
         </span>
       </component>
