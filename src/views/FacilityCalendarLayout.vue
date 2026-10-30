@@ -1,37 +1,26 @@
 
 <script setup>
 // Wraps the four facility pages (calendar, My Club, waitlist, OSL approvals).
-// Loads who is signed in, then shows the current page in <RouterView />.
-import { ref, onMounted } from 'vue'
+// App.vue loads who is signed in (initSession) and shows the bell and Pip on
+// every page; this waits for that session, then shows the current page in <RouterView />.
+import { ref, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
-import FacilityNavbar from '../components/FacilityNavbar.vue'
-import PipMascot from '../components/PipMascot.vue'
 import { session, initSession, toast, setActiveClub } from '../services/sessionState'
-import {
-  notificationStore,
-  unreadCount,
-  soonestOfferSeconds,
-  startNotifications,
-  setPipStatic,
-  reloadAll
-} from '../services/notificationStore'
+import { startNotifications } from '../services/notificationStore'
 
 const router = useRouter()
 const route = useRoute()
 
 const loadError = ref('')
-const loadingSession = ref(true)
-const viewKey = ref(0) // changing this redraws the page after "Reset demo"
+const loadingSession = ref(false)
 
-// Inside the team app, who you are comes from the team's sign-in,
-// so the demo persona switcher is turned off here.
-session.value.demoMode = false
-
+// "Retry" after a failed load
 async function loadSession() {
   loadingSession.value = true
   loadError.value = ''
   try {
     await initSession()
+    startNotifications()
   } catch (error) {
     loadError.value = error.message
     console.log(error.message)
@@ -40,40 +29,20 @@ async function loadSession() {
   }
 }
 
-function handleDataReset() {
-  viewKey.value += 1
-  reloadAll()
-}
-
-// Pip's buttons: open the bell, or go to the waitlist offer
-function openNotifications() {
-  notificationStore.value.bellOpen = true
-}
-
-function openOffer() {
-  router.push('/facilities/waitlist')
-}
-
 // Telegram links end with ?club=<club id> so the page opens on that CCA
-function applyClubFromLink() {
-  if (route.query.club) {
+watch(() => session.value.ready, (ready) => {
+  if (ready && route.query.club) {
     setActiveClub(Number(route.query.club))
+    startNotifications()
     router.replace({ path: route.path })
   }
-}
-
-onMounted(async () => {
-  await loadSession()
-  applyClubFromLink()
-  startNotifications()
-})
+}, { immediate: true })
 </script>
 
 <template>
-  <div class="pulse-facility" >
-  <FacilityNavbar embedded @data-reset="handleDataReset" />
+  <div class="pulse-facility-module">
 
-  <div class="py-3">
+  <div class="pb-3">
 
     <!-- Shared toast -->
     <Transition name="toast">
@@ -119,25 +88,15 @@ onMounted(async () => {
     <!-- Current route -->
     <RouterView v-else v-slot="{ Component, route }">
       <Transition name="page" mode="out-in">
-        <component
-          :is="Component"
-          :key="`${route.path}-${viewKey}-${session.memberId}-${session.activeClubId}`"
-        />
+        <!-- The pages have several root elements, which <Transition> can't animate
+             (the next page then never appears), so give it one element to swap -->
+        <div :key="`${route.path}-${session.memberId}-${session.activeClubId}`">
+          <component :is="Component" />
+        </div>
       </Transition>
     </RouterView>
 
   </div>
 
-  <!-- Pip watches notifications and waitlist offers on every page -->
-  <PipMascot
-    v-if="session.ready && session.memberId"
-    mode="notifications"
-    :unanswered-count="unreadCount"
-    :offer-seconds-left="soonestOfferSeconds"
-    :is-static="notificationStore.pipStatic"
-    @update:is-static="setPipStatic"
-    @open-notifications="openNotifications"
-    @open-offer="openOffer"
-  />
   </div>
 </template>

@@ -19,6 +19,12 @@ const loading = ref(true)
 const busyId = ref(null)
 const accepting = ref(null)  // the offer waiting in the confirm pop-up
 
+// queue_position 1 = next in line, so (position - 1) CCAs are in front
+function inFrontLabel(count) {
+  const n = Math.max(0, count)
+  return n + ' CCA' + (n === 1 ? '' : 's') + ' in front of you'
+}
+
 const HISTORY_LABELS = {
   EXPIRED: 'Offer expired',
   DECLINED: 'Declined',
@@ -140,7 +146,7 @@ function onExpired() {
     :title="activeClubName ? `${activeClubName} waitlist` : 'Waitlist'"
     subtitle="First come, first served. When a holder releases a slot, the first CCA in the queue gets 30 minutes to accept before it passes on."
     :stats="[
-      { label: 'Live offers', value: offers.length, tone: 'amber' },
+      { label: 'Live offers', value: offers.length, tone: 'green' },
       { label: 'In queue', value: waiting.length, tone: 'sky' }
     ]"
   />
@@ -185,7 +191,10 @@ function onExpired() {
             <div class="fw-semibold">{{ formatDate(entry.booking_date) }}</div>
             <div class="small text-muted">{{ formatTime(entry.start_time) }} – {{ formatTime(entry.end_time) }}</div>
           </div>
-          <div class="pulse-slot-status"><span class="pulse-badge pulse-badge-booked">#{{ entry.queue_position }} in queue</span></div>
+          <div class="pulse-slot-status">
+            <span class="pulse-badge pulse-badge-booked">#{{ entry.queue_position }} in queue</span>
+            <div class="small text-pulse fw-semibold mt-1">{{ inFrontLabel(entry.queue_position - 1) }}</div>
+          </div>
           <div class="pulse-slot-who small">
             <strong>{{ entry.facility_name }}</strong>
             <div class="text-muted">Holder: {{ entry.owner_club_name }} · {{ entry.booking_status }}</div>

@@ -7,6 +7,7 @@ defineProps({
   facility: { type: Object, required: true },
   bookings: { type: Array, default: () => [] },
   actionsByBooking: { type: Object, default: () => ({}) },
+  waitlistByBooking: { type: Object, default: () => ({}) },   // booking_id -> our CCA's queue entry (Logistics Directors only)
   busyBookingId: { type: Number, default: null },
   highlightClubId: { type: Number, default: null },
   index: { type: Number, default: 0 }
@@ -57,6 +58,7 @@ const TYPE_CLASS = {
         :actions="actionsByBooking[booking.booking_id] || []"
         :busy="busyBookingId === booking.booking_id"
         :highlight-club-id="highlightClubId"
+        :waitlist-entry="waitlistByBooking[booking.booking_id] || null"
         @action="(type, b) => emit('action', type, b)"
       />
     </div>
