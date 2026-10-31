@@ -7,7 +7,7 @@ import SimulatorCalendarActions from './SimulatorCalendarActions.vue'
 import {SIMULATOR_WORKFLOW_VERIFIED,createSimulatorWorkflow,prepareRecoveryDraft,projectRecoveryPreview,
  workflowReadiness,captureSimulatorState,undoReadiness,bookingEvidence,suggestSimulatorFacilities,
  effectiveInvitationStatus,simulatorStartRequestKey,recordedDisruptionResolutions} from '../services/simulatorWorkflowService.js'
-const props=defineProps({data:Object,eventId:[Number,String],options:{type:Array,default:()=>[]},disruptions:{type:Array,default:()=>[]},refreshVersion:{type:Number,default:0},refreshEvent:Function,selectedRecoveryId:{type:String,default:null}})
+const props=defineProps({sessionVersion:{type:Number,default:0},data:Object,eventId:[Number,String],options:{type:Array,default:()=>[]},disruptions:{type:Array,default:()=>[]},refreshVersion:{type:Number,default:0},refreshEvent:Function,selectedRecoveryId:{type:String,default:null}})
 const emit=defineEmits(['refresh','invitations-changed','select-option','stage-change','review-saved','operation-complete'])
 // Reads are safe behind server authorization; every write still requires both gates.
 const enabled=SIMULATOR_WORKFLOW_VERIFIED
@@ -187,6 +187,12 @@ function resolveDisruption(row){
   'Resolution recorded. Original disruption history is retained; Undo must still validate the original event.',{application:true})
 }
 watch(selectedPlanId,()=>{resolutionReasons.value={}})
+// A new hypothetical session clears local preparation and confirmation only.
+// Persisted plans, invitations and audit history remain loaded and untouched.
+watch(()=>props.sessionVersion,()=>{
+ selectedOptionId.value='';selectedPlanId.value='';bookingSelections.value={};resolutionReasons.value={}
+ pendingAction.value=null;confirmed.value=false;manualAcknowledged.value=false;error.value='';message.value=''
+})
 function resetContext(){
  ++contextEpoch;++historyVersion;++incomingVersion
  capabilities.value=null;capabilityError.value='';history.value={plans:[],invitations:[],audit:[]};historyError.value='';historyLoading.value=false

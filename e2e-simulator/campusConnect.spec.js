@@ -19,7 +19,7 @@ for(const scenario of ['verified','manual','none','no-facility','facility-manual
    await page.getByLabel('Unavailable from (Singapore)',{exact:true}).fill('2026-11-02T10:00')
    await page.getByLabel('Unavailable until (Singapore)',{exact:true}).fill('2026-11-02T10:30')
   }
-  await page.getByRole('button',{name:'Run combined simulation (1)',exact:true}).click()
+  if(scenario!=='unlinked') await page.getByRole('button',{name:'Run combined simulation (1)',exact:true}).click()
   if(scenario==='unlinked'){
    await page.getByRole('button',{name:'Manage facility setup',exact:true}).click()
    await expect(page.getByText(/No accessible linked facility bookings/)).toBeVisible()
@@ -27,7 +27,7 @@ for(const scenario of ['verified','manual','none','no-facility','facility-manual
    await expect(page.getByLabel('Activity for calendar',{exact:true}).locator('option')).toHaveCount(8)
    await expect(page.getByText(/Original booking linking is unavailable/)).toBeVisible()
    await expect(page.getByLabel('Unavailable facility',{exact:true}).locator('option')).toHaveCount(0)
-   await expect(page.getByRole('alert').first()).toContainText('Select a facility linked to this event')
+   await expect(page.getByRole('button',{name:'Run combined simulation (1)',exact:true})).toBeDisabled()
    return
   }
   await expect(page.getByText('Simulation complete',{exact:true})).toBeVisible()
@@ -59,6 +59,7 @@ test('facility recommendations follow two selected events and actual linked book
   body:"import {campusConnectMultiEventFixture} from '/e2e-simulator/fixtures/campusConnect.js'; export async function loadSimulationData(){return campusConnectMultiEventFixture()}"}))
  await page.route('https://**',route=>route.abort())
  await page.goto('/e2e-simulator/harness.html')
+ page.on('dialog',dialog=>dialog.accept())
  for(const [eventId,bookingId,date,title] of [['990001','1','2026-11-02','Fixture activity 1'],['990003','4','2026-11-03','Fixture activity 1']]){
   await page.getByLabel('Event',{exact:true}).selectOption(eventId)
   await page.getByLabel('Disruption type',{exact:true}).selectOption('FACILITY_UNAVAILABLE')

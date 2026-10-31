@@ -29,6 +29,7 @@ async function boot(page,canManage=true){
  await page.getByLabel('Unavailable from (Singapore)',{exact:true}).fill('2026-11-02T10:00')
  await page.getByLabel('Unavailable until (Singapore)',{exact:true}).fill('2026-11-02T10:30')
  await page.getByRole('button',{name:'Run combined simulation (1)',exact:true}).click()
+ page.once('dialog',dialog=>dialog.accept())
  await page.getByTestId('facility-alternative').getByRole('link',{name:'View / Request this facility',exact:true}).click()
 }
 test('recommendation opens the real calendar at facility/time; claim still requires normal confirmation',async({page})=>{

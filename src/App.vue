@@ -34,8 +34,11 @@ const isOslReviewRoute = computed(() => route.path.startsWith('/facilities/admin
 // changes the URL, and opening or refreshing a URL opens that page.
 const router = useRouter()
 const route = useRoute()
-watch(currentView, (view) => {
-  if (route.meta.view !== view && VIEW_PATHS[view]) router.push(VIEW_PATHS[view])
+watch(currentView, async (view) => {
+  if (route.meta.view !== view && VIEW_PATHS[view]) {
+    const failure = await router.push(VIEW_PATHS[view])
+    if (failure && route.meta.view) currentView.value = route.meta.view
+  }
 })
 watch(() => route.meta.view, (view) => {
   if (view && isLoggedIn.value && view !== currentView.value) currentView.value = view
@@ -718,7 +721,7 @@ onMounted(async () => {
  
         <!-- VIEW 5: Event Risk Planning & What-If Simulator -->
         <div v-show="currentView === 'risk'">
-          <EventRiskView :api-mode="apiMode" :read-only="isGuest" />
+          <EventRiskView :active="route.meta.view === 'risk'" :api-mode="apiMode" :read-only="isGuest" />
 
         </div>
  
