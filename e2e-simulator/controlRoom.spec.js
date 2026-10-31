@@ -68,7 +68,7 @@ test('mobile layout stays within viewport and comparison remains ahead of real r
  await expect(page.getByRole('heading',{name:'Plan Comparison',exact:true})).toBeInViewport()
  const order=await page.evaluate(()=>document.getElementById('simulator-comparison').compareDocumentPosition(document.getElementById('simulator-recovery-workflow')))
  expect(order&4).toBeTruthy()
- await expect(page.getByRole('button',{name:'Apply selected recovery',exact:true})).toBeDisabled()
+ await expect(page.getByRole('button',{name:'Apply selected recovery',exact:true})).toHaveCount(0)
  await page.getByRole('navigation',{name:'Simulator workflow',exact:true}).getByRole('link',{name:/Understand impact/}).click()
  await page.screenshot({path:test.info().outputPath('control-room-mobile.png'),fullPage:false})
 })
@@ -111,18 +111,19 @@ test('ranked plan selection changes comparison, preparation and recovery inspect
 
 test('candidate cards select the actual combined recovery and Reset scenario does not reload records',async({page})=>{
  await boot(page)
- const candidates=page.getByRole('button',{name:'Select replacement',exact:true})
+ const candidates=page.locator('[data-candidate-id]')
  expect(await candidates.count()).toBeGreaterThan(1)
  await candidates.first().click()
- await expect(page.getByRole('button',{name:'Selected replacement',exact:true})).toHaveCount(1)
+ await page.getByRole('button',{name:'Use in recovery preview',exact:true}).click()
+ await expect(page.getByRole('button',{name:'In recovery preview',exact:true})).toHaveCount(1)
  const panel=page.getByRole('region',{name:'Persisted recovery workflow',exact:true})
  await expect(panel).toHaveAttribute('data-selected-recovery','combined-selected')
  await expect(page.locator('#simulator-comparison')).toContainText('Combined selected recovery preview')
  await expect(page.locator('[id^="replacement-"]')).toHaveCount(0)
  await expect(page.getByRole('region',{name:'My replacement invitations',exact:true})).toHaveCount(0)
  await page.getByRole('button',{name:'Reset scenario',exact:true}).click()
- await expect(page.getByText('Simulation calculated.',{exact:true})).toHaveCount(0)
- await expect(page.getByRole('button',{name:'Selected replacement',exact:true})).toHaveCount(0)
+ await expect(page.getByText('Simulation complete',{exact:true})).toHaveCount(0)
+ await expect(page.getByRole('button',{name:'In recovery preview',exact:true})).toHaveCount(0)
 })
 
 test('multi-date event keeps readable bars and heatmap labels within the selected real event day',async({page})=>{

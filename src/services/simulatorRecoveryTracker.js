@@ -31,10 +31,11 @@ export function buildRecoveryTracker({plan,invitations=[],audit=[],manualAcknowl
  }
  add({key:'review',kind:'Organizer verification',activity:'Entire recovery',change:'Availability, qualifications and venue suitability',status:manualAcknowledged?'Review acknowledged':'Organizer review required',satisfied:manualAcknowledged,nextAction:'Review evidence and acknowledge below',updated})
  const readiness=workflowReadiness({enabled:true,plan,invites:invitations,manualAcknowledged})
+ const requirementsReady=plan.application_status==='Draft' && !(plan.blockers || []).length && rows.filter(r=>r.key!=='review').every(r=>r.satisfied) && workflowReadiness({enabled:true,plan,invites:invitations,manualAcknowledged:true}).ready
  let status=plan.application_status==='Applied'?'Applied':plan.application_status==='Undone'?'Undone':plan.application_status==='Cancelled'?'Cancelled':plan.application_status==='Draft' && plan.lifecycle!=='In Progress'?'Draft':
   (plan.blockers || []).length?'Stale or blocked':rows.some(r=>['Declined','Cancelled','Expired'].includes(r.status))?'Rejected or expired':
   readiness.ready && rows.every(r=>r.satisfied)?'Ready to apply':'Pending requirements'
  const nextAction=status==='Draft'?'Prepare recovery requests before tracking approvals.':status==='Applied'?'Review applied changes and original disruption resolution before Undo.':status==='Undone'?'Original schedule restored; review history.':status==='Cancelled'?'View history or prepare another proposal.':status==='Ready to apply'?(enabled?'Review and apply this saved recovery.':'Requirements are recorded; application is unavailable in this environment.'):
   status==='Stale or blocked'?'Review the reported changes; refresh and rerun the simulation.':'Complete outstanding requirements, then refresh their authoritative status.'
- return {status,rows,satisfied:rows.filter(r=>r.satisfied).length,total:rows.length,nextAction}
+ return {status,requirementsReady,rows,satisfied:rows.filter(r=>r.satisfied).length,total:rows.length,nextAction}
 }

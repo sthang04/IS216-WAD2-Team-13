@@ -5,10 +5,10 @@ import {ORIGINAL_BOOKING_LINK_VERIFIED,createOriginalBookingWorkflow} from '../s
 import {weekStartOf} from '../services/facilityService'
 import {describeSimulatorFacilityLinks} from '../services/simulatorFacilitySetupService.js'
 import SimulatorCalendarActions from './SimulatorCalendarActions.vue'
-const props=defineProps({data:Object,eventId:[String,Number],busy:Boolean})
+const props=defineProps({data:Object,eventId:[String,Number],busy:Boolean,initialActivityId:[String,Number]})
 const emit=defineEmits(['refresh'])
 const rows=computed(()=>describeSimulatorFacilityLinks(props.data,props.eventId))
-const selectedId=ref('')
+const selectedId=ref(props.initialActivityId ?? '')
 watch(rows,items=>{if(!items.some(r=>String(r.segment.id)===String(selectedId.value)))selectedId.value=items[0]?.segment.id ?? ''},{immediate:true})
 const selected=computed(()=>rows.value.find(r=>String(r.segment.id)===String(selectedId.value)))
 const event=computed(()=>props.data?.events?.find(e=>String(e.id)===String(props.eventId)))
@@ -53,7 +53,7 @@ async function linkOriginal(){
    <option v-for="row in rows" :key="row.segment.id" :value="row.segment.id">{{ row.segment.title }} | {{ row.segment.starts_at }} to {{ row.segment.ends_at }}</option>
   </select>
   <RouterLink :to="target" class="btn btn-outline-primary btn-sm me-2">Open Facility Calendar for selected activity</RouterLink>
-  <button type="button" class="btn btn-outline-secondary btn-sm" :disabled="busy" @click="emit('refresh')">Refresh event booking links (resets simulation)</button>
+  <button type="button" class="btn btn-outline-secondary btn-sm" :disabled="busy" @click="emit('refresh')">Refresh booking information</button>
   <p v-if="!linkCount" class="small text-warning mt-2">This event has no loaded booking links. Open the calendar to inspect or claim an existing eligible slot. Vacant intervals cannot be booked here.</p>
   
   <div class="small border rounded p-2 my-2">
