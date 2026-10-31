@@ -28,6 +28,7 @@ async function boot(page){
   window.__localPlan=plan;window.__localOriginal=structuredClone(before);
   const invitation={id:'fixture-invite',plan_id:plan.id,recipient_member_id:2,replaced_member_id:1,
    status:'Accepted',expires_at:'2099-11-02T00:00:00Z',assignment_snapshot:invitationTerms(plan,1)};
+  window.__localInvitation=invitation;
   function restore(state){
    d.events=d.events.map(e=>e.id===990001?{...e,...state.event}:e);
    d.event_segments=d.event_segments.map(s=>state.segments.some(t=>t.id===s.id)?{...s,...state.segments.find(t=>t.id===s.id)}:s);
@@ -66,8 +67,8 @@ async function boot(page){
   }};
  `}))
  await page.goto('/e2e-simulator/harness.html')
- await page.getByRole('link',{name:'Review Update / Undo',exact:true}).click()
- await page.getByLabel('Saved recovery plan',{exact:true}).selectOption('00000000-0000-4000-8000-000000000777')
+ await page.getByRole('region',{name:'Persisted recovery workflow',exact:true}).scrollIntoViewIfNeeded()
+ await page.locator('[data-saved-plan-id="00000000-0000-4000-8000-000000000777"]').click()
  const panel=page.getByRole('region',{name:'Persisted recovery workflow',exact:true})
  await panel.getByLabel('I manually checked personal availability, qualifications and facility suitability; incomplete data is not proof of availability.',{exact:true}).check()
  return panel
@@ -80,11 +81,11 @@ async function confirm(panel){
 test('local Apply refreshes schedule; blocked Undo resolves explicitly then restores original schedule',async({page})=>{
  const panel=await boot(page)
  await page.evaluate(()=>{window.__holdApply=true})
- await panel.getByRole('button',{name:'Confirm Recovery',exact:true}).click()
+ await panel.getByRole('button',{name:'Apply selected recovery',exact:true}).click()
  expect(await page.evaluate(()=>window.__localCalls.filter(c=>c.name==='rpc_simulator_apply_plan').length)).toBe(0)
  await confirm(panel)
- await expect(panel.getByText(/Running Confirm Recovery;/)).toBeVisible()
- await expect(panel.getByRole('button',{name:'Confirm Recovery',exact:true})).toBeDisabled()
+ await expect(panel.getByText(/Running Apply selected recovery;/)).toBeVisible()
+ await expect(panel.getByRole('button',{name:'Apply selected recovery',exact:true})).toBeDisabled()
  await page.evaluate(()=>window.__releaseApply())
  await expect(panel.getByText('Recovery committed by the server.',{exact:true})).toBeVisible()
  await expect.poll(()=>page.evaluate(()=>window.__localLoads)).toBeGreaterThan(1)
@@ -109,17 +110,39 @@ test('local Apply refreshes schedule; blocked Undo resolves explicitly then rest
 test('stale revision refreshes plan history without retrying or claiming success',async({page})=>{
  const panel=await boot(page)
  await page.evaluate(()=>{window.__localPlan.version=2})
- await panel.getByRole('button',{name:'Confirm Recovery',exact:true}).click();await confirm(panel)
+ await panel.getByRole('button',{name:'Apply selected recovery',exact:true}).click();await confirm(panel)
  await expect(panel.getByRole('alert')).toContainText('Plan revision changed')
- await expect(page.getByLabel('Saved recovery plan').locator('option:checked')).toContainText('v2')
+ await expect(panel.getByText(/Revision 2/)).toHaveCount(1)
  expect(await page.evaluate(()=>window.__localCalls.filter(c=>c.name==='rpc_simulator_apply_plan').length)).toBe(1)
  expect(await page.evaluate(()=>window.__localPlan.application_status)).toBe('Draft')
  await expect(panel.getByText('Recovery committed by the server.',{exact:true})).toHaveCount(0)
 })
 test('authorization failure leaves local records unchanged and reports the backend rejection',async({page})=>{
  const panel=await boot(page);await page.evaluate(()=>{window.__denyOperation=true})
- await panel.getByRole('button',{name:'Confirm Recovery',exact:true}).click();await confirm(panel)
+ await panel.getByRole('button',{name:'Apply selected recovery',exact:true}).click();await confirm(panel)
  await expect(panel.getByRole('alert')).toContainText('Event management permission required')
  expect(await page.evaluate(()=>window.__localPlan.application_status)).toBe('Draft')
  expect(await page.evaluate(()=>window.__localDb.segment_assignments.find(a=>a.id===1).member_id)).toBe(1)
+})
+
+
+test('pending acceptance and facility approval block Apply until authoritative fixture statuses refresh',async({page})=>{
+ const panel=await boot(page)
+ await page.evaluate(()=>{window.__localInvitation.status='Pending';window.__localPlan.actions[0].status='Pending'})
+ await panel.getByRole('button',{name:'Refresh persisted history',exact:true}).click()
+ const tracker=panel.getByRole('region',{name:'Pending recovery requirements',exact:true})
+ await expect(tracker).toContainText('Awaiting response')
+ await expect(panel.getByRole('button',{name:'Apply selected recovery',exact:true})).toBeDisabled()
+ await page.evaluate(()=>{window.__localInvitation.status='Accepted';window.__localPlan.actions[0].status='Accepted';window.__localPlan.changes.push({segmentId:1,venueName:'Fixture Original Room',facilityBookingId:1});window.__localPlan.actions.push({kind:'Room',segmentId:1,status:'Pending Approval'})})
+ await panel.getByRole('button',{name:'Refresh persisted history',exact:true}).click()
+ await expect(tracker).toContainText('Pending Approval')
+ await expect(panel.getByRole('button',{name:'Apply selected recovery',exact:true})).toBeDisabled()
+ await page.evaluate(()=>{window.__localPlan.actions.find(a=>a.kind==='Room').status='Approved'})
+ await panel.getByRole('button',{name:'Refresh persisted history',exact:true}).click()
+ await expect(tracker).toContainText('Ready to apply')
+ await expect(panel.getByRole('button',{name:'Apply selected recovery',exact:true})).toBeEnabled()
+ expect(await page.evaluate(()=>window.__localCalls.filter(c=>c.name==='rpc_simulator_apply_plan').length)).toBe(0)
+ await page.getByRole('button',{name:'Original Plan',exact:true}).click()
+ await page.waitForTimeout(1200)
+ await expect(page.getByRole('button',{name:'Original Plan',exact:true})).toHaveClass(/btn-secondary/)
 })

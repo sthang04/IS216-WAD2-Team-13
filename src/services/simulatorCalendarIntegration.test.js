@@ -143,3 +143,9 @@ test('real calendar component discards an in-flight snapshot after the acting cl
   assert.equal(state.options[0].confirmed,false)
  }finally{app.unmount()}
 })
+
+
+test('Booked alone is a recorded reservation rather than verified final approval',()=>{
+ const row=inspect([{...booking,status:'Booked',owner_club_id:10}])[0]
+ assert.equal(row.confirmed,false)
+})

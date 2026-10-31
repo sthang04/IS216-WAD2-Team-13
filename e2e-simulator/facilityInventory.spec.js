@@ -15,5 +15,5 @@ test('active unbooked Sports Hall renders as a ranked tentative replacement in t
  await expect(card).toContainText('booking approval required')
  await expect(card).toContainText('club eligibility')
  await expect(card.getByRole('link',{name:'View / Request this facility',exact:true})).toBeVisible()
- await expect(page.getByRole('button',{name:'Confirm Recovery',exact:true})).toBeDisabled()
+ await expect(page.getByRole('button',{name:'Apply selected recovery',exact:true})).toBeDisabled()
 })

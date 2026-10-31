@@ -88,10 +88,10 @@ test('busy periods and simulated unavailability have distinct actual reasons',()
   assert.match(result.excluded.find(c=>c.id===2).reasons[0],/busy period/)
   assert.match(result.excluded.find(c=>c.id===3).reasons[0],/simulation/)
 })
-test('UI provides toggle, exclusion details and explicit no-send preview labels',()=>{
+test('UI provides selectable candidates and preserves exclusion evidence',()=>{
   // Markup wiring guard; this is not a browser interaction test.
   const source=readFileSync(new URL('../views/EventRiskView.vue',import.meta.url),'utf8')
   assert.match(source,/Show All Candidates/); assert.match(source,/Show Top 5/)
   assert.match(source,/candidateAssessment.excluded/); assert.match(source,/conflict.eventName/)
-  assert.match(source,/Simulate Telegram invitation/); assert.match(source,/no message sent/)
+  assert.match(source,/Select replacement/); assert.match(source,/selectCandidate\(candidateAssessment,candidate\)/); assert.doesNotMatch(source,/openTelegramDispatch/)
 })

@@ -11,7 +11,7 @@ export function calendarOptionsForRecommendation({venue,start,end,rows,clubId,bo
   const conflict=rows.some(o=>String(o.booking_id)!==String(b.booking_id)&&o.facility_id!=null&&b.facility_id!=null&&String(o.facility_id)===String(b.facility_id)&&interval(o)[0]<e&&s<interval(o)[1])
   // Reuse the team's exact calendar rules, rather than maintaining another copy.
   const actions=bookingActions(b,{clubId,canManage:canClaim,isOslAdmin,waitlistEntry:waitlistEntries.find(e=>String(e.booking_id)===String(b.booking_id))})
-  const approved=['Booked','Officially Confirmed Booking'].includes(b.status)&&clubId!=null&&String(b.owner_club_id)===String(clubId)
+  const approved=b.status==='Officially Confirmed Booking'&&clubId!=null&&String(b.owner_club_id)===String(clubId)
   const action=conflict?'Unavailable':actions.some(a=>a.type==='claim'&&!a.disabled)?'Claim Room':actions.some(a=>a.type==='leave')?'Manage Waitlist':actions.some(a=>a.type==='join')?'Join Waitlist':'View in Calendar'
   return {bookingId:b.booking_id,status:b.status,action,confirmed:approved&&!conflict,
    reason:conflict?'Another visible booking overlaps this physical room.':approved?'Recorded booking belongs to this club; Apply must revalidate it.':b.status==='Pending Admin Sign-off'?'Pending OSL approval; not confirmed.':action==='Claim Room'?'Released slot; claim requires calendar confirmation and approval.':action==='Manage Waitlist'?'Your club already has a live queue entry; manage or leave it in the calendar.':action==='Join Waitlist'?'Waitlist only; no approved replacement booking.':'Not claimable for the current club or permissions. Review in the calendar.'}
