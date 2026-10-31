@@ -4,9 +4,14 @@ import {
   shallowRef,
   computed,
   onMounted,
+  onActivated,
+  onDeactivated,
+  onUnmounted,
   watch,
   nextTick
 } from 'vue'
+
+import {useRoute, useRouter} from 'vue-router'
 
 import {
   loadSimulationData
@@ -61,7 +66,9 @@ IMPORTANT:
 ========================================================
 */
 
-defineProps({
+const props = defineProps({
+  active: {type:Boolean, default:true},
+  eventId: {type:[String,Number], default:null},
   apiMode: {
     type: Boolean,
     default: false
@@ -81,9 +88,10 @@ defineProps({
 const data = shallowRef(null)
 const result = shallowRef(null)
 
-const loading = ref(true)
+const loading = ref(false)
 const error = ref('')
 const initialized = ref(false)
+const sessionVersion = ref(0)
 const invitationRefreshVersion = ref(0)
 
 const activeComparison = ref('original')
@@ -125,10 +133,13 @@ function selectRecoveryPlan(id) {
 }
 
 
-const selectedEventId = ref(null)
+const route = useRoute(), router = useRouter()
+const navigationEventId = () => props.eventId ?? route.query.eventId ?? route.query.event_id ?? null
+const selectedEventId = ref(navigationEventId())
 // Reuse the original simulator's stable card IDs and Add/Remove pattern.
 let nextDisruptionId = 1
 const disruptionCards = ref([])
+const pristineDisruptions = ref('[]')
 const replacementSelections = ref({})
 const selectedFacilityOptions = ref([])
 const setupDialog=ref(null)
@@ -273,11 +284,10 @@ function toSingaporeLocal(value) {
 // ========================================================
 
 function createDisruption() {
-  const event = selectedEvent.value
   return { id: 'D' + nextDisruptionId++, type: 'MEMBER_UNAVAILABLE',
     memberId: eventMembers.value[0]?.id ?? null, facilityBookingId:eventLinkedBookings.value[0]?.id ?? null, venueName: eventFacilities.value[0] || '',
     segmentId: eventSegments.value[0]?.id ?? null, delayMinutes: 30,
-    start: toSingaporeLocal(event?.starts_at), end: toSingaporeLocal(event?.ends_at) }
+    start: toSingaporeLocal(selectedEvent.value?.starts_at), end: toSingaporeLocal(selectedEvent.value?.ends_at) }
 }
 function addDisruption() { disruptionCards.value.push(createDisruption()) }
 // A preset uses a real selected-event activity and only changes preview inputs.
@@ -290,17 +300,55 @@ function removeDisruption(id) {
   // Keep one input card, matching WhatIfSimulator's original interaction.
   if (disruptionCards.value.length > 1) disruptionCards.value = disruptionCards.value.filter(d => d.id !== id)
 }
-function resetSelections() {
-  disruptionCards.value = [createDisruption()]
+function resetSelections(resetWorkflow = true) {
+  if(resetWorkflow) sessionVersion.value++
+  nextDisruptionId = 1
+  disruptionCards.value = [{...createDisruption(), start:'', end:''}]
+  selectedRecoveryId.value = ''
+  if(resetWorkflow) selectedSavedRecovery.value = null
+  workflowStage.value = 'Draft'
+  rankingLimit.value = 3
+  error.value = ''
   replacementSelections.value = {}
   selectedFacilityOptions.value = []
   result.value = null
   activeComparison.value = 'original'
+  pristineDisruptions.value = JSON.stringify(disruptionCards.value)
 }
 function buildDisruptions() {
   return prepareDisruptionCards(data.value, selectedEventId.value, disruptionCards.value)
 }
 function validateInputs() { buildDisruptions() }
+const validationMessage = computed(() => {
+  try { buildDisruptions(); return '' } catch(e) { return e.message }
+})
+const canRunSimulation = computed(() => !!data.value && !!selectedEventId.value && !validationMessage.value)
+const hasUnsavedWork = computed(() => !!result.value || JSON.stringify(disruptionCards.value) !== pristineDisruptions.value)
+function confirmDiscard() { return !hasUnsavedWork.value || window.confirm('Discard this unsaved hypothetical simulation? Saved recoveries and approvals will remain unchanged.') }
+function changeEvent(event) {
+  if (!confirmDiscard()) { event.target.value = selectedEventId.value; return }
+  selectedEventId.value = events.value.find(e => String(e.id) === event.target.value)?.id ?? null
+}
+function resetSession() { resetSelections() }
+function beforeUnload(event) { if(props.active && hasUnsavedWork.value) { event.preventDefault(); event.returnValue = '' } }
+// App.vue uses v-show; routed and KeepAlive consumers use the same local reset.
+const removeNavigationGuard = router.beforeEach((to,from) => {
+  if(props.active && (to.path !== from.path || to.query.eventId !== from.query.eventId || to.query.event_id !== from.query.event_id) && !confirmDiscard()) return false
+})
+const removeAfterNavigation = router.afterEach((to,from,failure) => {
+  if(!failure && to.path !== from.path && props.active) resetSelections()
+})
+watch(() => props.active, active => { if(active) { resetSelections(); adoptEventContext() } })
+function adoptEventContext() {
+  const id = navigationEventId()
+  if(id != null && events.value.some(e => String(e.id) === String(id))) selectedEventId.value = events.value.find(e => String(e.id) === String(id)).id
+}
+watch(() => [props.eventId, route.query.eventId, route.query.event_id], () => { if(props.active) adoptEventContext() })
+let wasDeactivated = false
+onDeactivated(() => { wasDeactivated = true })
+onActivated(() => { if(wasDeactivated) { resetSelections(); adoptEventContext(); wasDeactivated = false } })
+onMounted(() => window.addEventListener('beforeunload', beforeUnload))
+onUnmounted(() => { removeNavigationGuard(); removeAfterNavigation(); window.removeEventListener('beforeunload', beforeUnload) })
 
 // ========================================================
 // RUN SIMULATION
@@ -342,7 +390,7 @@ function runSimulation() {
 }
 
 // ========================================================
-// AUTO-RECALCULATION
+// HYPOTHETICAL SESSION INVALIDATION
 // ========================================================
 
 watch(selectedEventId, async () => {
@@ -356,7 +404,6 @@ watch(selectedEventId, async () => {
 
   initialized.value = true
 
-  runSimulation()
 })
 
 watch(disruptionCards, () => {
@@ -367,6 +414,8 @@ watch(disruptionCards, () => {
   activeComparison.value = 'original'
   replacementSelections.value = {}
   selectedFacilityOptions.value = []
+  selectedRecoveryId.value = ''
+  selectedSavedRecovery.value = null
 }, { deep: true, flush: 'sync' })
 
 // ========================================================
@@ -386,14 +435,13 @@ async function refreshSimulator(preserveScenario=false) {
     data.value = await loadSimulationData({ source: 'supabase' })
     selectedEventId.value = data.value.events.find(e => String(e.id) === String(previousEventId))?.id ?? data.value.events[0]?.id ?? null
     if (!selectedEventId.value) throw new Error('No accessible events found in Supabase.')
-    resetSelections()
+    resetSelections(false)
     if(priorCards && String(previousEventId)===String(selectedEventId.value)){
       disruptionCards.value=priorCards
       for(const card of disruptionCards.value)if(card.type==='FACILITY_UNAVAILABLE' && card.facilityBookingId==null && eventLinkedBookings.value.length){card.facilityBookingId=eventLinkedBookings.value[0].id;setDisruptedBooking(card)}
     }
     await nextTick()
     initialized.value = true
-    runSimulation()
     return true
   } catch (e) {
     data.value = null
@@ -401,7 +449,8 @@ async function refreshSimulator(preserveScenario=false) {
     return false
   } finally { loading.value = false }
 }
-onMounted(refreshSimulator)
+onMounted(() => { if(props.active) refreshSimulator() })
+watch(() => props.active, active => { if(active && !data.value && !loading.value) refreshSimulator() })
 
 // ========================================================
 // KPI CALCULATIONS
@@ -766,7 +815,7 @@ function proposedVenueFor(segment) {
       <div><button type="button" class="btn btn-outline-secondary btn-sm" :disabled="loading" @click="refreshSimulator(true)">Refresh event data</button></div>
     </div>
     <nav class="simulator-steps mb-3" aria-label="Simulator workflow">
-     <a v-for="(step,i) in stages" :key="step.label" :href="'#'+step.target" :aria-current="i===currentStage?'step':undefined" :class="{current:i===currentStage}"><span>{{ i+1 }}</span>{{ step.label }}</a>
+     <a v-for="(step,i) in stages" :key="step.label" :href="!result && [2,3,4].includes(i) && !(i===4 && selectedSavedRecovery) ? undefined : '#'+step.target" :aria-disabled="!result && [2,3,4].includes(i) && !(i===4 && selectedSavedRecovery) ? true : undefined" :aria-current="i===currentStage?'step':undefined" :class="{current:i===currentStage}"><span>{{ i+1 }}</span>{{ step.label }}</a>
     </nav>
     <p class="small text-muted" role="status">Next: {{ stages[currentStage].label }}. Simulations stay read-only; saving requests and applying recovery require separate confirmation.</p>
 
@@ -803,8 +852,8 @@ function proposedVenueFor(segment) {
          KPI CARDS
     ==================================================== -->
 
-    <div class="d-flex justify-content-between align-items-center mb-2"><h5 class="fw-bold mb-0">Simulation overview</h5><span v-if="result" class="small text-muted" role="status">Simulation complete</span></div>
-    <div class="row g-3 mx-0 mb-4 simulator-metrics">
+    <div v-if="result" class="d-flex justify-content-between align-items-center mb-2"><h5 class="fw-bold mb-0">Simulation overview</h5><span v-if="result" class="small text-muted" role="status">Simulation complete</span></div>
+    <div v-if="result" class="row g-3 mx-0 mb-4 simulator-metrics">
 
       <div class="col-6 col-md-3">
         <div class="pulse-card p-3 shadow-sm text-center">
@@ -902,7 +951,7 @@ function proposedVenueFor(segment) {
 
       <!-- Original Add/Remove disruption-card pattern, now in the unified view. -->
       <label class="small fw-bold" for="simulation-event">Event</label>
-      <select id="simulation-event" v-model="selectedEventId" class="form-select form-select-sm mb-3" :disabled="loading">
+      <select id="simulation-event" :value="selectedEventId" @change="changeEvent" class="form-select form-select-sm mb-3" :disabled="loading">
         <option v-for="event in events" :key="event.id" :value="event.id">{{ event.name }}</option>
       </select>
       <p class="small text-muted">Add member, facility and delay disruptions together. Repeated delays on one activity accumulate. Times use Singapore time.</p>
@@ -960,11 +1009,12 @@ function proposedVenueFor(segment) {
       <div class="d-flex flex-wrap gap-2 mt-3">
         <button type="button" class="btn btn-outline-secondary btn-sm" :disabled="loading || !eventSegments.length" @click="addDelayPreset">Add 15-min delay</button>
         <button type="button" class="btn btn-outline-secondary btn-sm" :disabled="loading" @click="addDisruption">Add disruption</button>
-        <button type="button" class="btn btn-outline-secondary btn-sm" :disabled="loading" @click="resetSelections">Reset scenario</button>
-        <button type="button" class="btn btn-pulse-primary btn-sm" :disabled="loading" @click="runSimulation">Run combined simulation ({{ disruptionCards.length }})</button>
+        <button type="button" class="btn btn-outline-secondary btn-sm" :disabled="loading" @click="resetSession">Reset Simulation</button>
+        <button type="button" class="btn btn-pulse-primary btn-sm" :disabled="loading || !canRunSimulation" @click="runSimulation">Run combined simulation ({{ disruptionCards.length }})</button>
       </div>
     </section>
-    <SimulatorImpactWorkspace :data="impactData" :event-id="selectedEventId" :result="result"
+    <section v-if="!result" class="pulse-card p-3 p-lg-4 align-self-start" aria-label="Start a simulation"><h5>Start a new simulation</h5><p>Choose an event, configure a member absence, facility outage or activity delay, then run the simulation to explore impacts and recovery plans.</p><p class="small text-muted mb-0">This is a hypothetical session. Saved recoveries, approvals and history remain available below.</p><p v-if="!loading && validationMessage" class="small mt-2 mb-0" role="status">{{ validationMessage }}</p></section>
+    <SimulatorImpactWorkspace v-if="result" :data="impactData" :event-id="selectedEventId" :result="result"
       :disruptions="result ? buildDisruptions() : []" :recovery="comparedRecovery" :loading="loading" />
     </div>
 
@@ -981,7 +1031,7 @@ function proposedVenueFor(segment) {
          SCENARIO-SPECIFIC RECOMMENDATIONS
     ==================================================== -->
 
-    <section id="simulator-recovery" class="recovery-planning-workspace mb-4" aria-label="Recovery planning workspace">
+    <section v-if="result" id="simulator-recovery" class="recovery-planning-workspace mb-4" aria-label="Recovery planning workspace">
     <section class="pulse-card p-3 p-lg-4 shadow-sm recovery-build" aria-label="Build your recovery">
 
       <div
@@ -1341,7 +1391,7 @@ function proposedVenueFor(segment) {
          PLAN COMPARISON
     ==================================================== -->
 
-    <div id="simulator-comparison" class="pulse-card p-4 shadow-sm">
+    <div v-if="result || selectedSavedRecovery" id="simulator-comparison" class="pulse-card p-4 shadow-sm">
 
       <div
         class="d-flex flex-wrap justify-content-between
@@ -1530,10 +1580,12 @@ function proposedVenueFor(segment) {
     </div>
 
     <!-- Review the comparison before confirming database recovery. -->
-    <SimulatorRecoveryWorkflow @operation-complete="activeComparison=$event==='Undone'?'original':'recovery'" @stage-change="workflowStage=$event" @review-saved="reviewSavedRecovery" :selected-recovery-id="selectedRecoveryId" @select-option="selectRecoveryPlan" :refresh-event="refreshSimulator" :refresh-version="invitationRefreshVersion" @invitations-changed="invitationRefreshVersion++" :data="data" :event-id="selectedEventId" :options="recoveryOptions"
+    <section aria-label="Saved Recoveries" class="mt-4"><h5>Saved Recoveries</h5><p class="small text-muted">Review saved plans, pending approvals, invitations and applied history independently of this hypothetical simulation.</p>
+    <SimulatorRecoveryWorkflow :session-version="sessionVersion" @operation-complete="activeComparison=$event==='Undone'?'original':'recovery'" @stage-change="workflowStage=$event" @review-saved="reviewSavedRecovery" :selected-recovery-id="selectedRecoveryId" @select-option="selectRecoveryPlan" :refresh-event="refreshSimulator" :refresh-version="invitationRefreshVersion" @invitations-changed="invitationRefreshVersion++" :data="data" :event-id="selectedEventId" :options="recoveryOptions"
       :disruptions="result ? buildDisruptions() : []" />
+    </section>
 
-    <PipMascot
+    <PipMascot v-if="result"
     class="simulation-pip"
     mode="simulation"
     :result="result"
