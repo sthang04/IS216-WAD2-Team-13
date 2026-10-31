@@ -3,6 +3,7 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import * as Vue from 'vue'
 import { parse, compileScript, compileTemplate } from 'vue/compiler-sfc'
+import {campusConnectFixture} from '../../e2e-simulator/fixtures/campusConnect.js'
 import { getSimulationTestData } from '../data/simulationTestData.js'
 import { runCompleteSimulation } from '../services/simulationService.js'
 import { prepareDisruptionCards, assessCombinedRecovery, buildCombinedRecoveryOptions } from '../services/combinedSimulationService.js'
@@ -12,7 +13,7 @@ import { evaluateRecoveryPlans } from '../services/recoveryPlanEvaluationService
 
 // Compile the real SFC and run its setup/lifecycle with a no-DOM Vue renderer.
 // Only the live loader is mocked. No server, browser, auth session or RPC is used.
-async function mountView() {
+async function mountView(fixture=getSimulationTestData()) {
   const source=readFileSync(new URL('./EventRiskView.vue',import.meta.url),'utf8')
   const {descriptor,errors}=parse(source,{filename:'EventRiskView.vue'})
   assert.deepEqual(errors,[])
@@ -20,9 +21,9 @@ async function mountView() {
   const template=compileTemplate({source:descriptor.template.content,filename:'EventRiskView.vue',id:'unified-risk',compilerOptions:{bindingMetadata:script.bindings}})
   assert.deepEqual(template.errors,[])
   const code=script.content.replace(/import[\s\S]*?from ['"][^'"]+['"];?/g,'').replace('export default','return')
-  const deps={ref:Vue.ref,shallowRef:Vue.shallowRef,computed:Vue.computed,onMounted:Vue.onMounted,watch:Vue.watch,nextTick:Vue.nextTick,loadSimulationData:async()=>getSimulationTestData(),runCompleteSimulation,
+  const deps={ref:Vue.ref,shallowRef:Vue.shallowRef,computed:Vue.computed,onMounted:Vue.onMounted,watch:Vue.watch,nextTick:Vue.nextTick,loadSimulationData:async()=>fixture,runCompleteSimulation,
     prepareDisruptionCards,assessCombinedRecovery,buildCombinedRecoveryOptions,evaluateRecoveryPlans,projectRecoveryPreview,presentSimulatorFacilities,
-    SimulatorImpactWorkspace:{render:()=>null},SimulatorInvitationInbox:{render:()=>null},SimulatorFacilitySetup:{render:()=>null},SimulatorCalendarActions:{render:()=>null},PipMascot:{render:()=>null},SimulatorRecoveryWorkflow:{render:()=>null},console:{log(){},error(){}}}
+    SimulatorCandidateChooser:{render:()=>null},SimulatorFacilityChoices:{render:()=>null},SimulatorImpactWorkspace:{render:()=>null},SimulatorInvitationInbox:{render:()=>null},SimulatorFacilitySetup:{render:()=>null},SimulatorCalendarActions:{render:()=>null},PipMascot:{render:()=>null},SimulatorRecoveryWorkflow:{render:()=>null},console:{log(){},error(){}}}
   const component=new Function(...Object.keys(deps),code)(...Object.values(deps))
   component.render=()=>null
   const renderer=Vue.createRenderer({insert(){},remove(){},createElement:()=>({}),createText:()=>({}),
@@ -99,5 +100,35 @@ test('selecting a candidate card changes the combined proposal and keeps actual 
    assert.deepEqual(s.comparisonSegments,s.selectedRecoveryPlan.proposedSegments)
   }
   assert.equal(JSON.stringify(s.data.segment_assignments),before)
+ }finally{view.app.unmount()}
+})
+
+
+test('facility choices replace incompatible venues and update the actual compared proposal',async()=>{
+ const d=campusConnectFixture();d.facilities.push({id:3,name:'Fixture third room',is_active:true,capacity:60})
+ d.facility_slots.push({...d.facility_slots[1],id:3,venue_name:'Fixture third room'});d.facility_bookings.push({...d.facility_bookings[1],id:3,facility_id:3})
+ const view=await mountView(d),s=view.state,before=JSON.stringify(d)
+ try{
+  const card=s.disruptionCards[0];card.type='FACILITY_UNAVAILABLE';card.start='2026-11-02T10:00';card.end='2026-11-02T10:30';s.runSimulation();await Vue.nextTick()
+  const options=s.combinedAssessment.facilityOptions.filter(o=>o.changes.some(c=>c.segmentId===1 && c.venueName))
+  assert.ok(options.length>=2)
+  await s.chooseFacility(options[0].id);await Vue.nextTick();assert.ok(s.selectedFacilityOptions.includes(options[0].id))
+  await s.chooseFacility(options[1].id);await Vue.nextTick();assert.deepEqual([...s.selectedFacilityOptions],[options[1].id])
+  assert.equal(s.selectedRecoveryPlan.changes.filter(c=>c.venueName).length,1)
+  assert.deepEqual(s.comparisonSegments,s.selectedRecoveryPlan.proposedSegments)
+  assert.equal(s.selectedRecoveryPlan.proposedVenues['1'],options[1].changes.find(c=>c.venueName).venueName)
+  assert.equal(JSON.stringify(d),before)
+ }finally{view.app.unmount()}
+})
+test('ranked selection is reflected by candidate details and subsequent combination uses that same member',async()=>{
+ const view=await mountView(),s=view.state
+ try{
+  const group=s.memberAssessments.find(g=>g.eligible.length>=2);assert.ok(group)
+  await s.selectCandidate(group,group.eligible[0]);await Vue.nextTick()
+  const other=s.rankedRecoveryPlans.find(p=>p.changes.some(c=>c.replacementMemberId===group.eligible[1].id));assert.ok(other)
+  s.selectRecoveryPlan(other.id);await Vue.nextTick()
+  assert.equal(s.previewMemberId(group.memberId),group.eligible[1].id)
+  s.adoptPreviewInputs();await Vue.nextTick()
+  assert.equal(s.replacementSelections[String(group.memberId)],group.eligible[1].id)
  }finally{view.app.unmount()}
 })

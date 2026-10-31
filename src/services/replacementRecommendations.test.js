@@ -98,7 +98,7 @@ test('live source is explicit, has no fixture fallback and uses the authorised r
   const view=readFileSync(new URL('../views/EventRiskView.vue',import.meta.url),'utf8')
   assert.doesNotMatch(loader,/import.*simulationTestData/)
   assert.match(loader,/source = 'supabase'/); assert.match(view,/source: 'supabase'/)
-  assert.match(loader,/loadEventReplacementRosters\(supabase, events\)/); assert.match(view,/replacementCoverage.warning/)
+  assert.match(loader,/loadEventReplacementRosters\(supabase, events\)/); assert.match(view,/showMemberAvailabilityWarning/); assert.match(view,/Candidate availability has not been confirmed/)
 })
 
 test('fixture contains a partial-role standby by default',()=>{

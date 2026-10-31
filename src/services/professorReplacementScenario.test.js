@@ -90,8 +90,9 @@ test('busy periods and simulated unavailability have distinct actual reasons',()
 })
 test('UI provides selectable candidates and preserves exclusion evidence',()=>{
   // Markup wiring guard; this is not a browser interaction test.
-  const source=readFileSync(new URL('../views/EventRiskView.vue',import.meta.url),'utf8')
+  const view=readFileSync(new URL('../views/EventRiskView.vue',import.meta.url),'utf8')
+  const source=readFileSync(new URL('../components/SimulatorCandidateChooser.vue',import.meta.url),'utf8')
   assert.match(source,/Show All Candidates/); assert.match(source,/Show Top 5/)
-  assert.match(source,/candidateAssessment.excluded/); assert.match(source,/conflict.eventName/)
-  assert.match(source,/Select replacement/); assert.match(source,/selectCandidate\(candidateAssessment,candidate\)/); assert.doesNotMatch(source,/openTelegramDispatch/)
+  assert.match(source,/assessment.excluded/); assert.match(source,/conflict.eventName/)
+  assert.match(source,/Use in recovery preview/); assert.match(view,/@use="selectCandidate\(assessment,\$event\)"/); assert.doesNotMatch(view,/openTelegramDispatch/)
 })

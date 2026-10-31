@@ -70,6 +70,6 @@ test('combined member/facility recommendations retain the relevant roster warnin
   await page.getByLabel(label,{exact:true}).nth(0).fill(value);await page.getByLabel(label,{exact:true}).nth(1).fill(value)
  }
  await page.getByRole('button',{name:'Run combined simulation (2)',exact:true}).click()
- await expect(page.getByText(/Club roster loaded. Timetable coverage is incomplete/)).toBeVisible()
+ await expect(page.getByText('Candidate availability has not been confirmed. Check with your selected replacement before proceeding.',{exact:true})).toBeVisible()
  await expect(page.getByTestId('facility-alternative')).toHaveCount(1)
 })

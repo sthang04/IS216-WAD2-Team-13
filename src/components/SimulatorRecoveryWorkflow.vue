@@ -49,6 +49,10 @@ const preview=computed(()=>{
 const readiness=computed(()=>{void clock.value;return workflowReadiness({enabled:applicationEnabled.value,plan:plan.value,invites:history.value.invitations,manualAcknowledged:manualAcknowledged.value})})
 const tracker=computed(()=>{void clock.value;return buildRecoveryTracker({plan:plan.value,invitations:history.value.invitations,audit:history.value.audit,manualAcknowledged:manualAcknowledged.value,enabled:applicationEnabled.value,data:props.data,now:clock.value})})
 const applyReady=computed(()=>!historyLoading.value && !historyError.value && readiness.value.ready && tracker.value.status==='Ready to apply')
+const savedFilter=ref('All')
+const savedCategory=item=>{const t=savedTracker(item);return item.application_status==='Applied'?'Applied':item.application_status==='Undone' || item.application_status==='Cancelled' || ['Stale or blocked','Rejected or expired'].includes(t.status)?'Other':t.requirementsReady?'Ready to Apply':'Pending'}
+const visibleSaved=computed(()=>history.value.plans.filter(p=>savedFilter.value==='All' || savedCategory(p)===savedFilter.value))
+const recoveryNotice=computed(()=>historyError.value || (!enabled?'Live updates are unavailable in this environment. You can safely explore scenarios and compare proposals.':capabilityError.value?'Recovery readiness could not be verified. Refresh requirements or contact the club manager.':!plan.value && !invitationEnabled.value?'Preparing recovery requests is unavailable in this environment. Compare proposals now and ask a club manager about activation.':plan.value && !applicationEnabled.value?'Applying and undoing recovery are unavailable in this environment. Requirements may still be reviewed.':'') )
 function savedTracker(item){return buildRecoveryTracker({plan:item,invitations:history.value.invitations,audit:history.value.audit,data:props.data})}
 watch([()=>tracker.value.status,plan],()=>{emit('stage-change',plan.value?tracker.value.status:'Draft');emit('review-saved',plan.value || null)})
 const incomingStatus=computed(()=>effectiveInvitationStatus(incoming.value,clock.value))
@@ -207,25 +211,21 @@ onUnmounted(()=>{disposed=true;++contextEpoch;++historyVersion;++incomingVersion
 
 <template>
   <section id="simulator-recovery-workflow" tabindex="-1" class="pulse-card p-3 p-lg-4 shadow-sm mt-4 mb-4" aria-label="Persisted recovery workflow" :data-selected-recovery="selectedOptionId">
-    <h5 class="fw-bold">Review and apply recovery</h5>
+<div class="d-flex flex-wrap justify-content-between align-items-start gap-2"><h5 class="fw-bold">Recovery Workspace</h5><span class="badge bg-light text-dark border">{{ plan ? tracker.status : 'Draft' }}</span></div>
     <p class="small text-muted">Prepare the selected proposal, complete its approvals, then confirm. Undo restores the original schedule only after safety checks pass.</p>
-    <div v-if="!enabled" class="alert alert-warning small" role="status">
-      Live updates are unavailable in this environment. You can safely explore scenarios and compare proposals.
-    </div>
-    <p v-if="enabled && !applicationEnabled" class="small text-warning" role="status">Applying and undoing recovery are unavailable until this environment is activated and verified.</p>
-    <p v-if="enabled && !invitationEnabled" class="small text-warning">Preparing new saved recoveries, associating bookings and sending invitations are currently unavailable. Existing eligible saved recoveries can still be reviewed.</p>
-
+    <p v-if="recoveryNotice" class="small recovery-notice rounded p-2" role="status">{{ recoveryNotice }}</p>
     <div v-if="error" class="alert alert-danger" role="alert">{{ error }}</div>
     <div v-if="message" class="alert alert-info" role="status">{{ message }}</div>
     <div v-if="busy" class="small my-2" role="status" aria-live="polite"><span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>Running {{ busyAction }}; waiting for the server and refresh.</div>
     <div v-if="refreshWarning" class="alert alert-warning small" role="status">{{ refreshWarning }}</div>
-    <div v-if="historyError" class="alert alert-warning small" role="status">{{ historyError }}</div>
+
     <div v-if="invitationError" class="alert alert-warning small" role="status">{{ invitationError }}</div>
     <label v-if="selectedRecoveryId===null" for="persisted-option" class="small fw-bold">Recovery option to preview</label>
     <select v-if="selectedRecoveryId===null" id="persisted-option" v-model="selectedOptionId" :disabled="busy" class="form-select form-select-sm mb-3">
       <option value="">Select an option</option>
       <option v-for="option in options" :key="option.id" :value="option.id">{{ option.title }}</option>
     </select>
+    <p v-if="!plan && !selectedOption" class="small text-muted">Choose and compare a ranked proposal above to prepare recovery requests.</p>
     <p v-if="selectedOption && !plan" class="small fw-bold">Selected proposal: {{ selectedOption.title }}</p>
     <div v-for="change in !plan ? selectedOption?.changes || [] : []" :key="change.segmentId+':'+(change.assignmentId||'time')" class="small border-bottom py-2">
       <strong>{{ activityName(change.segmentId) }}</strong>
@@ -249,9 +249,9 @@ onUnmounted(()=>{disposed=true;++contextEpoch;++historyVersion;++incomingVersion
       <div>Status: {{ bookingDetails(change).status }}. {{ bookingDetails(change).reasons.join(' ') }}</div>
       <div>Capacity: {{ bookingDetails(change).capacity ?? 'Unverified' }}. Equipment: {{ bookingDetails(change).equipment?.join(', ') || 'Unverified' }}.</div>
     </div>
-    <p class="small text-muted mt-2">Use the existing <RouterLink to="/facilities">Master Facility Calendar</RouterLink> for claims, waitlists and OSL approval. A pending claim is not approved. This panel never creates or reverses bookings.</p>
+    <p v-if="venueChanges.length || plan?.changes?.some(c=>c.venueName || c.facilityBookingId)" class="small text-muted mt-2">Use the existing <RouterLink to="/facilities">Master Facility Calendar</RouterLink> for claims, waitlists and OSL approval. A pending claim is not approved. This panel never creates or reverses bookings.</p>
     <p v-if="selectedOption && !plan && preview.error" class="small text-warning">{{ preview.error }}</p>
-    <details v-if="preview.draft && !plan" class="small my-2"><summary>Exact original and proposed records (local preview)</summary><pre class="overflow-auto">{{ JSON.stringify({before:preview.draft.expectedState,after:preview.after},null,2) }}</pre></details>
+
     
     <div v-if="pendingAction" class="recovery-dialog-backdrop" @keydown.esc="pendingAction=null;confirmed=false">
     <div ref="actionDialog" tabindex="-1" role="dialog" aria-label="Action confirmation" aria-modal="true" aria-describedby="recovery-confirm-title" class="pulse-card p-4 recovery-dialog" @keydown.tab="trapConfirmationFocus">
@@ -262,7 +262,7 @@ onUnmounted(()=>{disposed=true;++contextEpoch;++historyVersion;++incomingVersion
       <button type="button" class="btn btn-outline-secondary btn-sm ms-2" :disabled="busy" @click="pendingAction=null;confirmed=false">Dismiss action</button>
     </div></div>
 
-    <label class="d-block small my-2"><input v-model="manualAcknowledged" type="checkbox"> I manually checked personal availability, qualifications and facility suitability; incomplete data is not proof of availability.</label>
+    <label v-if="plan && (plan.application_status==='Applied' || tracker.requirementsReady)" class="d-block small my-2"><input v-model="manualAcknowledged" type="checkbox"> I manually checked personal availability, qualifications and facility suitability; incomplete data is not proof of availability.</label>
     <button v-if="!plan" class="btn btn-outline-primary btn-sm me-2" :disabled="!invitationEnabled || busy || !preview.draft" @click="startPlan">Prepare recovery requests</button>
     <button class="btn btn-outline-secondary btn-sm" :disabled="historyLoading || busy" @click="refreshHistory">{{ historyLoading ? 'Refreshing history...' : 'Refresh persisted history' }}</button>
     <details class="small my-2"><summary>Saved recovery status guide</summary><p class="small text-muted mt-2">Persisted history: {{ history.plans.length }} plans loaded (read-only refresh; mutations remain gated). In Progress / Ready to Confirm / Resolved / Cancelled / Undone are separate from simulation feasibility.</p></details>
@@ -270,12 +270,14 @@ onUnmounted(()=>{disposed=true;++contextEpoch;++historyVersion;++incomingVersion
       <h6 class="fw-bold">Pending and saved recoveries</h6>
       <p class="small text-muted">Proposals stay separate from the live schedule. Revisit a recovery below or refresh to check approvals.</p>
       <p v-if="!historyLoading && !history.plans.length" class="small">No saved recoveries are available for this event.</p>
-      <div class="table-responsive" v-if="history.plans.length"><table class="table table-sm align-middle small">
+      <div class="d-flex flex-wrap gap-2 my-2" role="group" aria-label="Saved recovery views"><button v-for="view in ['All','Pending','Ready to Apply','Applied','Other']" :key="view" type="button" class="btn btn-outline-secondary btn-sm" :aria-pressed="savedFilter===view" @click="savedFilter=view">{{ view }}</button></div>
+      <p v-if="history.plans.length && !visibleSaved.length" class="small text-muted">No recoveries in this view.</p>
+      <div class="table-responsive" v-if="visibleSaved.length"><table class="table table-sm align-middle small">
        <thead><tr><th scope="col">Recovery proposal</th><th scope="col">Status</th><th scope="col">Next action</th><th scope="col">Review</th></tr></thead>
-       <tbody><tr v-for="item in history.plans" :key="item.id" :class="{'table-active':selectedPlanId===item.id}"><td>{{ item.title }}</td><td>{{ savedTracker(item).status }}</td><td>{{ savedTracker(item).nextAction }}</td><td><button type="button" class="btn btn-outline-secondary btn-sm" :disabled="busy" :aria-pressed="selectedPlanId===item.id" :data-saved-plan-id="item.id" @click="selectedPlanId=item.id">Review saved recovery</button></td></tr></tbody>
+       <tbody><tr v-for="item in visibleSaved" :key="item.id" :class="{'table-active':selectedPlanId===item.id}"><td>{{ item.title }}</td><td>{{ savedTracker(item).requirementsReady ? 'Ready for final review' : savedTracker(item).status }}</td><td>{{ savedTracker(item).nextAction }}</td><td><button type="button" class="btn btn-outline-secondary btn-sm" :disabled="busy" :aria-pressed="selectedPlanId===item.id" :data-saved-plan-id="item.id" @click="selectedPlanId=item.id">Review saved recovery</button></td></tr></tbody>
       </table></div>
     </section>
-    <section v-if="plan" class="recovery-requirements border rounded p-3 mb-3" aria-label="Pending recovery requirements">
+    <section id="recovery-requirements" tabindex="-1" v-if="plan" class="recovery-requirements border rounded p-3 mb-3" aria-label="Pending recovery requirements">
       <div class="d-flex flex-wrap justify-content-between gap-2"><h6 class="fw-bold">{{ plan.title }}</h6><span class="badge bg-light text-dark border">{{ tracker.status }}</span></div>
       <p class="small">{{ tracker.nextAction }}</p>
       <p class="small">{{ tracker.satisfied }} of {{ tracker.total }} recorded requirements satisfied. The server revalidates everything before Apply.</p>
@@ -287,11 +289,8 @@ onUnmounted(()=>{disposed=true;++contextEpoch;++historyVersion;++incomingVersion
     <div v-if="plan" class="small border rounded p-2 my-2">
       <div class="d-flex flex-wrap align-items-center gap-2 mb-2"><strong>Selected saved plan: {{ plan.title }}</strong><span class="badge bg-light text-dark border">{{ displayStatus(plan) }}</span></div>
       <div v-for="(change,i) in plan.changes" :key="'saved-change-'+i" class="py-1"><strong>{{ activityName(change.segmentId) }}</strong><span v-if="change.venueName">: {{ change.venueName }}</span><span v-if="change.replacementMemberId!=null">: {{ memberName(change.replacedMemberId) }} to {{ memberName(change.replacementMemberId) }}</span><span v-if="change.starts_at || change.ends_at">: {{ localTime(change.starts_at) }} to {{ localTime(change.ends_at) }}</span></div>
-      <div>Ready to Confirm means prerequisites are recorded; the server must still check freshness and conflicts.</div>
+
       <div v-for="blocker in plan.blockers || []" :key="blocker">{{ blocker }}</div>
-      <div v-for="action in plan.actions || []" :key="action.action+':'+action.kind">
-        {{ action.kind }} | {{ activityName(action.segmentId) }}: {{ action.status }}
-      </div>
       <div v-if="plan.application_status==='Draft'">Notification delivery is pending integration. Consent must be recorded inside Pulse; no Telegram message is sent.</div>
     </div>
     <div v-for="change in plan?.changes?.filter(c => c.venueName) || []" :key="'claim-'+change.segmentId" class="small border rounded p-2 my-2">
@@ -335,17 +334,19 @@ onUnmounted(()=>{disposed=true;++contextEpoch;++historyVersion;++incomingVersion
       </div>
     </div>
     <ul v-if="plan?.application_status==='Draft'" class="small text-muted mt-3"><li v-for="reason in readiness.reasons" :key="reason">{{ reason.replace(/replacement member (\d+)/g,(_,id)=>'replacement '+memberName(id)).replace(/activity (\d+)/g,(_,id)=>activityName(id)) }}</li></ul>
-    <button v-if="!plan || plan.application_status==='Draft'" class="btn btn-success btn-sm me-2" :disabled="busy || !applyReady" @click="applyPlan">Apply selected recovery</button>
+    <a v-if="plan?.application_status==='Draft' && !tracker.requirementsReady" href="#recovery-requirements" class="btn btn-pulse-primary btn-sm me-2">Review outstanding requirements</a>
+    <button v-if="plan?.application_status==='Draft' && tracker.requirementsReady" class="btn btn-success btn-sm me-2" :disabled="busy || !applyReady" @click="applyPlan">Apply selected recovery</button>
     <button v-if="plan?.application_status==='Draft'" class="btn btn-outline-danger btn-sm me-2" :disabled="!invitationEnabled || busy || plan?.application_status!=='Draft'" @click="cancelPlan">Cancel Recovery Plan</button>
     <button v-if="plan?.application_status==='Applied'" class="btn btn-outline-danger btn-sm" :disabled="!applicationEnabled || busy || !manualAcknowledged || !undoStatus.ready" @click="undoPlan">Undo Recovery Plan</button>
     <p v-if="plan?.application_status==='Applied'" class="small text-muted mt-2">Undo: {{ undoStatus.reason }} External Telegram messages cannot be retracted. Invalid or transferred original bookings require manual recovery.</p>
+
+    <details class="small mt-4 recovery-support"><summary>Support diagnostics and audit history</summary>
+    <details v-if="preview.draft && !plan" class="small my-2"><summary>Exact original and proposed records (local preview)</summary><pre class="overflow-auto">{{ JSON.stringify({before:preview.draft.expectedState,after:preview.after},null,2) }}</pre></details>
     <details v-if="plan?.after_state" class="small"><summary>Undo preview: recorded applied state to original state</summary><pre class="overflow-auto">{{ JSON.stringify({from:plan.after_state,to:plan.before_state},null,2) }}</pre></details>
-    <details class="small mb-2"><summary>Support diagnostics</summary>
       <p>Backend application gate: {{ capabilities?.application_enabled ?? 'unverified' }}. Invitation gate: {{ capabilities?.invitations_enabled ?? 'unverified' }}.</p>
       <p>{{ capabilityError }}</p>
       <p>Event {{ eventId }} | Club {{ eventClubId }} | Plan {{ plan?.id || 'not selected' }} | Revision {{ plan?.version }}</p>
-    </details>
-    <details class="small mt-3"><summary>Technical audit history</summary><div v-for="entry in history.audit" :key="entry.id" class="small text-muted">{{ entry.created_at }} | {{ entry.action }} | {{ entry.outcome }} | {{ entry.details }}</div></details>
+    <details class="small mt-3"><summary>Technical audit history</summary><div v-for="entry in history.audit" :key="entry.id" class="small text-muted">{{ entry.created_at }} | {{ entry.action }} | {{ entry.outcome }} | {{ entry.details }}</div></details></details>
   </section>
 </template>
 
@@ -353,4 +354,5 @@ onUnmounted(()=>{disposed=true;++contextEpoch;++historyVersion;++incomingVersion
 .recovery-dialog-backdrop{position:fixed;inset:0;z-index:1090;background:#0008;display:flex;align-items:center;justify-content:center;padding:1rem}
 .recovery-dialog{width:min(100%,36rem);max-height:90vh;overflow:auto}.recovery-dialog button{margin-top:.75rem}
 .recovery-requirements table{min-width:42rem}.table th{white-space:nowrap}.table td{max-width:20rem;overflow-wrap:anywhere}
+.recovery-notice{background:var(--pulse-bg);border:1px solid var(--pulse-border)}.recovery-support{color:var(--pulse-ink-muted);font-size:.75rem}
 </style>
