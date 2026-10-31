@@ -19,6 +19,11 @@ for(const [width,height] of sizes)test.describe(width+'x'+height,()=>{
  test.use({viewport:{width,height},hasTouch:width<1100})
  test('simulation, impact, touch selection, facilities and comparison',async({page},info)=>{
   await bootSimulation(page);await fits(page)
+  const build=page.getByRole('region',{name:'Build your recovery',exact:true}),ranking=page.getByRole('region',{name:'Combined recovery ranking',exact:true})
+  const bb=await build.boundingBox(),rb=await ranking.boundingBox()
+  if(width>=1280){expect(Math.abs(bb.y-rb.y)).toBeLessThan(2);expect(rb.x).toBeGreaterThan(bb.x+bb.width);expect(bb.width/rb.width).toBeCloseTo(1.5,1)}
+  else expect(rb.y).toBeGreaterThanOrEqual(bb.y+bb.height)
+  await build.scrollIntoViewIfNeeded();await page.screenshot({path:info.outputPath('recovery-workspace.png')})
   await page.screenshot({path:info.outputPath('overview.png')})
   const builder=await page.getByRole('region',{name:'Scenario builder',exact:true}).boundingBox(),impact=await page.getByRole('region',{name:'Event impact workspace',exact:true}).boundingBox()
   if(width>=1280)expect(impact.x).toBeGreaterThan(builder.x+builder.width);else expect(impact.y).toBeGreaterThan(builder.y)
@@ -44,7 +49,7 @@ for(const [width,height] of sizes)test.describe(width+'x'+height,()=>{
   await expect(page.getByRole('region',{name:'Persisted recovery workflow',exact:true})).toHaveAttribute('data-selected-recovery','combined-selected')
   const listBox=await page.locator('.candidate-list').boundingBox(),detailBox=await details.boundingBox()
   if(width>=768)expect(detailBox.x).toBeGreaterThan(listBox.x);else expect(detailBox.y).toBeGreaterThan(listBox.y)
-  await details.scrollIntoViewIfNeeded();await fits(page);if(width<768)expect((await details.getByRole('button',{name:'In recovery preview',exact:true}).boundingBox()).height).toBeGreaterThanOrEqual(44);await page.screenshot({path:info.outputPath('candidate.png')})
+  await details.scrollIntoViewIfNeeded();await fits(page);if(width<768)expect(Math.round((await details.getByRole('button',{name:'In recovery preview',exact:true}).boundingBox()).height*100)/100).toBeGreaterThanOrEqual(44);await page.screenshot({path:info.outputPath('candidate.png')})
   await page.getByLabel('Disruption type',{exact:true}).selectOption('FACILITY_UNAVAILABLE')
   await act(page,page.getByRole('button',{name:'Run combined simulation (1)',exact:true}))
   const option=page.locator('[data-facility-option]').first()

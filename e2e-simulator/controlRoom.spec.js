@@ -160,6 +160,10 @@ test('mixed member and room disruptions select one complete recovery across comp
   await card.getByRole('button',{name:'Select this plan',exact:true}).click()
   await expect(page.getByRole('region',{name:'Persisted recovery workflow',exact:true})).toHaveAttribute('data-selected-recovery',id)
   const title=await card.getAttribute('data-plan-title')
+  const expectedMember=(await card.textContent()).includes('with Fixture exact standby')?'Fixture exact standby':'Fixture review standby'
+  await expect(page.getByRole('region',{name:'Candidate details',exact:true})).toContainText(expectedMember)
+  await expect(page.locator('[data-facility-option].chosen')).toHaveCount(1)
+  await expect(page.getByRole('region',{name:'Build your recovery',exact:true})).toContainText(title)
   await expect(page.locator('#simulator-comparison')).toContainText(title)
   await page.getByRole('button',{name:'Preview selected recovery',exact:true}).click()
   await expect(page.getByLabel('Visualization proposal')).toContainText(title)
