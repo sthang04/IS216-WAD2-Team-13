@@ -968,7 +968,8 @@ function proposedVenueFor(segment) {
          SCENARIO-SPECIFIC RECOMMENDATIONS
     ==================================================== -->
 
-    <div id="simulator-recovery" class="pulse-card p-4 shadow-sm mb-4">
+    <section id="simulator-recovery" class="recovery-planning-workspace mb-4" aria-label="Recovery planning workspace">
+    <section class="pulse-card p-3 p-lg-4 shadow-sm recovery-build" aria-label="Build your recovery">
 
       <div
         class="d-flex flex-wrap justify-content-between
@@ -983,7 +984,7 @@ function proposedVenueFor(segment) {
           </span>
 
           <h5 class="fw-bold mb-0">
-            {{ recommendationTitle }}
+            Build your recovery
           </h5>
         </div>
 
@@ -998,6 +999,8 @@ function proposedVenueFor(segment) {
         </span>
       </div>
 
+      <p class="small text-muted">{{ recommendationTitle }}. Adjust individual options here, or select a complete proposal in the combined ranking.</p>
+      <p class="small recovery-selection-summary" role="status"><template v-if="selectedRecoveryPlan"><strong>Current preview: {{ selectedRecoveryPlan.title }}</strong><br>Selected options are highlighted below. Adjusting a choice recalculates a custom recovery; it does not change the live event.</template><template v-else>Choose member and facility options, or select a ranked recovery to start your preview.</template></p>
       <p v-if="showMemberAvailabilityWarning" class="small text-muted" role="status">Candidate availability has not been confirmed. Check with your selected replacement before proceeding.</p>
 
       <p
@@ -1009,12 +1012,12 @@ function proposedVenueFor(segment) {
 
       <template v-if="result"><SimulatorCandidateChooser v-for="assessment in memberAssessments" :key="assessment.memberId" :assessment="assessment" :selected-id="previewMemberId(assessment.memberId)" @use="selectCandidate(assessment,$event)" /></template>
       <SimulatorFacilityChoices v-if="result && hasFacilityDisruptions" :recommendations="facilityRecovery" :options="combinedAssessment.facilityOptions" :ranked-plans="rankedRecoveryPlans" :selected="displayedFacilityChoices" :data="data" :event="selectedEvent" @choose="chooseFacility" />
-    </div>
+    </section>
     <!-- ===================================================
          RECOVERY PLAN EVALUATION RESULTS
     ==================================================== -->
 
-    <div class="pulse-card p-4 shadow-sm mb-4">
+    <section class="pulse-card p-3 p-lg-4 shadow-sm recovery-ranking" aria-label="Combined recovery ranking">
 
       <div
         class="d-flex flex-wrap justify-content-between
@@ -1025,11 +1028,11 @@ function proposedVenueFor(segment) {
             class="text-uppercase fw-bold text-primary small"
             style="font-size: 0.65rem;"
           >
-            Explore recovery
+            Compare complete proposals
           </span>
 
           <h5 class="fw-bold mb-0">
-            Recovery Plan Ranking
+            Combined recovery ranking
           </h5>
         </div>
 
@@ -1127,7 +1130,7 @@ function proposedVenueFor(segment) {
           </div>
         </div>
 
-        <p class="small text-muted">Overall options combine available building blocks and are checked against all selected disruptions. Search is limited to four choices per requirement and 64 combinations; this is not an exhaustive optimum. Individual member and facility suggestions remain available above. Missing choices and unresolved conflicts require organizer review.</p>
+        <p class="small text-muted">Overall options combine available building blocks and are checked against all selected disruptions. Search is limited to four choices per requirement and 64 combinations; this is not an exhaustive optimum. Individual member and facility suggestions remain available in Build your recovery. Missing choices and unresolved conflicts require organizer review.</p>
         <!-- RANKED EVALUATED OPTIONS -->
 
         <div
@@ -1165,6 +1168,7 @@ function proposedVenueFor(segment) {
             {{ plan.score }}/100
           </div>
 
+          <p class="small mb-2">{{ plan.conflicts.length }} unresolved conflict(s) in accessible records; {{ plan.warnings.length }} verification item(s).</p>
           <p class="small text-muted">{{ plan.kind==='combined' ? 'Combined member, facility and timing choices evaluated together.' : plan.kind==='custom' ? 'Custom selection recalculated against every disruption.' : 'Individual building block; other disruptions may remain unresolved.' }} Ranking is not approval.</p><button type="button" class="btn btn-pulse-primary btn-sm mb-3" :aria-pressed="selectedRecoveryId===plan.id" @click="selectRecoveryPlan(plan.id)">{{ selectedRecoveryId===plan.id ? 'Selected plan' : 'Select this plan' }}</button>
           <p class="small" v-if="plan.changes.some(c=>c.replacementMemberId!=null)">Member acceptance and organizer confirmation required before Apply.</p>
           <p class="small" v-if="plan.changes.some(c=>c.venueName)">Approved booking evidence, capacity and equipment verification required before Apply.</p>
@@ -1175,7 +1179,7 @@ function proposedVenueFor(segment) {
             <span v-if="change.replacementMemberId!=null">: replace {{ data.members.find(m => String(m.id)===String(change.replacedMemberId))?.full_name || 'assigned member' }} with {{ data.members.find(m => String(m.id)===String(change.replacementMemberId))?.full_name || 'replacement member' }}</span>
           </li></ul>
           <details class="small"><summary>Checks and score breakdown</summary>
-          <div class="row g-2 small mb-2 mt-2">
+          <div class="row g-2 small mb-2 mt-2 recovery-score-grid">
 
             <div class="col-6 col-md-3">
               <div class="bg-light p-2 rounded">
@@ -1310,10 +1314,8 @@ function proposedVenueFor(segment) {
         </div>
 
       </template>
-    </div>
-
-
-
+    </section>
+    </section>
 
     <!-- ===================================================
          PLAN COMPARISON
@@ -1546,4 +1548,8 @@ function proposedVenueFor(segment) {
 .simulator-page{padding-bottom:6rem!important;overflow-wrap:anywhere}
 .simulator-page :deep(.sim-row-label){min-height:44px}
 }
+.recovery-planning-workspace{display:grid;grid-template-columns:minmax(0,1fr);gap:1.25rem;align-items:start}
+.recovery-build,.recovery-ranking{min-width:0;overflow-wrap:anywhere}
+.recovery-selection-summary{padding:.85rem;border:1px solid var(--pulse-border);border-radius:.65rem;background:var(--pulse-bg)}
+@media(min-width:1200px){.recovery-planning-workspace{grid-template-columns:minmax(0,3fr) minmax(0,2fr)}.recovery-score-grid>.col-md-3{width:50%}}
 </style>
