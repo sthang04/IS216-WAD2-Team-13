@@ -4,8 +4,8 @@
   PURPOSE:
   Load the data needed by the What-If Simulator.
 
-  LOCAL MODE:
-  - Uses our existing test data while event-table RLS is being prepared.
+  TEST DATA:
+  - Automated tests import fixtures directly; this loader never supplies them.
 
   SUPABASE MODE:
   - Uses the logged-in user's Supabase session.
@@ -13,40 +13,25 @@
   - Includes facility bookings on the event dates to check clashes.
 
   IMPORTANT:
-  - This service only performs SELECT queries.
+  - This service performs SELECT queries and the read-only roster RPC.
   - It never changes real bookings, members, or event schedules.
-  - It never bypasses RLS or uses a service-role key.
+  - It uses the caller session, never a service-role key. The roster RPC performs explicit server authorization.
   - Live mode does NOT fall back to test data when a query fails.
 */
 
 import { supabase, isSupabaseConfigured } from '../supabase'
-import { getSimulationTestData } from '../data/simulationTestData.js'
+import { loadEventReplacementRosters } from './simulatorRosterService.js'
+import { readSimulatorRows } from './simulatorPaginationService.js'
 
-// Supabase projects may limit how many rows one query returns.
-// Fail clearly rather than running a simulation on a truncated result.
-const MAX_ROWS = 1000
 
-async function readRows(table, configureQuery) {
-  let query = supabase.from(table).select('*').limit(MAX_ROWS)
-  if (configureQuery) query = configureQuery(query)
-
-  const { data, error } = await query
-
-  if (error) {
-    throw new Error(`Could not load ${table}: ${error.message}`)
-  }
-
-  if ((data?.length ?? 0) === MAX_ROWS) {
-    throw new Error(
-      `Too many ${table} records for this loader. Add pagination before using live mode.`
-    )
-  }
-
-  return data ?? []
+// Keep all simulator reads on the shared authenticated client. The helper
+// verifies pagination/counts; it never assumes that a short page is complete.
+async function readRows(table, configureQuery, columns = '*') {
+  return readSimulatorRows(supabase, table, configureQuery, columns)
 }
 
 // Convert a timestamp to its Singapore calendar date (YYYY-MM-DD).
-// Facility bookings use event_date rather than a timestamp.
+// Facility bookings use booking_date rather than a timestamp.
 function singaporeDate(timestamp) {
   const date = new Date(timestamp)
 
@@ -75,7 +60,7 @@ export async function loadLiveSimulationData() {
 
   if (!isSupabaseConfigured() || !supabase) {
     throw new Error(
-      'Supabase is not configured. Use local simulation mode for now.'
+      'Supabase is not configured. Live event data cannot be loaded.'
     )
   }
 
@@ -138,24 +123,32 @@ export async function loadLiveSimulationData() {
       ),
 
       readRows(
-        'segment_facility_slots',
+        'segment_facility_bookings',
         query => query.in('segment_id', segmentIds)
       )
 
     ])
 
-  // Retrieve assigned members instead of loading
-  // the entire members table.
+  // The RPC checks the authenticated caller and resolves each event's club.
+  // It starts from active membership, so no existing assignment is required.
+  // A failed request is a real loading error; never fall back to fake members.
+  const roster = await loadEventReplacementRosters(supabase, events)
+
+  // Keep assigned members for impact analysis, including records outside the
+  // replacement pool. Only RPC membership evidence makes a candidate eligible.
   const memberIds = [
     ...new Set(assignments.map(row => row.member_id))
   ]
 
-  const members = memberIds.length
+  const assignedMembers = memberIds.length
     ? await readRows(
         'members',
-        query => query.in('id', memberIds)
+        query => query.in('id', memberIds),
+        'id, full_name'
       )
     : []
+  const members = [...new Map([...assignedMembers, ...roster.members]
+    .map(member => [String(member.id), member])).values()]
 
   // ==========================================
   // STEP 3: LOAD FACILITY BOOKINGS
@@ -164,7 +157,7 @@ export async function loadLiveSimulationData() {
   // Include bookings on relevant event dates.
   // These help identify possible clashes with other CCAs.
   //
-  // The facility_slots RLS policy determines
+  // The facility_bookings RLS policy determines
   // which bookings the logged-in user can see.
 
   const dates = [
@@ -195,32 +188,67 @@ export async function loadLiveSimulationData() {
         .toISOString().slice(0, 10)
     : null
 
-  const facilitySlots = dates.length
-    ? await readRows(
-        'facility_slots',
-        query => query
-          .gte('event_date', coverageStart)
-          .lte('event_date', coverageEnd)
-      )
-    : []
+  // Shared master-calendar schema introduced by the main branch.
+  // Fetch facilities separately so we do not depend on PostgREST FK joins.
+  const [bookings, facilities] = await Promise.all([
+    dates.length
+      ? readRows('facility_bookings', query => query
+          .gte('booking_date', coverageStart)
+          .lte('booking_date', coverageEnd))
+      : Promise.resolve([]),
+    readRows('facilities',query=>query.eq('is_active',true))
+  ])
 
+  const facilitiesById = new Map(
+    facilities.map(facility => [String(facility.id), facility])
+  )
+
+  // Preserve the legacy shape consumed by the simulation/recovery services.
+  // Keep the actual booking and facility IDs for future write operations.
+  const facilitySlots = bookings.map(booking => {
+    const facility = facilitiesById.get(String(booking.facility_id))
+    // Keep legacy HH:mm display compatibility; raw calendar fields above retain
+    // seconds for the recommendation/evaluation evidence parser.
+    const hhmm = value => String(value || '').slice(0,5)
+    return {
+      ...booking,
+      venue_name: facility?.name || null,
+      venue_type: facility?.facility_type || null,
+      building_location: facility?.location || null,
+      event_date: booking.booking_date,
+      time_slot: `${hhmm(booking.start_time)} - ${hhmm(booking.end_time)}`,
+      owner_club_id: booking.owner_club_id,
+      facility_id: booking.facility_id
+    }
+  })
+
+  const normalizedFacilityLinks = facilityLinks.map(link => ({
+    ...link,
+    facility_slot_id: link.booking_id
+  }))
+
+  // The absence of a booking in an RLS-filtered result is NOT proof that a room is free. Booking writes need server-side verification.
   // ==========================================
   // STEP 4: RETURN DATA TO THE SIMULATOR
   // ==========================================
 
   // Return the same data structure as simulationTestData.js.
-  //
   // This allows simulationService.js to work with either
   // local test data or authorised Supabase data.
 
   return {
-    events,
+    events: roster.events,
     members,
+    replacement_memberships: roster.replacement_memberships,
+    member_replacement_coverage: roster.member_replacement_coverage,
     event_segments: eventSegments,
     segment_assignments: assignments,
     segment_dependencies: dependencies,
-    segment_facility_slots: facilityLinks,
+    segment_facility_slots: normalizedFacilityLinks,
     facility_slots: facilitySlots,
+    facilities,
+    facility_bookings: bookings,
+    segment_facility_bookings: facilityLinks,
     // This is the query window, not a guarantee that RLS exposed
     // every CCA's reservation. RLS must be verified separately.
     facility_booking_coverage: {
@@ -234,17 +262,15 @@ export async function loadLiveSimulationData() {
 // STEP 5: CHOOSE THE DATA SOURCE
 // ==========================================
 
-// Default to local test data until the team
-// approves the event-table SELECT policies.
+// Live errors never fall back to fixtures; tests import fixtures directly.
 
 export async function loadSimulationData({
-  source = 'local'
+  source = 'supabase'
 } = {}) {
 
-  // LOCAL MODE:
-  // Continue testing the simulator without Supabase.
+  // Local fixtures are imported directly by automated tests, never by live views.
   if (source === 'local') {
-    return getSimulationTestData()
+    throw new Error('Local fixtures are test-only. The simulator uses real Supabase data.')
   }
 
   // LIVE MODE:

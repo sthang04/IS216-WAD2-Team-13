@@ -23,7 +23,7 @@ IMPORTANT:
 
 */
 
-// 29.10 src/data/simulationTestData.js is a development reference. It won't affect live simulator as long as nothing imports or calls it.
+// Automated tests import fixtures directly; the live loader never imports this module.
 
 
 // 1. EVENTS
@@ -201,10 +201,26 @@ const segment_dependencies = [
 
 export function getSimulationTestData() {
   return structuredClone({
-    events,
-    members,
-    event_segments,
-    segment_assignments,
+    events: [...events.map(e => ({ ...e, club_id: 1 })), { id: 2, club_id: 1, name: 'Standby history' }],
+    members: [...members, ...[[6,'Exact standby'],[7,'Partial standby'],[8,'Nonmatching standby'],
+      [9,'Unassigned standby'],[10,'Busy dancer'],[11,'Inactive dancer'],[12,'Other club dancer'],
+      [13,'Unavailable dancer'],[14,'High workload dancer']].map(([id,full_name]) => ({id,full_name}))],
+    // Normalized test metadata, not live database columns or RLS guarantees.
+    replacement_memberships: Array.from({length:14},(_,i) => ({
+      memberId:i+1, clubId:i+1 === 12 ? 2 : 1, active:i+1 !== 11, verified:true
+    })),
+    member_replacement_coverage: {rosterVerified:true, scheduleVerified:true},
+    member_busy_periods: [10,13].map(memberId => ({memberId, start:'2027-10-16T19:00:00+08:00', end:'2027-10-16T20:00:00+08:00'})),
+    event_segments: [...event_segments,
+      {id:20,event_id:2,starts_at:'2027-10-15T10:00:00+08:00',ends_at:'2027-10-15T11:00:00+08:00'},
+      {id:21,event_id:2,starts_at:'2027-10-16T19:30:00+08:00',ends_at:'2027-10-16T20:00:00+08:00'}],
+    segment_assignments: [...segment_assignments.map(a =>
+      a.member_id === 2 && a.segment_id === 3 ? {...a, role_name:'Dance Captain'} : a),
+      ...[6,14].map(member_id => ({segment_id:20,member_id,role_name:'Dance Captain'})),
+      ...[6,7,10,11,12,13,14].map(member_id => ({segment_id:20,member_id,role_name:'Lead Dancer'})),
+      {segment_id:20,member_id:8,role_name:'Sound Technician'},
+      {segment_id:21,member_id:4,role_name:'Crew'},
+      ...[1,2].map(segment_id => ({segment_id,member_id:14,role_name:'Crew'}))],
     facility_slots,
     segment_facility_slots,
     segment_dependencies
