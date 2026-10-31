@@ -532,11 +532,24 @@ const bestRecoveryPlan = computed(() =>
     ?.recommendedPlan ?? null
 )
 
-const displayedRankedPlans=computed(()=>{const plans=rankedRecoveryPlans.value;return plans.some(p=>p.kind==='combined')?plans.filter(p=>p.kind==='combined'||p.kind==='custom').map((p,i)=>({...p,rank:i+1})):plans})
+const rankingLimit = ref(3)
+const overallRankedPlans=computed(()=>{const plans=rankedRecoveryPlans.value;return plans.some(p=>p.kind==='combined')?plans.filter(p=>p.kind==='combined'||p.kind==='custom').map((p,i)=>({...p,rank:i+1})):plans})
 const rankedRecoveryPlans = computed(() =>
   recoveryEvaluation.value
     ?.rankedPlans || []
 )
+
+const displayedRankedPlans = computed(() => {
+  const plans = overallRankedPlans.value
+  const visible = rankingLimit.value === 'all' ? plans : plans.slice(0, Number(rankingLimit.value))
+  const selected = plans.find(plan => plan.id === selectedRecoveryId.value)
+  return selected && !visible.some(plan => plan.id === selected.id) ? [...visible, selected] : visible
+})
+function changeSummary(plan, field) {
+  return [...new Set(plan.changes.filter(c => c[field] != null).map(c => field === 'venueName'
+    ? 'move to ' + c.venueName
+    : 'replace ' + (data.value.members.find(m => String(m.id) === String(c.replacedMemberId))?.full_name || 'assigned member') + ' with ' + (data.value.members.find(m => String(m.id) === String(c.replacementMemberId))?.full_name || 'replacement member')))].join('; ')
+}
 
 watch(() => recoveryOptions.value, options => {
   if (!options.some(o => o.id === selectedRecoveryId.value)) selectedRecoveryId.value = ''
@@ -1112,7 +1125,7 @@ function proposedVenueFor(segment) {
           </div>
         </div>
 
-        <div class="alert alert-info small" role="status">
+        <details class="small mb-3"><summary>Ranking method and shared verification requirements</summary><p>Member acceptance, organiser confirmation and approved facility booking evidence are required before applying relevant changes.</p><div class="alert alert-info small" role="status">
           <strong>Facility booking checks</strong>
           <div class="mt-1">
             Confirmed overlapping reservations are treated as conflicts.
@@ -1131,6 +1144,12 @@ function proposedVenueFor(segment) {
         </div>
 
         <p class="small text-muted">Overall options combine available building blocks and are checked against all selected disruptions. Search is limited to four choices per requirement and 64 combinations; this is not an exhaustive optimum. Individual member and facility suggestions remain available in Build your recovery. Missing choices and unresolved conflicts require organizer review.</p>
+        </details>
+        <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
+          <span class="small" role="status">{{ overallRankedPlans.length }} ranked plans / {{ displayedRankedPlans.length }} shown</span>
+          <label class="small">Show <select v-model="rankingLimit" class="form-select form-select-sm d-inline-block w-auto" aria-label="Number of ranked plans"><option :value="3">Top 3</option><option :value="5">Top 5</option><option value="all">All Plans</option></select></label>
+        </div>
+        <p v-if="rankingLimit !== 'all' && displayedRankedPlans.length > Number(rankingLimit)" class="small text-muted">Your selected plan is also shown below the top {{ rankingLimit }}.</p>
         <!-- RANKED EVALUATED OPTIONS -->
 
         <div
@@ -1169,16 +1188,17 @@ function proposedVenueFor(segment) {
           </div>
 
           <p class="small mb-2">{{ plan.conflicts.length }} unresolved conflict(s) in accessible records; {{ plan.warnings.length }} verification item(s).</p>
-          <p class="small text-muted">{{ plan.kind==='combined' ? 'Combined member, facility and timing choices evaluated together.' : plan.kind==='custom' ? 'Custom selection recalculated against every disruption.' : 'Individual building block; other disruptions may remain unresolved.' }} Ranking is not approval.</p><button type="button" class="btn btn-pulse-primary btn-sm mb-3" :aria-pressed="selectedRecoveryId===plan.id" @click="selectRecoveryPlan(plan.id)">{{ selectedRecoveryId===plan.id ? 'Selected plan' : 'Select this plan' }}</button>
-          <p class="small" v-if="plan.changes.some(c=>c.replacementMemberId!=null)">Member acceptance and organizer confirmation required before Apply.</p>
-          <p class="small" v-if="plan.changes.some(c=>c.venueName)">Approved booking evidence, capacity and equipment verification required before Apply.</p>
+          <p class="small mb-1">{{ changeSummary(plan, 'replacementMemberId') || 'Member: no replacement proposed' }}</p>
+          <p class="small mb-2">{{ changeSummary(plan, 'venueName') || 'Facility: no change proposed' }}</p>
+          <p class="small text-muted mb-2">Organiser approval required / {{ selectedRecoveryId === plan.id ? 'Selected for preview' : 'Proposal only' }}</p>
+          <button type="button" class="btn btn-pulse-primary btn-sm mb-2" :aria-pressed="selectedRecoveryId===plan.id" @click="selectRecoveryPlan(plan.id)">{{ selectedRecoveryId===plan.id ? 'Selected plan' : 'Select this plan' }}</button>
+          <details class="small"><summary>Checks and score breakdown</summary><h6 class="mt-2">Full activity changes</h6>
           <ul class="small selected-changes"><li v-for="(change,i) in plan.changes" :key="i">
             <strong>{{ eventSegments.find(s => String(s.id)===String(change.segmentId))?.title || 'Activity' }}</strong>
             <span v-if="change.starts_at || change.ends_at">: {{ formatTime(change.starts_at) }} to {{ formatTime(change.ends_at) }}</span>
             <span v-if="change.venueName">: move to {{ change.venueName }}</span>
             <span v-if="change.replacementMemberId!=null">: replace {{ data.members.find(m => String(m.id)===String(change.replacedMemberId))?.full_name || 'assigned member' }} with {{ data.members.find(m => String(m.id)===String(change.replacementMemberId))?.full_name || 'replacement member' }}</span>
           </li></ul>
-          <details class="small"><summary>Checks and score breakdown</summary>
           <div class="row g-2 small mb-2 mt-2 recovery-score-grid">
 
             <div class="col-6 col-md-3">
@@ -1545,6 +1565,7 @@ function proposedVenueFor(segment) {
 .simulator-page :deep(.btn),.simulator-page :deep(.form-select),.simulator-page :deep(.form-control:not([type="checkbox"])),.simulator-page :deep(summary),.simulator-steps a{min-height:44px}
 .simulator-page :deep(.form-control),.simulator-page :deep(.form-select){font-size:1rem;min-width:0}
 .simulator-page :deep(input[type="checkbox"]){width:1.15rem;height:1.15rem;vertical-align:middle}
+.simulation-pip{display:none!important}
 .simulator-page{padding-bottom:6rem!important;overflow-wrap:anywhere}
 .simulator-page :deep(.sim-row-label){min-height:44px}
 }

@@ -28,6 +28,11 @@ export function campusConnectFixture(mode='manual'){
   segment_facility_bookings:segments.map(s=>({segment_id:s.id,booking_id:1})),
   facility_booking_coverage:{warning:'ISOLATED fixture coverage, not live database evidence.'}
  }
+ if(mode==='many-plans') for(const id of [5,6]){
+  data.members.push({id,full_name:'Fixture additional standby '+id})
+  data.replacement_memberships.push({memberId:id,clubId:1,active:true,verified:true})
+  data.segment_assignments.push({id:100+id,segment_id:90,member_id:id,role_name:'Performer'})
+ }
  if(mode==='blocked'){data.facility_slots[1].status='Booked';data.facility_bookings[1].status='Booked'}
  if(mode==='unlinked'){data.segment_facility_slots=[];data.segment_facility_bookings=[]}
  if(mode==='none')data.segment_assignments.push({id:100,segment_id:99,member_id:2,role_name:'Performer'},{id:101,segment_id:99,member_id:3,role_name:'Crew'})
