@@ -46,7 +46,7 @@ test('setup navigates only supported calendar week and cannot create or link rec
  const component=readFileSync(new URL('../components/SimulatorFacilitySetup.vue',import.meta.url),'utf8')
  assert.match(component,/query:\{week:weekStartOf\(day\)\}/)
  assert.doesNotMatch(component,/\.insert\(|\.update\(|\.rpc\(|claimBooking\(|joinWaitlist\(/)
- assert.match(component,/Original linking is disabled/)
+ assert.match(component,/Original booking linking is unavailable/)
  assert.match(component,/does not automatically link it to this event/)
 })
 

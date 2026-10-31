@@ -1,5 +1,6 @@
 <script setup>
 import { ref, computed } from 'vue';
+import SimulatorInvitationInbox from '../components/SimulatorInvitationInbox.vue';
 
 const props = defineProps({
   apiMode: { type: Boolean, default: false },
@@ -389,6 +390,7 @@ function exportCalendarICS() {
 
 <template>
   <div class="py-2">
+    <SimulatorInvitationInbox v-if="!readOnly" />
     
     <!-- Top Header & Actions -->
     <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-4">

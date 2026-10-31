@@ -4,6 +4,7 @@ import {readFileSync} from 'node:fs'
 import * as Vue from 'vue'
 import {parse,compileScript,compileTemplate} from 'vue/compiler-sfc'
 import * as workflow from '../services/simulatorWorkflowService.js'
+import {buildRecoveryTracker} from '../services/simulatorRecoveryTracker.js'
 import {simulatorWorkflowError} from '../services/simulatorWorkflowActivation.js'
 
 // Compile the real components; only authenticated RPC responses are mocked.
@@ -22,7 +23,7 @@ async function mount(name,api,enabled=true,initial={}){
  assert.deepEqual(template.errors,[])
  const code=script.content.replace(/import[\s\S]*?from ['"][^'"]+['"];?/g,'').replace('export default','return')
  let auth
- const deps={...Vue,...workflow,simulatorWorkflowError,SIMULATOR_WORKFLOW_VERIFIED:enabled,createSimulatorWorkflow:()=>({capabilities:async()=>({contract_version:4,application_enabled:enabled,invitations_enabled:enabled}),...api}),
+ const deps={...Vue,...workflow,buildRecoveryTracker,simulatorWorkflowError,SIMULATOR_WORKFLOW_VERIFIED:enabled,createSimulatorWorkflow:()=>({capabilities:async()=>({contract_version:4,application_enabled:enabled,invitations_enabled:enabled}),...api}),
   supabase:{auth:{onAuthStateChange(callback){auth=callback;return {data:{subscription:{unsubscribe(){}}}}}}},
   SimulatorCalendarActions:{render:()=>null}}
  const entries=Object.entries(deps).filter(([key])=>/^[A-Za-z_$][A-Za-z0-9_$]*$/.test(key));
@@ -186,5 +187,54 @@ test('event refresh failure is a warning after confirmed persistence, not a fake
   view.state.confirmed=true;await view.state.executePending()
   assert.equal(view.state.message,'Persisted by server');assert.equal(view.state.error,'')
   assert.match(view.state.refreshWarning,/operation was saved/)
+ }finally{view.app.unmount()}
+})
+
+
+test('controlled ranked selection prepares and saves its exact changes, then a different choice clears saved confirmation',async()=>{
+ const other={...option,id:'later',title:'Later schedule',changes:[{...option.changes[0],starts_at:'2026-11-02T10:10:00Z',ends_at:'2026-11-02T11:10:00Z'}]}
+ let savedDraft,savedPlan
+ const view=await mount('SimulatorRecoveryWorkflow',{history:async()=>({...empty(),plans:savedPlan?[savedPlan]:[]}),start:async draft=>{savedDraft=draft;savedPlan={id:'selected-draft',version:1,application_status:'Draft',changes:draft.changes};return savedPlan}},true,{selectedRecoveryId:'delay',options:[option,other]})
+ assert.equal(view.state.selectedOptionId,'delay')
+ assert.deepEqual(view.state.preview.draft.changes,option.changes)
+ view.state.startPlan();view.state.confirmed=true;await view.state.executePending()
+ assert.deepEqual(savedDraft.changes,option.changes)
+ assert.equal(view.state.selectedPlanId,'selected-draft')
+ view.props.selectedRecoveryId='later';await flush()
+ assert.equal(view.state.selectedPlanId,'')
+ assert.deepEqual(view.state.preview.draft.changes,other.changes)
+ view.state.startPlan();view.state.confirmed=true;await view.state.executePending()
+ assert.deepEqual(savedDraft.changes,other.changes)
+ view.app.unmount()
+})
+
+
+test('refreshing simulation choices preserves the applied saved recovery for Undo review',async()=>{
+ const applied={id:'applied-choice',version:2,application_status:'Applied',changes:option.changes}
+ const view=await mount('SimulatorRecoveryWorkflow',{history:async()=>({...empty(),plans:[applied]})},true,{selectedRecoveryId:'delay'})
+ view.state.selectedPlanId=applied.id;await flush()
+ view.props.selectedRecoveryId='';await flush()
+ assert.equal(view.state.selectedPlanId,applied.id)
+ view.app.unmount()
+})
+
+
+test('management permission failure explains event-club authorization rather than hiding it',async()=>{
+ const view=await mount('SimulatorRecoveryWorkflow',{history:async()=>{throw Error('Event management permission required')}})
+ try{assert.match(view.state.historyError,/member-management permission/);assert.match(view.state.historyError,/Event club/);assert.match(view.state.historyError,/changing the calendar acting club does not grant/)}finally{view.app.unmount()}
+})
+
+
+test('failed requirement refresh disables Apply instead of relying on an old ready history',async()=>{
+ let deny=false
+ const saved={id:'ready',event_id:1,version:1,application_status:'Draft',lifecycle:'In Progress',actions:[],changes:[]}
+ const view=await mount('SimulatorRecoveryWorkflow',{history:async()=>{if(deny)throw Error('Unable to refresh approval evidence');return {...empty(),plans:[saved]}}})
+ try{
+  view.state.selectedPlanId='ready';view.state.manualAcknowledged=true;await flush()
+  assert.equal(view.state.applyReady,true)
+  deny=true;await view.state.loadHistory();await flush()
+  assert.equal(view.state.applyReady,false)
+  view.state.applyPlan();assert.equal(view.state.pendingAction,null)
+  assert.match(view.state.historyError,/Unable to refresh approval evidence/)
  }finally{view.app.unmount()}
 })

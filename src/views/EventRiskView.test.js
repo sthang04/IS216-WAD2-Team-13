@@ -7,6 +7,7 @@ import { getSimulationTestData } from '../data/simulationTestData.js'
 import { runCompleteSimulation } from '../services/simulationService.js'
 import { prepareDisruptionCards, assessCombinedRecovery, buildCombinedRecoveryOptions } from '../services/combinedSimulationService.js'
 import {presentSimulatorFacilities} from '../services/simulatorFacilityPresentationService.js'
+import {projectRecoveryPreview} from '../services/simulatorWorkflowService.js'
 import { evaluateRecoveryPlans } from '../services/recoveryPlanEvaluationService.js'
 
 // Compile the real SFC and run its setup/lifecycle with a no-DOM Vue renderer.
@@ -20,8 +21,8 @@ async function mountView() {
   assert.deepEqual(template.errors,[])
   const code=script.content.replace(/import[\s\S]*?from ['"][^'"]+['"];?/g,'').replace('export default','return')
   const deps={ref:Vue.ref,shallowRef:Vue.shallowRef,computed:Vue.computed,onMounted:Vue.onMounted,watch:Vue.watch,nextTick:Vue.nextTick,loadSimulationData:async()=>getSimulationTestData(),runCompleteSimulation,
-    prepareDisruptionCards,assessCombinedRecovery,buildCombinedRecoveryOptions,evaluateRecoveryPlans,presentSimulatorFacilities,
-    SimulatorInvitationInbox:{render:()=>null},SimulatorFacilitySetup:{render:()=>null},SimulatorCalendarActions:{render:()=>null},PipMascot:{render:()=>null},SimulatorRecoveryWorkflow:{render:()=>null},console:{log(){},error(){}}}
+    prepareDisruptionCards,assessCombinedRecovery,buildCombinedRecoveryOptions,evaluateRecoveryPlans,projectRecoveryPreview,presentSimulatorFacilities,
+    SimulatorImpactWorkspace:{render:()=>null},SimulatorInvitationInbox:{render:()=>null},SimulatorFacilitySetup:{render:()=>null},SimulatorCalendarActions:{render:()=>null},PipMascot:{render:()=>null},SimulatorRecoveryWorkflow:{render:()=>null},console:{log(){},error(){}}}
   const component=new Function(...Object.keys(deps),code)(...Object.values(deps))
   component.render=()=>null
   const renderer=Vue.createRenderer({insert(){},remove(){},createElement:()=>({}),createText:()=>({}),
@@ -67,4 +68,36 @@ test('single unified mount and original component remain intact',()=>{
   assert.doesNotMatch(view,/activeScenario|buildDisruptions\(\)\[0\]/)
   assert.equal((view.match(/<PipMascot\b/g)||[]).length,1)
   assert.match(view,/Choose Disruption Scenarios/)
+})
+
+
+test('ranked selection drives exact comparison and preparation input, and clears on scenario change',async()=>{
+ const view=await mountView(),s=view.state
+ assert.ok(s.rankedRecoveryPlans.length>=2)
+ for(const candidate of s.rankedRecoveryPlans.slice(0,2)){
+  s.selectRecoveryPlan(candidate.id);await Vue.nextTick()
+  assert.equal(s.selectedRecoveryPlan.id,candidate.id)
+  assert.equal(s.activeComparison,'recovery')
+  assert.deepEqual(s.comparisonSegments,candidate.proposedSegments)
+  assert.deepEqual(s.recoveryOptions.find(o=>o.id===s.selectedRecoveryId).changes,candidate.changes)
+ }
+ s.disruptionCards[0].type='SCHEDULE_DELAY';await Vue.nextTick()
+ assert.equal(s.selectedRecoveryId,'')
+ assert.equal(s.selectedRecoveryPlan,null)
+ view.app.unmount()
+})
+
+
+test('selecting a candidate card changes the combined proposal and keeps actual assignments untouched',async()=>{
+ const view=await mountView(),s=view.state,before=JSON.stringify(s.data.segment_assignments)
+ try{
+  const group=s.memberAssessments.find(g=>g.eligible.length>=2);assert.ok(group)
+  for(const candidate of group.eligible.slice(0,2)){
+   await s.selectCandidate(group,candidate);await Vue.nextTick()
+   assert.equal(s.replacementSelections[String(group.memberId)],candidate.id)
+   assert.ok(s.selectedRecoveryPlan.changes.some(c=>c.replacementMemberId===candidate.id))
+   assert.deepEqual(s.comparisonSegments,s.selectedRecoveryPlan.proposedSegments)
+  }
+  assert.equal(JSON.stringify(s.data.segment_assignments),before)
+ }finally{view.app.unmount()}
 })

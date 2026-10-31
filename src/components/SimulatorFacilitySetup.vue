@@ -59,7 +59,7 @@ async function linkOriginal(){
   <div class="small border rounded p-2 my-2">
    <button type="button" class="btn btn-outline-primary btn-sm" :disabled="busy || working || !selected" @click="discover">Find eligible original bookings</button>
    <p class="text-muted mb-1">Server-checked existing bookings only. Linking does not create, claim or approve a reservation.</p>
-   <p v-if="!ORIGINAL_BOOKING_LINK_VERIFIED" class="text-warning">Original linking is disabled until migration 003 is reviewed, deployed and independently verified. Discovery is read-only.</p>
+   <p v-if="!ORIGINAL_BOOKING_LINK_VERIFIED" class="text-warning">Original booking linking is unavailable in this environment. You can inspect existing bookings and arrange reservations in Facility Calendar.</p>
    <p v-if="linkError" role="alert" class="text-danger">{{ linkError }}</p>
    <p v-if="linkMessage" role="status">{{ linkMessage }}</p>
    <p v-if="evidence && !evidence.bookings.some(b=>b.eligible)" class="text-warning">No eligible original booking found. Use the calendar workflow for the selected activity; no vacant interval is treated as a reservation.</p>

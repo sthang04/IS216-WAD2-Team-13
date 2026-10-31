@@ -1,13 +1,14 @@
 <script setup>
-import {computed,ref,watch,onMounted,onUnmounted} from 'vue'
+import {computed,ref,watch,onMounted,onUnmounted,nextTick} from 'vue'
 import {supabase} from '../supabase'
+import {buildRecoveryTracker} from '../services/simulatorRecoveryTracker.js'
 import {simulatorWorkflowError} from '../services/simulatorWorkflowActivation.js'
 import SimulatorCalendarActions from './SimulatorCalendarActions.vue'
 import {SIMULATOR_WORKFLOW_VERIFIED,createSimulatorWorkflow,prepareRecoveryDraft,projectRecoveryPreview,
  workflowReadiness,captureSimulatorState,undoReadiness,bookingEvidence,suggestSimulatorFacilities,
  effectiveInvitationStatus,simulatorStartRequestKey,recordedDisruptionResolutions} from '../services/simulatorWorkflowService.js'
-const props=defineProps({data:Object,eventId:[Number,String],options:{type:Array,default:()=>[]},disruptions:{type:Array,default:()=>[]},refreshVersion:{type:Number,default:0},refreshEvent:Function})
-const emit=defineEmits(['refresh','invitations-changed'])
+const props=defineProps({data:Object,eventId:[Number,String],options:{type:Array,default:()=>[]},disruptions:{type:Array,default:()=>[]},refreshVersion:{type:Number,default:0},refreshEvent:Function,selectedRecoveryId:{type:String,default:null}})
+const emit=defineEmits(['refresh','invitations-changed','select-option','stage-change','review-saved','operation-complete'])
 // Reads are safe behind server authorization; every write still requires both gates.
 const enabled=SIMULATOR_WORKFLOW_VERIFIED
 const api=createSimulatorWorkflow(supabase,{enabled,allowReadOnly:true})
@@ -22,11 +23,21 @@ const history=ref({plans:[],invitations:[],audit:[]}),historyLoading=ref(false),
 const incoming=ref(null),invitationError=ref(''),pendingAction=ref(null),clock=ref(Date.now())
 const invitationId=ref(typeof window==='undefined'?null:new URLSearchParams(window.location.search).get('replacementInvitation'))
 const startRequestId=ref(''),startRequestIds=new Map()
+let historyTimer
 let contextEpoch=0,historyVersion=0,incomingVersion=0,authId,authSubscription,timer,disposed=false
 const selectedEvent=computed(()=>props.data?.events?.find(e=>String(e.id)===String(props.eventId)))
 // Never use the facility navbar's active club as the event's identity.
 const eventClubId=computed(()=>selectedEvent.value?.club_id ?? null)
+function keepAppliedSelection(){return ['Applied','Undone'].includes(history.value.plans.find(p=>p.id===selectedPlanId.value)?.application_status)}
+watch(()=>props.selectedRecoveryId,id=>{if(id!==null && id!==selectedOptionId.value){selectedOptionId.value=id;if(id || !keepAppliedSelection())selectedPlanId.value='';bookingSelections.value={}}},{immediate:true})
+watch(selectedOptionId,id=>{if(props.selectedRecoveryId!==null && id!==props.selectedRecoveryId)emit('select-option',id)})
+const actionDialog=ref(null)
+let confirmationTrigger
+watch(pendingAction,async action=>{await nextTick();if(action)actionDialog.value?.focus();else confirmationTrigger?.focus?.()})
+function localTime(value){if(!value)return 'unchanged';const d=new Date(value);return Number.isFinite(d.getTime())?new Intl.DateTimeFormat('en-SG',{timeZone:'Asia/Singapore',dateStyle:'medium',timeStyle:'short'}).format(d):'Time unavailable'}
+const displayStatus=p=>p.application_status==='Applied'?'Recovery applied':p.workflow_status || p.lifecycle
 const selectedOption=computed(()=>props.options.find(o=>o.id===selectedOptionId.value))
+watch(()=>JSON.stringify(selectedOption.value?.changes),()=>{if(selectedOption.value || !keepAppliedSelection())selectedPlanId.value='';pendingAction.value=null;confirmed.value=false})
 const plan=computed(()=>history.value.plans.find(p=>p.id===selectedPlanId.value))
 const disruptionResolutions=computed(()=>recordedDisruptionResolutions(plan.value,history.value.audit))
 const venueChanges=computed(()=>selectedOption.value?.changes?.filter(c=>c.venueName!=null)||[])
@@ -36,6 +47,10 @@ const preview=computed(()=>{
  catch(e){return {draft:null,after:null,error:e.message}}
 })
 const readiness=computed(()=>{void clock.value;return workflowReadiness({enabled:applicationEnabled.value,plan:plan.value,invites:history.value.invitations,manualAcknowledged:manualAcknowledged.value})})
+const tracker=computed(()=>{void clock.value;return buildRecoveryTracker({plan:plan.value,invitations:history.value.invitations,audit:history.value.audit,manualAcknowledged:manualAcknowledged.value,enabled:applicationEnabled.value,data:props.data,now:clock.value})})
+const applyReady=computed(()=>!historyLoading.value && !historyError.value && readiness.value.ready && tracker.value.status==='Ready to apply')
+function savedTracker(item){return buildRecoveryTracker({plan:item,invitations:history.value.invitations,audit:history.value.audit,data:props.data})}
+watch([()=>tracker.value.status,plan],()=>{emit('stage-change',plan.value?tracker.value.status:'Draft');emit('review-saved',plan.value || null)})
 const incomingStatus=computed(()=>effectiveInvitationStatus(incoming.value,clock.value))
 const undoStatus=computed(()=>{
  try{return undoReadiness(plan.value,captureSimulatorState(props.data,props.eventId))}
@@ -81,7 +96,7 @@ async function loadHistory(){
   if(disposed||version!==historyVersion||epoch!==contextEpoch)return
   history.value=result
   if(selectedPlanId.value&&!result.plans.some(p=>p.id===selectedPlanId.value))selectedPlanId.value=''
- }catch(e){if(!disposed&&version===historyVersion&&epoch===contextEpoch)historyError.value='History unavailable: '+e.message}
+ }catch(e){if(!disposed&&version===historyVersion&&epoch===contextEpoch)historyError.value=/Event management permission required/i.test(e.message)?'Recovery history requires an active club role with member-management permission for '+(selectedEvent.value?.club_name || 'this event')+'. Your signed-in account is not authorized. Contact the club manager; changing the calendar acting club does not grant this permission.':'History unavailable: '+e.message}
  finally{if(!disposed&&version===historyVersion&&epoch===contextEpoch)historyLoading.value=false}
 }
 async function refreshIncoming(){
@@ -100,10 +115,17 @@ const confirmationKey=computed(()=>JSON.stringify({
  plan:plan.value,bookings:bookingSelections.value,incoming:incoming.value,manual:manualAcknowledged.value,resolutionReasons:resolutionReasons.value
 }))
 watch(confirmationKey,()=>{pendingAction.value=null;confirmed.value=false})
+function trapConfirmationFocus(event){
+ const items=[...(actionDialog.value?.querySelectorAll('button:not(:disabled),input:not(:disabled)') || [])]
+ const first=items[0],last=items.at(-1)
+ if(event.shiftKey && (document.activeElement===first || document.activeElement===actionDialog.value)){event.preventDefault();last?.focus()}
+ else if(!event.shiftKey && (document.activeElement===last || document.activeElement===actionDialog.value)){event.preventDefault();first?.focus()}
+}
 function queueAction(label,operation,success,settings={}){
  if(!(settings.application?applicationEnabled.value:invitationEnabled.value)){error.value='Live recovery writes remain disabled: the required backend gate is OFF or unverified.';return}
  if(busy.value)return
  confirmed.value=false;error.value='';message.value='';refreshWarning.value=''
+ confirmationTrigger=typeof document==='undefined'?null:document.activeElement
  pendingAction.value={label,operation,success,settings,key:confirmationKey.value,eventId:props.eventId,
   club:eventClubId.value,planId:plan.value?.id,revision:plan.value?.version}
 }
@@ -129,6 +151,7 @@ async function executePending(){
     try{const loaded=await props.refreshEvent();if(loaded===false)refreshWarning.value='The operation was saved, but the event refresh failed. Refresh live data before continuing.'}
     catch{refreshWarning.value='The operation was saved, but the event refresh failed. Refresh live data before continuing.'}
    }else emit('refresh')
+   emit('operation-complete',result.application_status)
   }
  }catch(e){if(!disposed&&epoch===contextEpoch){error.value=simulatorWorkflowError(e);await loadHistory()}}
  finally{if(!disposed&&epoch===contextEpoch){busy.value=false;busyAction.value='';confirmed.value=false}}
@@ -139,7 +162,7 @@ function startPlan(){
  if(!startRequestIds.has(key))startRequestIds.set(key,crypto.randomUUID())
  startRequestId.value=startRequestIds.get(key)
  const requestId=startRequestId.value
- queueAction('Start Recovery Plan',()=>api.start({...draft,requestId},true),
+ queueAction('Prepare recovery requests',()=>api.start({...draft,requestId},true),
   'Recovery started. Actions are pending; event records have not been changed.',{onResult:saved=>{selectedPlanId.value=saved.id}})
 }
 function attachBooking(change){
@@ -150,7 +173,7 @@ function cancelPlan(){const current={...plan.value};queueAction('Cancel Recovery
 function invite(target){const id=plan.value.id;queueAction('Invite '+memberName(target.recipient)+' to replace '+memberName(target.replaced),()=>api.invite(id,target.recipient,target.replaced,true),'Invitation persisted in the protected Pulse inbox. No public notification or Telegram message was sent.')}
 function respond(response){const id=incoming.value.id;queueAction(response+' invitation '+id,()=>api.respond(id,response,true),'Response persisted. No assignment was applied.',{refreshInvitation:true})}
 function cancel(id){queueAction('Cancel invitation '+id,()=>api.cancel(id,true),'Invitation cancelled.')}
-function applyPlan(){const current={...plan.value},ack=manualAcknowledged.value;queueAction('Confirm Recovery',()=>api.confirm(current,ack,true),'Recovery committed by the server.',{refresh:true,application:true})}
+function applyPlan(){if(!applyReady.value){error.value='Complete the outstanding requirements and review the saved recovery before applying.';return}const current={...plan.value},ack=manualAcknowledged.value;queueAction('Apply selected recovery',()=>api.confirm(current,ack,true),'Recovery committed by the server.',{refresh:true,application:true})}
 function undoPlan(){const current={...plan.value},ack=manualAcknowledged.value;queueAction('Undo Recovery Plan',()=>api.undo(current,ack,true),'Recovery reversed by the server; review the reopened issue.',{refresh:true,application:true})}
 function resolveDisruption(row){
  const current={...plan.value},reason=String(resolutionReasons.value[row.index] || '').trim()
@@ -164,7 +187,7 @@ function resetContext(){
  ++contextEpoch;++historyVersion;++incomingVersion
  capabilities.value=null;capabilityError.value='';history.value={plans:[],invitations:[],audit:[]};historyError.value='';historyLoading.value=false
  incoming.value=null;pendingAction.value=null;confirmed.value=false;manualAcknowledged.value=false;busy.value=false;busyAction.value='';refreshWarning.value=''
- selectedPlanId.value='';selectedOptionId.value='';bookingSelections.value={};error.value='';message.value=''
+ selectedPlanId.value='';selectedOptionId.value=props.selectedRecoveryId ?? '';bookingSelections.value={};error.value='';message.value=''
  startRequestIds.clear();startRequestId.value='';resolutionReasons.value={}
  void loadHistory();void loadCapabilities();void refreshIncoming()
 }
@@ -173,43 +196,44 @@ watch(()=>[props.eventId,eventClubId.value],resetContext,{immediate:true})
 watch(()=>props.options,()=>{if(!props.options.some(o=>o.id===selectedOptionId.value))selectedOptionId.value=''})
 onMounted(()=>{
  timer=setInterval(()=>{clock.value=Date.now()},1000)
+ historyTimer=setInterval(()=>{if(!busy.value && (typeof document==='undefined' || document.visibilityState==='visible'))void refreshHistory()},30000)
  authSubscription=supabase?.auth?.onAuthStateChange?.((_event,session)=>{
   const next=session?.user?.id ?? null
   if(next!==authId){authId=next;resetContext()}
  })?.data?.subscription
 })
-onUnmounted(()=>{disposed=true;++contextEpoch;++historyVersion;++incomingVersion;clearInterval(timer);authSubscription?.unsubscribe()})
+onUnmounted(()=>{disposed=true;++contextEpoch;++historyVersion;++incomingVersion;clearInterval(timer);clearInterval(historyTimer);authSubscription?.unsubscribe()})
 </script>
 
 <template>
-  <section id="simulator-recovery-workflow" tabindex="-1" class="pulse-card p-4 shadow-sm mb-4" aria-label="Persisted recovery workflow">
-    <h5 class="fw-bold">Start, Confirm, Cancel and Undo</h5>
+  <section id="simulator-recovery-workflow" tabindex="-1" class="pulse-card p-3 p-lg-4 shadow-sm mt-4 mb-4" aria-label="Persisted recovery workflow" :data-selected-recovery="selectedOptionId">
+    <h5 class="fw-bold">Review and apply recovery</h5>
+    <p class="small text-muted">Prepare the selected proposal, complete its approvals, then confirm. Undo restores the original schedule only after safety checks pass.</p>
     <div v-if="!enabled" class="alert alert-warning small" role="status">
-      LIVE RECOVERY WRITES DISABLED. Live updates are awaiting backend activation and safety verification. Start, Invite, Accept, Confirm, Cancel and Undo remain gated pending safety verification.
-      Simulate / Start Recovery Plan / Await acceptance and room approval / Confirm Recovery / Undo if needed.
+      Live updates are unavailable in this environment. You can safely explore scenarios and compare proposals.
     </div>
-    <p class="small" role="status">Backend application gate: {{ capabilities ? (capabilities.application_enabled ? 'ON' : 'OFF') : 'Not verified' }}. Invitation gate: {{ capabilities ? (capabilities.invitations_enabled ? 'ON' : 'OFF') : 'Not verified' }}. No gate is changed here.</p>
-    <p v-if="capabilityError" class="small text-warning" role="status">{{ capabilityError }}</p>
-    <p v-if="enabled && !invitationEnabled" class="small text-warning">Start, invitation responses, cancellation and booking attachment await verified invitation-gate activation.</p>
+    <p v-if="enabled && !applicationEnabled" class="small text-warning" role="status">Applying and undoing recovery are unavailable until this environment is activated and verified.</p>
+    <p v-if="enabled && !invitationEnabled" class="small text-warning">Preparing new saved recoveries, associating bookings and sending invitations are currently unavailable. Existing eligible saved recoveries can still be reviewed.</p>
+
     <div v-if="error" class="alert alert-danger" role="alert">{{ error }}</div>
     <div v-if="message" class="alert alert-info" role="status">{{ message }}</div>
     <div v-if="busy" class="small my-2" role="status" aria-live="polite"><span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>Running {{ busyAction }}; waiting for the server and refresh.</div>
     <div v-if="refreshWarning" class="alert alert-warning small" role="status">{{ refreshWarning }}</div>
     <div v-if="historyError" class="alert alert-warning small" role="status">{{ historyError }}</div>
     <div v-if="invitationError" class="alert alert-warning small" role="status">{{ invitationError }}</div>
-    <p class="small">Selected event club: {{ selectedEvent?.club_name || 'unverified' }} ({{ eventClubId ?? 'unverified' }}). Calendar acting-club selection does not change this identity.</p>
-    <label for="persisted-option" class="small fw-bold">Recovery option to preview</label>
-    <select id="persisted-option" v-model="selectedOptionId" :disabled="busy" class="form-select form-select-sm mb-3">
+    <label v-if="selectedRecoveryId===null" for="persisted-option" class="small fw-bold">Recovery option to preview</label>
+    <select v-if="selectedRecoveryId===null" id="persisted-option" v-model="selectedOptionId" :disabled="busy" class="form-select form-select-sm mb-3">
       <option value="">Select an option</option>
       <option v-for="option in options" :key="option.id" :value="option.id">{{ option.title }}</option>
     </select>
-    <div v-for="change in selectedOption?.changes || []" :key="change.segmentId+':'+(change.assignmentId||'time')" class="small border-bottom py-2">
+    <p v-if="selectedOption && !plan" class="small fw-bold">Selected proposal: {{ selectedOption.title }}</p>
+    <div v-for="change in !plan ? selectedOption?.changes || [] : []" :key="change.segmentId+':'+(change.assignmentId||'time')" class="small border-bottom py-2">
       <strong>{{ activityName(change.segmentId) }}</strong>
       <div v-if="change.replacementMemberId!=null">{{ memberName(change.replacedMemberId) }} to {{ memberName(change.replacementMemberId) }} ({{ change.roleName || 'role requires verification' }})</div>
-      <div v-if="change.starts_at || change.ends_at">Proposed times: {{ change.starts_at }} to {{ change.ends_at }}</div>
+      <div v-if="change.starts_at || change.ends_at">Proposed times: {{ localTime(change.starts_at) }} to {{ localTime(change.ends_at) }}</div>
       <div v-if="change.venueName">Proposed room: {{ change.venueName }}</div>
     </div>
-    <div v-for="change in venueChanges" :key="'booking-'+change.segmentId" class="my-2 small">
+    <div v-for="change in !plan ? venueChanges : []" :key="'booking-'+change.segmentId" class="my-2 small">
       <label :for="'booking-'+change.segmentId" class="fw-bold">Actual booking for {{ activityName(change.segmentId) }}</label>
       <select :id="'booking-'+change.segmentId" v-model="bookingSelections[String(change.segmentId)]" class="form-select form-select-sm">
         <option value="">Select a verified booking</option>
@@ -226,28 +250,43 @@ onUnmounted(()=>{disposed=true;++contextEpoch;++historyVersion;++incomingVersion
       <div>Capacity: {{ bookingDetails(change).capacity ?? 'Unverified' }}. Equipment: {{ bookingDetails(change).equipment?.join(', ') || 'Unverified' }}.</div>
     </div>
     <p class="small text-muted mt-2">Use the existing <RouterLink to="/facilities">Master Facility Calendar</RouterLink> for claims, waitlists and OSL approval. A pending claim is not approved. This panel never creates or reverses bookings.</p>
-    <p v-if="selectedOption && preview.error" class="small text-warning">{{ preview.error }}</p>
-    <details v-if="preview.draft" class="small my-2"><summary>Exact original and proposed records (local preview)</summary><pre class="overflow-auto">{{ JSON.stringify({before:preview.draft.expectedState,after:preview.after},null,2) }}</pre></details>
+    <p v-if="selectedOption && !plan && preview.error" class="small text-warning">{{ preview.error }}</p>
+    <details v-if="preview.draft && !plan" class="small my-2"><summary>Exact original and proposed records (local preview)</summary><pre class="overflow-auto">{{ JSON.stringify({before:preview.draft.expectedState,after:preview.after},null,2) }}</pre></details>
     
-    <div v-if="pendingAction" class="alert alert-info small" aria-label="Action confirmation">
-      <strong>Confirm selected action: {{ pendingAction.label }}</strong>
-      <div>Event {{ pendingAction.eventId }} | Event club {{ pendingAction.club ?? 'unverified' }} | Plan {{ pendingAction.planId || 'new plan' }} | Revision {{ pendingAction.revision ?? 'not started' }}</div>
+    <div v-if="pendingAction" class="recovery-dialog-backdrop" @keydown.esc="pendingAction=null;confirmed=false">
+    <div ref="actionDialog" tabindex="-1" role="dialog" aria-label="Action confirmation" aria-modal="true" aria-describedby="recovery-confirm-title" class="pulse-card p-4 recovery-dialog" @keydown.tab="trapConfirmationFocus">
+      <strong id="recovery-confirm-title">Confirm selected action: {{ pendingAction.label }}</strong>
+      <p class="small mt-2">{{ plan?.title || selectedOption?.title }}. This action will be checked by the server before it is saved.</p>
       <label><input v-model="confirmed" type="checkbox"> I confirm this selected action and its reviewed inputs.</label>
       <button type="button" class="btn btn-primary btn-sm ms-2" :disabled="!(pendingAction.settings.application ? applicationEnabled : invitationEnabled) || busy || !confirmed" @click="executePending">Confirm selected action</button>
       <button type="button" class="btn btn-outline-secondary btn-sm ms-2" :disabled="busy" @click="pendingAction=null;confirmed=false">Dismiss action</button>
-    </div>
+    </div></div>
 
     <label class="d-block small my-2"><input v-model="manualAcknowledged" type="checkbox"> I manually checked personal availability, qualifications and facility suitability; incomplete data is not proof of availability.</label>
-    <button class="btn btn-outline-primary btn-sm me-2" :disabled="!invitationEnabled || busy || !preview.draft" @click="startPlan">Start Recovery Plan</button>
+    <button v-if="!plan" class="btn btn-outline-primary btn-sm me-2" :disabled="!invitationEnabled || busy || !preview.draft" @click="startPlan">Prepare recovery requests</button>
     <button class="btn btn-outline-secondary btn-sm" :disabled="historyLoading || busy" @click="refreshHistory">{{ historyLoading ? 'Refreshing history...' : 'Refresh persisted history' }}</button>
-    <p class="small text-muted mt-2">Persisted history: {{ history.plans.length }} plans loaded (read-only refresh; mutations remain gated). In Progress / Ready to Confirm / Resolved / Cancelled / Undone are separate from simulation feasibility.</p>
-    <select v-if="history.plans.length" v-model="selectedPlanId" :disabled="busy" class="form-select form-select-sm my-2" aria-label="Saved recovery plan">
-      <option value="">Select a saved revision</option>
-      <option v-for="item in history.plans" :key="item.id" :value="item.id">{{ item.title }} | {{ item.workflow_status || item.lifecycle }} | {{ item.application_status }} | v{{ item.version }}</option>
-    </select>
+    <details class="small my-2"><summary>Saved recovery status guide</summary><p class="small text-muted mt-2">Persisted history: {{ history.plans.length }} plans loaded (read-only refresh; mutations remain gated). In Progress / Ready to Confirm / Resolved / Cancelled / Undone are separate from simulation feasibility.</p></details>
+    <section class="my-4" aria-label="Saved recovery tracker">
+      <h6 class="fw-bold">Pending and saved recoveries</h6>
+      <p class="small text-muted">Proposals stay separate from the live schedule. Revisit a recovery below or refresh to check approvals.</p>
+      <p v-if="!historyLoading && !history.plans.length" class="small">No saved recoveries are available for this event.</p>
+      <div class="table-responsive" v-if="history.plans.length"><table class="table table-sm align-middle small">
+       <thead><tr><th scope="col">Recovery proposal</th><th scope="col">Status</th><th scope="col">Next action</th><th scope="col">Review</th></tr></thead>
+       <tbody><tr v-for="item in history.plans" :key="item.id" :class="{'table-active':selectedPlanId===item.id}"><td>{{ item.title }}</td><td>{{ savedTracker(item).status }}</td><td>{{ savedTracker(item).nextAction }}</td><td><button type="button" class="btn btn-outline-secondary btn-sm" :disabled="busy" :aria-pressed="selectedPlanId===item.id" :data-saved-plan-id="item.id" @click="selectedPlanId=item.id">Review saved recovery</button></td></tr></tbody>
+      </table></div>
+    </section>
+    <section v-if="plan" class="recovery-requirements border rounded p-3 mb-3" aria-label="Pending recovery requirements">
+      <div class="d-flex flex-wrap justify-content-between gap-2"><h6 class="fw-bold">{{ plan.title }}</h6><span class="badge bg-light text-dark border">{{ tracker.status }}</span></div>
+      <p class="small">{{ tracker.nextAction }}</p>
+      <p class="small">{{ tracker.satisfied }} of {{ tracker.total }} recorded requirements satisfied. The server revalidates everything before Apply.</p>
+      <div class="table-responsive"><table class="table table-sm small align-middle"><thead><tr><th scope="col">Proposed change</th><th scope="col">Affected activity</th><th scope="col">Requirement</th><th scope="col">Current status</th><th scope="col">Next action</th><th scope="col">Last updated</th></tr></thead><tbody>
+       <tr v-for="row in tracker.rows" :key="row.key"><td>{{ row.change }}</td><td>{{ row.activity }}</td><td>{{ row.kind }}</td><td>{{ row.status }}<div v-if="row.delivery" class="text-muted">Delivery: {{ row.delivery }}. Delivery is not acceptance.</div></td><td>{{ row.nextAction }}</td><td>{{ row.updated ? localTime(row.updated) : 'Not supplied' }}</td></tr>
+      </tbody></table></div>
+    </section>
 
     <div v-if="plan" class="small border rounded p-2 my-2">
-      <strong>{{ plan.workflow_status || plan.lifecycle }}</strong>
+      <div class="d-flex flex-wrap align-items-center gap-2 mb-2"><strong>Selected saved plan: {{ plan.title }}</strong><span class="badge bg-light text-dark border">{{ displayStatus(plan) }}</span></div>
+      <div v-for="(change,i) in plan.changes" :key="'saved-change-'+i" class="py-1"><strong>{{ activityName(change.segmentId) }}</strong><span v-if="change.venueName">: {{ change.venueName }}</span><span v-if="change.replacementMemberId!=null">: {{ memberName(change.replacedMemberId) }} to {{ memberName(change.replacementMemberId) }}</span><span v-if="change.starts_at || change.ends_at">: {{ localTime(change.starts_at) }} to {{ localTime(change.ends_at) }}</span></div>
       <div>Ready to Confirm means prerequisites are recorded; the server must still check freshness and conflicts.</div>
       <div v-for="blocker in plan.blockers || []" :key="blocker">{{ blocker }}</div>
       <div v-for="action in plan.actions || []" :key="action.action+':'+action.kind">
@@ -280,33 +319,38 @@ onUnmounted(()=>{disposed=true;++contextEpoch;++historyVersion;++incomingVersion
       {{ memberName(invitation.recipient_member_id) }}: {{ invitation.status }} | Delivery: {{ invitation.delivery_status }} (Telegram integration unavailable)
       <button class="btn btn-outline-danger btn-sm ms-2" :disabled="!invitationEnabled || busy || !['Pending','Accepted'].includes(invitation.status)" @click="cancel(invitation.id)">Cancel invitation</button>
     </div>
-    <div v-if="incoming" class="border rounded p-3 my-3">
-      <strong>Replacement invitation: {{ incoming.event_name }}</strong>
-      <div v-for="term in incoming.assignment_snapshot" :key="term.assignment_id" class="small">{{ term.activity }} | {{ term.role_name }} | {{ term.starts_at }} to {{ term.ends_at }}</div>
-      <p>Status: {{ incomingStatus }}. Acceptance does not apply an assignment.</p>
-      <button class="btn btn-success btn-sm me-2" :disabled="!invitationEnabled || busy || incomingStatus!=='Pending'" @click="respond('Accepted')">Accept invitation</button>
-      <button class="btn btn-outline-danger btn-sm" :disabled="!invitationEnabled || busy || incoming.status!=='Pending'" @click="respond('Declined')">Decline invitation</button>
-    </div>
-    <div v-if="plan?.application_status==='Applied' && disruptionResolutions.length" class="border rounded p-2 my-3 small" aria-label="Recorded disruption resolution">
-      <strong>Recorded resource disruptions</strong>
+    <p v-if="incoming" class="small">Your replacement invitation is available in <RouterLink to="/personal-schedule#simulator-invitation-inbox">Personal Schedule - My replacement invitations</RouterLink>. Accepting it does not apply an assignment.</p>
+    <div v-if="plan && disruptionResolutions.length" class="border rounded p-2 my-3 small" aria-label="Recorded disruption resolution">
+      <strong>Disruption resolution tracker</strong>
       <p>Independently verify the original resource is available again, then record why. Original disruption history is retained. Resolution does not change the event or bypass Undo validation.</p>
       <div v-for="row in disruptionResolutions" :key="row.index" class="border-top py-2">
         <strong>Disruption {{ row.index }}: {{ row.disruption.type==='MEMBER_UNAVAILABLE' ? memberName(row.disruption.memberId) : row.disruption.venueName }}</strong>
-        <div>{{ row.disruption.start }} to {{ row.disruption.end }} | {{ row.resolved ? 'Explicitly resolved' : 'Unresolved ? blocks Undo when relevant to the original event' }}</div>
+        <div>{{ localTime(row.disruption.start) }} to {{ localTime(row.disruption.end) }} | {{ row.resolved ? 'Explicitly resolved' : plan.application_status==='Draft' && plan.lifecycle==='In Progress' ? 'Recovery in progress - original issue unresolved' : 'Unresolved - blocks Undo when relevant to the original event' }}</div>
         <div v-if="row.resolved">{{ row.reason }} | {{ row.resolvedAt }}</div>
-        <template v-else>
+        <template v-else-if="plan.application_status==='Applied'">
           <label :for="'resolution-'+row.index">Reason and evidence that original resource availability is restored</label>
           <textarea :id="'resolution-'+row.index" v-model="resolutionReasons[row.index]" class="form-control form-control-sm" maxlength="2000" :disabled="busy" />
           <button type="button" class="btn btn-outline-primary btn-sm mt-1" :disabled="!applicationEnabled || busy || !manualAcknowledged" @click="resolveDisruption(row)">Mark disruption {{ row.index }} resolved</button>
         </template>
       </div>
     </div>
-    <ul class="small text-muted mt-3"><li v-for="reason in readiness.reasons" :key="reason">{{ reason }}</li></ul>
-    <button class="btn btn-success btn-sm me-2" :disabled="busy || !readiness.ready" @click="applyPlan">Confirm Recovery</button>
-    <button class="btn btn-outline-danger btn-sm me-2" :disabled="!invitationEnabled || busy || plan?.application_status!=='Draft'" @click="cancelPlan">Cancel Recovery Plan</button>
-    <button class="btn btn-outline-danger btn-sm" :disabled="!applicationEnabled || busy || !manualAcknowledged || !undoStatus.ready" @click="undoPlan">Undo Recovery Plan</button>
-    <p class="small text-muted mt-2">Undo: {{ undoStatus.reason }} External Telegram messages cannot be retracted. Invalid or transferred original bookings require manual recovery.</p>
+    <ul v-if="plan?.application_status==='Draft'" class="small text-muted mt-3"><li v-for="reason in readiness.reasons" :key="reason">{{ reason.replace(/replacement member (\d+)/g,(_,id)=>'replacement '+memberName(id)).replace(/activity (\d+)/g,(_,id)=>activityName(id)) }}</li></ul>
+    <button v-if="!plan || plan.application_status==='Draft'" class="btn btn-success btn-sm me-2" :disabled="busy || !applyReady" @click="applyPlan">Apply selected recovery</button>
+    <button v-if="plan?.application_status==='Draft'" class="btn btn-outline-danger btn-sm me-2" :disabled="!invitationEnabled || busy || plan?.application_status!=='Draft'" @click="cancelPlan">Cancel Recovery Plan</button>
+    <button v-if="plan?.application_status==='Applied'" class="btn btn-outline-danger btn-sm" :disabled="!applicationEnabled || busy || !manualAcknowledged || !undoStatus.ready" @click="undoPlan">Undo Recovery Plan</button>
+    <p v-if="plan?.application_status==='Applied'" class="small text-muted mt-2">Undo: {{ undoStatus.reason }} External Telegram messages cannot be retracted. Invalid or transferred original bookings require manual recovery.</p>
     <details v-if="plan?.after_state" class="small"><summary>Undo preview: recorded applied state to original state</summary><pre class="overflow-auto">{{ JSON.stringify({from:plan.after_state,to:plan.before_state},null,2) }}</pre></details>
-    <div v-for="entry in history.audit" :key="entry.id" class="small text-muted">{{ entry.created_at }} | {{ entry.action }} | {{ entry.outcome }} | {{ entry.details }}</div>
+    <details class="small mb-2"><summary>Support diagnostics</summary>
+      <p>Backend application gate: {{ capabilities?.application_enabled ?? 'unverified' }}. Invitation gate: {{ capabilities?.invitations_enabled ?? 'unverified' }}.</p>
+      <p>{{ capabilityError }}</p>
+      <p>Event {{ eventId }} | Club {{ eventClubId }} | Plan {{ plan?.id || 'not selected' }} | Revision {{ plan?.version }}</p>
+    </details>
+    <details class="small mt-3"><summary>Technical audit history</summary><div v-for="entry in history.audit" :key="entry.id" class="small text-muted">{{ entry.created_at }} | {{ entry.action }} | {{ entry.outcome }} | {{ entry.details }}</div></details>
   </section>
 </template>
+
+<style scoped>
+.recovery-dialog-backdrop{position:fixed;inset:0;z-index:1090;background:#0008;display:flex;align-items:center;justify-content:center;padding:1rem}
+.recovery-dialog{width:min(100%,36rem);max-height:90vh;overflow:auto}.recovery-dialog button{margin-top:.75rem}
+.recovery-requirements table{min-width:42rem}.table th{white-space:nowrap}.table td{max-width:20rem;overflow-wrap:anywhere}
+</style>
