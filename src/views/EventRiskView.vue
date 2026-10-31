@@ -712,7 +712,7 @@ function proposedVenueFor(segment) {
 </script>
 
 <template>
-  <div class="py-2">
+  <div class="py-2 simulator-page">
 
     <!-- ===================================================
          PAGE HEADER
@@ -1535,4 +1535,11 @@ function proposedVenueFor(segment) {
 .recovery-choice.is-selected{border-color:var(--pulse-primary)!important;box-shadow:0 0 0 2px var(--pulse-primary-light);background:var(--pulse-card-bg)}
 .recovery-choice summary{cursor:pointer;padding:.5rem 0}.selected-changes{padding-left:1.2rem}
 .facility-setup-dialog{width:min(95vw,60rem);max-height:90vh;overflow:auto;border:1px solid var(--pulse-border);padding:1.25rem;color:var(--pulse-ink)}.facility-setup-dialog::backdrop{background:#0008}
+@media(max-width:767px){
+.simulator-page :deep(.btn),.simulator-page :deep(.form-select),.simulator-page :deep(.form-control:not([type="checkbox"])),.simulator-page :deep(summary),.simulator-steps a{min-height:44px}
+.simulator-page :deep(.form-control),.simulator-page :deep(.form-select){font-size:1rem;min-width:0}
+.simulator-page :deep(input[type="checkbox"]){width:1.15rem;height:1.15rem;vertical-align:middle}
+.simulator-page{padding-bottom:6rem!important;overflow-wrap:anywhere}
+.simulator-page :deep(.sim-row-label){min-height:44px}
+}
 </style>

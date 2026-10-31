@@ -272,7 +272,7 @@ onUnmounted(()=>{disposed=true;++contextEpoch;++historyVersion;++incomingVersion
       <p v-if="!historyLoading && !history.plans.length" class="small">No saved recoveries are available for this event.</p>
       <div class="d-flex flex-wrap gap-2 my-2" role="group" aria-label="Saved recovery views"><button v-for="view in ['All','Pending','Ready to Apply','Applied','Other']" :key="view" type="button" class="btn btn-outline-secondary btn-sm" :aria-pressed="savedFilter===view" @click="savedFilter=view">{{ view }}</button></div>
       <p v-if="history.plans.length && !visibleSaved.length" class="small text-muted">No recoveries in this view.</p>
-      <div class="table-responsive" v-if="visibleSaved.length"><table class="table table-sm align-middle small">
+      <p v-if="visibleSaved.length" class="small text-muted recovery-scroll-hint">Scroll horizontally to view additional columns.</p><div class="table-responsive" v-if="visibleSaved.length" tabindex="0" role="region" aria-label="Scrollable saved recoveries"><table class="table table-sm align-middle small">
        <thead><tr><th scope="col">Recovery proposal</th><th scope="col">Status</th><th scope="col">Next action</th><th scope="col">Review</th></tr></thead>
        <tbody><tr v-for="item in visibleSaved" :key="item.id" :class="{'table-active':selectedPlanId===item.id}"><td>{{ item.title }}</td><td>{{ savedTracker(item).requirementsReady ? 'Ready for final review' : savedTracker(item).status }}</td><td>{{ savedTracker(item).nextAction }}</td><td><button type="button" class="btn btn-outline-secondary btn-sm" :disabled="busy" :aria-pressed="selectedPlanId===item.id" :data-saved-plan-id="item.id" @click="selectedPlanId=item.id">Review saved recovery</button></td></tr></tbody>
       </table></div>
@@ -281,7 +281,7 @@ onUnmounted(()=>{disposed=true;++contextEpoch;++historyVersion;++incomingVersion
       <div class="d-flex flex-wrap justify-content-between gap-2"><h6 class="fw-bold">{{ plan.title }}</h6><span class="badge bg-light text-dark border">{{ tracker.status }}</span></div>
       <p class="small">{{ tracker.nextAction }}</p>
       <p class="small">{{ tracker.satisfied }} of {{ tracker.total }} recorded requirements satisfied. The server revalidates everything before Apply.</p>
-      <div class="table-responsive"><table class="table table-sm small align-middle"><thead><tr><th scope="col">Proposed change</th><th scope="col">Affected activity</th><th scope="col">Requirement</th><th scope="col">Current status</th><th scope="col">Next action</th><th scope="col">Last updated</th></tr></thead><tbody>
+      <p class="small text-muted recovery-scroll-hint">Scroll horizontally to view additional columns.</p><div class="table-responsive" tabindex="0" role="region" aria-label="Scrollable recovery requirements"><table class="table table-sm small align-middle"><thead><tr><th scope="col">Proposed change</th><th scope="col">Affected activity</th><th scope="col">Requirement</th><th scope="col">Current status</th><th scope="col">Next action</th><th scope="col">Last updated</th></tr></thead><tbody>
        <tr v-for="row in tracker.rows" :key="row.key"><td>{{ row.change }}</td><td>{{ row.activity }}</td><td>{{ row.kind }}</td><td>{{ row.status }}<div v-if="row.delivery" class="text-muted">Delivery: {{ row.delivery }}. Delivery is not acceptance.</div></td><td>{{ row.nextAction }}</td><td>{{ row.updated ? localTime(row.updated) : 'Not supplied' }}</td></tr>
       </tbody></table></div>
     </section>
@@ -355,4 +355,5 @@ onUnmounted(()=>{disposed=true;++contextEpoch;++historyVersion;++incomingVersion
 .recovery-dialog{width:min(100%,36rem);max-height:90vh;overflow:auto}.recovery-dialog button{margin-top:.75rem}
 .recovery-requirements table{min-width:42rem}.table th{white-space:nowrap}.table td{max-width:20rem;overflow-wrap:anywhere}
 .recovery-notice{background:var(--pulse-bg);border:1px solid var(--pulse-border)}.recovery-support{color:var(--pulse-ink-muted);font-size:.75rem}
+.table-responsive:focus-visible{outline:2px solid var(--pulse-primary);outline-offset:2px}.recovery-scroll-hint{display:none}@media(max-width:1100px){.recovery-scroll-hint{display:block}}
 </style>
