@@ -140,3 +140,37 @@ test('same replacement across overlapping different activities is infeasible',()
   const option=buildCombinedRecoveryOptions(assessment,{'1':3,'2':3}).find(o=>o.id==='combined-selected')
   assert.ok(evaluateRecoveryPlan({data,eventId:1,disruptions:ds,option}).conflicts.some(c=>c.type==='MEMBER_DOUBLE_BOOKING'))
 })
+
+test('automatic mixed plans cover unavailable member and every affected room together',()=>{
+ const data=fixture(),{ds,assessment}=run(data,[unavailable('m',1),{id:'f',type:'FACILITY_UNAVAILABLE',venueName:'Studio A',start:t('18:00'),end:t('20:00')}])
+ const options=buildCombinedRecoveryOptions(assessment).filter(o=>o.kind==='combined')
+ assert.ok(options.length>=2)
+ for(const option of options){
+  assert.ok(option.changes.some(c=>c.replacementMemberId!=null))
+  assert.ok(option.changes.some(c=>c.segmentId===1&&c.venueName==='Studio B'))
+  assert.ok(option.changes.some(c=>c.segmentId===2&&(c.venueName==='Studio B'||c.starts_at)))
+  const plan=evaluateRecoveryPlan({data,eventId:1,disruptions:ds,option})
+  assert.ok(!plan.conflicts.some(c=>c.type==='MEMBER_UNAVAILABLE'))
+  assert.equal(plan.status,'INFEASIBLE')
+  assert.ok(plan.conflicts.some(c=>['FACILITY_DOUBLE_BOOKING','FACILITY_UNAVAILABLE','DEPENDENCY_CONFLICT'].includes(c.type)))
+  assert.ok(plan.warnings.length)
+ }
+ assert.ok(options.length<=64)
+})
+test('contradictory venue and schedule inputs fail closed instead of last-write winning',()=>{
+ const plan=evaluateRecoveryPlan({data:fixture(),eventId:1,option:{id:'bad',changes:[{segmentId:1,venueName:'Studio A',starts_at:t('18:00')},{segmentId:1,venueName:'Studio B',starts_at:t('18:30')}]}})
+ assert.equal(plan.status,'INFEASIBLE')
+ assert.ok(plan.conflicts.some(c=>c.type==='INVALID_RECOVERY_PROPOSAL'))
+})
+
+test('mixed combinations with an unreserved venue remain tentative rather than approved',()=>{
+ const data=fixture();data.facility_slots=data.facility_slots.filter(s=>s.id!==102);data.facilities=[{id:1,name:'Studio A',is_active:true,capacity:50},{id:2,name:'Studio B',is_active:true,capacity:50}]
+ const {ds,assessment}=run(data,[unavailable('m',1),{id:'f',type:'FACILITY_UNAVAILABLE',venueName:'Studio A',start:t('18:00'),end:t('20:00')}])
+ const evaluation=evaluateRecoveryPlans({data,eventId:1,disruptions:ds,options:buildCombinedRecoveryOptions(assessment).filter(o=>o.kind==='combined')})
+ const tentative=evaluation.rankedPlans.find(p=>p.status==='NEEDS_REVIEW')
+ assert.ok(tentative)
+ assert.ok(tentative.changes.some(c=>c.replacementMemberId!=null))
+ assert.ok(tentative.changes.filter(c=>c.venueName==='Studio B').length===2)
+ assert.ok(tentative.warnings.some(w=>/booking/i.test(w)))
+ assert.equal(evaluation.recommendedPlan,null)
+})

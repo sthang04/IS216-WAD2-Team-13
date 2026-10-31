@@ -79,10 +79,10 @@ export function assessCombinedRecovery(data,eventId,result,disruptions) {
   return {memberGroups,facilityRecovery,facilityOptions,delayedChanges}
 }
 
-/** Build bounded, explicit preview options rather than a combinatorial search.
- * Organizers choose one candidate per member and optionally a facility/time
- * option. The evaluator checks the merged plan against ALL disruptions. */
-export function buildCombinedRecoveryOptions(assessment,selections={},facilityOptionIds=[]) {
+/** Retain individual building blocks and a custom preview, then enumerate a
+ * bounded product of candidate and facility/time choices for whole-plan ranking.
+ * Every proposal still requires evaluation against ALL disruptions. */
+export function buildCombinedRecoveryOptions(assessment,selections={},facilityOptionIds=[],generate=true) {
   const options = [], seen = new Set()
   const optionKey = option => JSON.stringify(option.changes.map(change =>
     Object.fromEntries(Object.entries(change).sort(([a],[b]) => a.localeCompare(b))))
@@ -132,13 +132,39 @@ export function buildCombinedRecoveryOptions(assessment,selections={},facilityOp
     changes.push(...memberChanges(group,candidate)); selected = true
   }
   if (selected) {
-    const combined = {id:'combined-selected',title:'Combined selected recovery preview',changes,selectionIssues,
+    const combined = {id:'combined-selected',title:'Custom combined recovery preview',changes,selectionIssues,sourceFacilityOptionIds:facilities.map(o=>o.id),kind:'custom',
       requiresApproval:true,note:'All remaining conflicts and unselected replacements still require resolution.'}
     // An explicitly selected plan replaces an identical individual option,
     // rather than showing duplicate proposals under different titles.
     const duplicate = options.findIndex(option => optionKey(option) === optionKey(combined))
     if (duplicate >= 0) options.splice(duplicate,1)
     options.push(combined)
+  }
+  if (generate) {
+    // Bounded search over actual building blocks, never synthetic approvals.
+    const dimensions = assessment.memberGroups.filter(g=>g.affectedAssignments.length).map(group=>
+      group.eligible.slice(0,4).map(candidate=>({member:[String(group.memberId),candidate.id]})))
+    const base = new Map(assessment.delayedChanges.map(c=>[String(c.segmentId),c]))
+    for (const recommendation of assessment.facilityRecovery) {
+      const choices=assessment.facilityOptions.filter(option=>option.changes.some(c=>
+        same(c.segmentId,recommendation.segmentId) && (c.venueName ||
+        (c.starts_at && c.starts_at!==base.get(String(c.segmentId))?.starts_at))))
+      dimensions.push(choices.slice(0,4).map(option=>({facility:option.id})))
+    }
+    let count=0
+    const visit=(index,members,rooms)=>{
+      if(count>=64)return
+      if(index===dimensions.length){
+        count++
+        const proposal=buildCombinedRecoveryOptions(assessment,members,rooms,false).find(o=>o.id==='combined-selected')
+        if(proposal && !proposal.selectionIssues.length)add({...proposal,
+          id:'overall-'+JSON.stringify([Object.entries(members),rooms]),title:'Combined recovery option '+count,
+          kind:'combined',sourceFacilityOptionIds:rooms})
+        return
+      }
+      for(const choice of dimensions[index])visit(index+1,choice.member?{...members,[choice.member[0]]:choice.member[1]}:members,choice.facility?[...rooms,choice.facility]:rooms)
+    }
+    if(dimensions.length && dimensions.every(d=>d.length))visit(0,{},[])
   }
   return options
 }
