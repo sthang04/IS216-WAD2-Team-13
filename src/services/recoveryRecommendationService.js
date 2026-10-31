@@ -1,3 +1,4 @@
+import {simulatorBookingPeriod} from './simulatorFacilityEvidence.js'
 /*
 ============================================================
 PULSE — RECOVERY RECOMMENDATION SERVICE
@@ -21,8 +22,8 @@ ALGORITHMS:
    - Timetable availability (30%)
    - Current commitment load (20%)
 
-   Members who are unavailable or have no matching
-   recorded role are excluded.
+   Confirmed conflicts exclude candidates; missing role or personal timetable
+   evidence requires manual review.
 
 2. FACILITY RECOVERY
    Identify activities affected by:
@@ -80,14 +81,7 @@ const minutes = (a, b) =>
 //
 // Convert these into complete timestamps using
 // Singapore's UTC+08:00 timezone.
-const slotPeriod = slot => {
-  const [start, end] = slot.time_slot.split(/\s*-\s*/)
-
-  return [
-    `${slot.event_date}T${start}:00+08:00`,
-    `${slot.event_date}T${end}:00+08:00`
-  ]
-}
+const slotPeriod = simulatorBookingPeriod
 
 
 // Normalize role names before comparing them.
@@ -95,400 +89,119 @@ const slotPeriod = slot => {
 // Example:
 // " Lead Dancer " becomes "lead dancer".
 const norm = value =>
-  String(value || '').trim().toLowerCase()
+  String(value || '').trim().toLowerCase().replace(/\s+/g, ' ')
 
 
 // Remove duplicate values from an array.
 const distinct = values => [...new Set(values)]
 
 
-/*
-============================================================
-ALGORITHM 1 — PERFORMER / CREW REPLACEMENT RANKING
-============================================================
-
-PURPOSE:
-Recommend suitable members when an assigned performer
-or crew member becomes unavailable.
-
-INPUTS:
-- data:
-  Event, member, assignment and scheduling records.
-
-- eventId:
-  ID of the event being simulated.
-
-- memberId:
-  ID of the unavailable member.
-
-- disruptions:
-  Array of hypothetical disruptions.
-
-- limit:
-  Maximum number of recommendations to return.
-
-SCORING CRITERIA:
-
-1. SPECIALTY MATCH — 50%
-
-   Checks whether the candidate has previously performed
-   the required role.
-
-   Specialty Score =
-     Matching Required Roles / Total Required Roles
-
-2. TIMETABLE AVAILABILITY — 30%
-
-   Checks whether the candidate:
-   - Has overlapping assigned activities
-   - Is marked unavailable in the simulation
-
-   Availability Score:
-   - 1 = No recorded conflicts
-   - 0 = Has a conflict or is unavailable
-
-3. COMMITMENT LOAD — 20%
-
-   Considers how many assignments the candidate already
-   has for the selected event.
-
-   Load Score =
-     max(0, 1 - Number of Assignments / 5)
-
-   Five assignments is a proposed workload threshold.
-
-FINAL FORMULA:
-
-Suitability Score =
-  100 × (
-    0.50 × Specialty Score
-    + 0.30 × Availability Score
-    + 0.20 × Load Score
-  )
-
-ELIGIBILITY RULES:
-- Exclude the unavailable member.
-- Exclude candidates with timetable conflicts.
-- Exclude candidates without a matching recorded role.
-
-OUTPUT:
-Eligible candidates ranked by suitability score,
-highest first.
-
-IMPORTANT:
-The score is a heuristic ranking, NOT the probability
-that a replacement will succeed.
-============================================================
-*/
-
-export function recommendMemberReplacements(
-  data,
-  eventId,
-  memberId,
-  disruptions = [],
-  limit = 5
-) {
-
-  // ----------------------------------------------------------
-  // STEP 1: IDENTIFY THE AFFECTED ACTIVITIES
-  // ----------------------------------------------------------
-
-  // Retrieve activities belonging to the selected event.
-  const eventSegments = data.event_segments.filter(
-    segment => segment.event_id === eventId
-  )
-
-  // Store the IDs for efficient assignment filtering.
-  const segmentIds = new Set(
-    eventSegments.map(segment => segment.id)
-  )
-
-  // Find assignments belonging to the unavailable member.
-  //
-  // Only assignments that overlap the member's
-  // unavailability period need replacement.
-  const impacted = data.segment_assignments
-    .filter(assignment =>
-      assignment.member_id === memberId &&
-      segmentIds.has(assignment.segment_id)
-    )
-    .filter(assignment =>
-      eventSegments.some(segment =>
-        segment.id === assignment.segment_id &&
-        disruptions.some(disruption =>
-          disruption.type === 'MEMBER_UNAVAILABLE' &&
-          disruption.memberId === memberId &&
-          overlap(
-            segment.starts_at,
-            segment.ends_at,
-            disruption.start,
-            disruption.end
-          )
-        )
-      )
-    )
-
-  // Identify the roles that require replacements.
-  const requiredRoles = distinct(
-    impacted.map(assignment =>
-      norm(assignment.role_name)
-    )
-  )
-
-  // Retrieve the affected activity records.
-  const affectedSegments = eventSegments.filter(
-    segment =>
-      impacted.some(
-        assignment =>
-          assignment.segment_id === segment.id
-      )
-  )
-
-  // If no assignments are affected, no replacement is needed.
-  if (!affectedSegments.length) {
-    return []
+/**
+ * Rank hypothetical replacements without changing assignments. Membership and
+ * coverage are simulator metadata, not guessed database columns or permissions.
+ * A missing clash does not prove availability when schedule coverage is unknown.
+ */
+export function assessMemberReplacements(data, eventId, memberId, disruptions = [], limit = Infinity) {
+  const excluded = []
+  const empty = message => ({ eligible: [], excluded: [], warnings: [message] })
+  if (!data || !['events','members','event_segments','segment_assignments'].every(key =>
+      Array.isArray(data[key]) && data[key].every(row => row && typeof row === 'object'))) {
+    return empty('Member, event or assignment data is incomplete. Refresh before reviewing replacements.')
   }
-
-
-  // ----------------------------------------------------------
-  // STEP 2: ORGANIZE MEMBERS' EXISTING ASSIGNMENTS
-  // ----------------------------------------------------------
-
-  // Group assignments by member ID.
-  //
-  // This avoids repeatedly searching through the full
-  // assignment list for each candidate.
-  const assignmentsByMember = new Map()
-
-  for (const assignment of data.segment_assignments) {
-
-    if (!assignmentsByMember.has(assignment.member_id)) {
-      assignmentsByMember.set(
-        assignment.member_id,
-        []
-      )
+  const validPeriod = (start,end) => Number.isFinite(ms(start)) && Number.isFinite(ms(end)) && ms(start) < ms(end)
+  if (!Array.isArray(disruptions) || disruptions.some(d => !d ||
+      (d.type === 'MEMBER_UNAVAILABLE' && !validPeriod(d.start,d.end)))) {
+    return empty('Enter a valid unavailability period with an end after its start.')
+  }
+  const same = (a,b) => a != null && b != null && String(a) === String(b)
+  const event = data.events.find(row => same(row.id,eventId))
+  // A failed unrelated event must not invalidate this event's successful roster.
+  const coverage = data.member_replacement_coverage?.byEvent?.[String(eventId)] ?? data.member_replacement_coverage
+  if (!event || coverage?.rosterVerified !== true) return empty('The selected event roster is not verified. Check the coverage warning.')
+  const segments = new Map(data.event_segments.map(row => [String(row.id),row]))
+  const impacted = data.segment_assignments.filter(a => {
+    const segment = segments.get(String(a.segment_id))
+    return same(a.member_id,memberId) && same(segment?.event_id,eventId) &&
+      disruptions.some(d => d.type === 'MEMBER_UNAVAILABLE' && same(d.memberId,memberId) &&
+        overlap(segment.starts_at,segment.ends_at,d.start,d.end))
+  })
+  if (!impacted.length) return empty('No recorded assignments overlap the selected member unavailability. Check the selected event, member and dates.')
+  const targets = [...new Set(impacted.map(a => String(a.segment_id)))].map(id => segments.get(id))
+  const requiredRoles = distinct(impacted.map(a => norm(a.role_name)).filter(Boolean))
+  const candidates = []
+  for (const member of data.members) {
+    if (same(member.id,memberId)) continue
+    const membership = (data.replacement_memberships || []).some(row =>
+      same(row.memberId,member.id) && same(row.clubId,event.club_id) && row.active === true && row.verified === true)
+    if (!membership) continue
+    const assignments = data.segment_assignments.filter(a => same(a.member_id,member.id))
+    const roles = distinct(assignments.map(a => norm(a.role_name)).filter(Boolean))
+    const matchedRoles = requiredRoles.filter(role => roles.includes(role))
+    const clashes = assignments.filter(a => targets.some(target => {
+      const segment = segments.get(String(a.segment_id))
+      return segment && !same(segment.id,target.id) &&
+        overlap(segment.starts_at,segment.ends_at,target.starts_at,target.ends_at)
+    }))
+    // Busy periods may come from a verified timetable adapter. Fixtures supply
+    // them directly; live data must never invent a member's availability.
+    const busy = (data.member_busy_periods || []).some(period => same(period.memberId,member.id) &&
+      targets.some(t => overlap(t.starts_at,t.ends_at,period.start,period.end)))
+    const unavailable = disruptions.some(d => d.type === 'MEMBER_UNAVAILABLE' && same(d.memberId,member.id) &&
+      targets.some(t => overlap(t.starts_at,t.ends_at,d.start,d.end)))
+    if (clashes.length || busy || unavailable) {
+      // Only verified active club members reach this branch. Do not display
+      // unauthorized identities merely to explain why they were not recommended.
+      const conflicts = [...new Map(clashes.map(a => {
+        const segment = segments.get(String(a.segment_id))
+        const conflictingEvent = data.events.find(e => same(e.id,segment.event_id))
+        return [String(segment.id), {
+          segmentId: segment.id, eventName: conflictingEvent?.name || 'Event name unavailable',
+          activity: segment.title || 'Activity name unavailable',
+          start: segment.starts_at, end: segment.ends_at
+        }]
+      })).values()]
+      const reasons = []
+      if (conflicts.length) reasons.push('Overlapping recorded event assignment(s)')
+      if (busy) reasons.push('Overlapping recorded busy period')
+      if (unavailable) reasons.push('Marked unavailable in this simulation')
+      excluded.push({ id: member.id, name: member.full_name, reasons, conflicts })
+      continue
     }
-
-    assignmentsByMember
-      .get(assignment.member_id)
-      .push(assignment)
+    const valid = t => Number.isFinite(ms(t?.starts_at)) && Number.isFinite(ms(t?.ends_at)) && ms(t.starts_at) < ms(t.ends_at)
+    const incomplete = targets.some(t => !valid(t)) || assignments.some(a => !valid(segments.get(String(a.segment_id)))) ||
+      (data.member_busy_periods || []).some(p => same(p.memberId,member.id) &&
+        (!Number.isFinite(ms(p.start)) || !Number.isFinite(ms(p.end)) || ms(p.start) >= ms(p.end)))
+    const availabilityVerified = coverage?.scheduleVerified === true && !incomplete
+    const roleMatch = !requiredRoles.length || impacted.some(a => !norm(a.role_name)) || !roles.length ? 'unverified' :
+      matchedRoles.length === requiredRoles.length ? 'exact' : matchedRoles.length ? 'partial' : 'none'
+    const reviewReasons = []
+    if (roleMatch !== 'exact') reviewReasons.push(roleMatch === 'partial' ? 'Only some required roles are recorded' :
+      roleMatch === 'none' ? 'Recorded roles do not match the required roles' : 'Required role or member experience is unverified')
+    if (!availabilityVerified) reviewReasons.push('Availability unverified: timetable or assignment coverage is incomplete')
+    const currentLoad = assignments.filter(a => same(segments.get(String(a.segment_id))?.event_id,eventId)).length
+    const specialtyScore = requiredRoles.length ? matchedRoles.length / requiredRoles.length : 0
+    // Preserve the 50/30/20 weights. Unknown availability earns no verified-availability points.
+    const score = Math.round(100 * (0.5 * specialtyScore + 0.3 * Number(availabilityVerified) +
+      0.2 * Math.max(0,1-currentLoad/5)))
+    candidates.push({ id:member.id, name:member.full_name, score, roleMatch, matchedRoles, currentLoad,
+      eligible:true, requiresManualReview:reviewReasons.length > 0, reviewReasons, availabilityVerified, clashes:0,
+      specialty:roles.join(', ') || 'No recorded role history', workload:currentLoad + ' assigned tasks',
+      availability:availabilityVerified ? 'No clashes in verified schedule coverage' : 'No recorded clash; availability unverified',
+      experience:matchedRoles.length + '/' + requiredRoles.length + ' required roles recorded (' + roleMatch + ')',
+      reason:reviewReasons.join('; ') || 'All required roles recorded; no known timetable conflicts' })
   }
-
-  // Create a lookup for activity information.
-  const segmentById = new Map(
-    data.event_segments.map(segment => [
-      segment.id,
-      segment
-    ])
-  )
-
-
-  // ----------------------------------------------------------
-  // STEP 3: EVALUATE POTENTIAL REPLACEMENT MEMBERS
-  // ----------------------------------------------------------
-
-  // Exclude the unavailable member from the candidate list.
-  return data.members
-    .filter(member => member.id !== memberId)
-    .map(member => {
-
-      // Retrieve this candidate's recorded assignments.
-      const assignments =
-        assignmentsByMember.get(member.id) || []
-
-      // Identify roles previously performed by the candidate.
-      //
-      // These roles are used as a proxy for specialty
-      // because a dedicated skills profile is not available.
-      const roles = distinct(
-        assignments
-          .map(assignment => norm(assignment.role_name))
-          .filter(Boolean)
-      )
-
-      // Find which required roles match the candidate's
-      // recorded role history.
-      const matchedRoles = requiredRoles.filter(
-        role => roles.includes(role)
-      )
-
-
-      // ------------------------------------------------------
-      // STEP 4A: CALCULATE SPECIALTY MATCH (50%)
-      // ------------------------------------------------------
-
-      // Example:
-      // Required roles: Lead Dancer, Dance Captain
-      // Matched roles: Lead Dancer
-      //
-      // Specialty Score = 1 / 2 = 0.5
-      const specialtyScore = requiredRoles.length
-        ? matchedRoles.length / requiredRoles.length
-        : 0
-
-
-      // ------------------------------------------------------
-      // STEP 4B: CHECK TIMETABLE AVAILABILITY (30%)
-      // ------------------------------------------------------
-
-      // Find assignments that overlap any affected activity.
-      //
-      // A candidate should not be recommended if they
-      // already have another activity at the same time.
-      const clashes = affectedSegments.flatMap(target =>
-        assignments
-          .filter(assignment =>
-            assignment.segment_id !== target.id
-          )
-          .filter(assignment => {
-
-            const assignedSegment =
-              segmentById.get(assignment.segment_id)
-
-            return assignedSegment &&
-              overlap(
-                assignedSegment.starts_at,
-                assignedSegment.ends_at,
-                target.starts_at,
-                target.ends_at
-              )
-          })
-      )
-
-      // Also check whether this candidate is marked
-      // unavailable by another disruption in the
-      // current simulation.
-      const unavailable = disruptions.some(disruption =>
-        disruption.type === 'MEMBER_UNAVAILABLE' &&
-        disruption.memberId === member.id &&
-        affectedSegments.some(segment =>
-          overlap(
-            segment.starts_at,
-            segment.ends_at,
-            disruption.start,
-            disruption.end
-          )
-        )
-      )
-
-      // Candidate is free only if there are no recorded
-      // timetable clashes and no simulated unavailability.
-      const isFree =
-        clashes.length === 0 &&
-        !unavailable
-
-
-      // ------------------------------------------------------
-      // STEP 4C: CALCULATE COMMITMENT LOAD (20%)
-      // ------------------------------------------------------
-
-      // Count the candidate's existing assignments
-      // within the selected event.
-      //
-      // More assignments mean a higher workload.
-      const currentLoad = assignments.filter(
-        assignment =>
-          segmentIds.has(assignment.segment_id)
-      ).length
-
-      // Convert workload into a score between 0 and 1.
-      //
-      // Examples:
-      // 0 assignments -> 1.0
-      // 2 assignments -> 0.6
-      // 5 assignments -> 0.0
-      //
-      // This is a workload proxy, not a medical
-      // measurement of burnout.
-      const loadScore = Math.max(
-        0,
-        1 - currentLoad / 5
-      )
-
-
-      // ------------------------------------------------------
-      // STEP 5: CALCULATE FINAL SUITABILITY SCORE
-      // ------------------------------------------------------
-
-      // Weighted formula:
-      // 50% specialty + 30% availability + 20% workload
-      const score = Math.round(
-        100 * (
-          0.50 * specialtyScore +
-          0.30 * (isFree ? 1 : 0) +
-          0.20 * loadScore
-        )
-      )
-
-      // Eligibility is separate from the numerical score.
-      //
-      // Even if a candidate has a high score, they must
-      // be free and have at least one matching role.
-      const eligible =
-        isFree &&
-        specialtyScore > 0
-
-
-      // ------------------------------------------------------
-      // STEP 6: PREPARE THE CANDIDATE RESULT
-      // ------------------------------------------------------
-
-      // Return the score and supporting explanations
-      // so the UI can show WHY someone was recommended.
-      return {
-        id: member.id,
-        name: member.full_name,
-        score,
-        eligible,
-
-        specialty:
-          roles.join(', ') || 'No recorded role',
-
-        workload:
-          `${currentLoad} assigned tasks`,
-
-        availability: unavailable
-          ? 'Marked unavailable'
-          : clashes.length
-            ? `${clashes.length} schedule clash(es)`
-            : 'No recorded timetable clashes',
-
-        experience:
-          `${matchedRoles.length}/${requiredRoles.length} required role(s) matched`,
-
-        reason: !isFree
-          ? 'Not currently available for all affected segments'
-          : specialtyScore === 0
-            ? 'No matching recorded role'
-            : `Matches ${matchedRoles.join(', ')}; ${currentLoad} existing assignments`,
-
-        matchedRoles,
-        currentLoad,
-        clashes: clashes.length
-      }
-    })
-
-
-    // --------------------------------------------------------
-    // STEP 7: FILTER AND RANK ELIGIBLE CANDIDATES
-    // --------------------------------------------------------
-
-    // Remove candidates who do not satisfy eligibility rules.
-    .filter(candidate => candidate.eligible)
-
-    // Rank highest suitability score first.
-    //
-    // If two candidates have the same score,
-    // prefer the candidate with fewer assignments.
-    .sort((a, b) =>
-      b.score - a.score ||
-      a.currentLoad - b.currentLoad
-    )
-
-    // Return only the requested number of recommendations.
-    .slice(0, limit)
+  // Exact experience is preferred even if availability still needs review.
+  const eligible = candidates.sort((a,b) => Number(b.roleMatch === 'exact')-Number(a.roleMatch === 'exact') ||
+    Number(a.requiresManualReview)-Number(b.requiresManualReview) || b.score-a.score ||
+    a.currentLoad-b.currentLoad || String(a.id).localeCompare(String(b.id)))
+    .slice(0,Math.max(0,limit))
+  return { eligible, excluded, warnings: [] }
 }
 
+// Keep the existing API and default limit for plan evaluation callers.
+export function recommendMemberReplacements(data, eventId, memberId, disruptions = [], limit = 5) {
+  return assessMemberReplacements(data, eventId, memberId, disruptions, limit).eligible
+}
 
 /*
 ============================================================
@@ -685,9 +398,7 @@ export function recommendFacilityRecovery(
     // A venue appearing in the booking table does NOT
     // mean it is currently free.
     const alternatives = distinct(
-      data.facility_slots.map(slot =>
-        slot.venue_name
-      )
+      (data.facilities?.length ? data.facilities.filter(f=>f.is_active!==false).map(f=>f.name) : data.facility_slots.map(slot=>slot.venue_name)).filter(Boolean)
     )
 
       // Exclude venues already assigned to this activity.
@@ -733,7 +444,11 @@ export function recommendFacilityRecovery(
                   'an unknown club'
                 }`
             }
-          : null
+          : {
+              venue:name,
+              status:'No recorded conflict verified yet / booking approval required',
+              reason:'Active facility inventory candidate. Calendar conflicts, audience capacity, equipment and club eligibility require verification; no booking has been created.'
+            }
       })
 
       // Remove venues without supporting records.

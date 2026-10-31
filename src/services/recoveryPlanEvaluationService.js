@@ -1,3 +1,6 @@
+import {simulatorBookingPeriod} from './simulatorFacilityEvidence.js'
+import { recommendMemberReplacements } from './recoveryRecommendationService.js'
+
 /*
 ==========================================================
 RECOVERY PLAN EVALUATION SERVICE
@@ -219,34 +222,10 @@ instead of silently assuming that a venue is free.
 */
 
 function parseFacilityBooking(slot) {
-  if (!slot?.event_date || !slot?.time_slot) {
-    return null
-  }
-
-  const match = String(slot.time_slot).match(
-    /^\s*(\d{1,2}:\d{2})\s*-\s*(\d{1,2}:\d{2})\s*$/
-  )
-
-  if (!match) return null
-
-  const [, startText, endText] = match
-
-  const start = timestamp(
-    `${slot.event_date}T${startText}:00+08:00`
-  )
-
-  const end = timestamp(
-    `${slot.event_date}T${endText}:00+08:00`
-  )
-
-  if (!validPeriod(start, end)) {
-    return null
-  }
-
-  return {
-    start,
-    end
-  }
+  // Prefer actual calendar date/time fields, preserving seconds and SG offset.
+  const [begin,finish]=simulatorBookingPeriod(slot)
+  const start=timestamp(begin),end=timestamp(finish)
+  return validPeriod(start,end)?{start,end}:null
 }
 
 // ========================================================
@@ -346,7 +325,9 @@ function buildProposedPlan(data, eventId, option) {
           sameId(
             assignment.member_id,
             change.replacedMemberId
-          )
+          ) &&
+          (change.assignmentId == null || sameId(assignment.id, change.assignmentId)) &&
+          (change.roleName == null || normaliseRole(assignment.role_name) === normaliseRole(change.roleName))
       )
 
       if (!target) {
@@ -601,13 +582,13 @@ when they are present in data.facility_slots.
 */
 
 // Booking statuses reflect the project facility_slots records.
-// Only "Booked" is treated as a confirmed reservation.
+// "Booked" and "Officially Confirmed Booking" are confirmed reservations.
 function bookingStatus(slot) {
   return String(slot?.status || '').trim().toLowerCase()
 }
 
 function isConfirmedBooking(slot) {
-  return bookingStatus(slot) === 'booked'
+  return ['booked', 'officially confirmed booking'].includes(bookingStatus(slot))
 }
 
 function sameVenue(a, b) {
@@ -651,7 +632,7 @@ function checkFacilityConflicts(data, plan, disruptions) {
     // An unlinked activity has no provable booking entitlement.
     // We do not invent a venue or treat another CCA's booking as ours.
     if (!venues.length) {
-      warnings.push(`No linked facility booking for ${segment.title}`)
+      warnings.push(`No linked or identifiable facility booking for ${segment.title}`)
       continue
     }
 
@@ -723,7 +704,7 @@ function checkFacilityConflicts(data, plan, disruptions) {
             segmentId: segment.id,
             venue,
             facilitySlotId: slot.id,
-            message: `${segment.title} overlaps a Booked reservation at ${venue}`
+            message: `${segment.title} overlaps a confirmed reservation at ${venue}`
           })
         } else {
           warnings.push(
@@ -844,18 +825,11 @@ function checkReplacementSpecialty(
       continue
     }
 
-    const originalAssignment =
-      list(data.segment_assignments).find(
-        assignment =>
-          sameId(
-            assignment.segment_id,
-            change.segmentId
-          ) &&
-          sameId(
-            assignment.member_id,
-            change.replacedMemberId
-          )
-      )
+    const originalAssignment = list(data.segment_assignments).find(assignment =>
+      sameId(assignment.segment_id, change.segmentId) &&
+      sameId(assignment.member_id, change.replacedMemberId) &&
+      (change.assignmentId == null || sameId(assignment.id, change.assignmentId)) &&
+      (change.roleName == null || normaliseRole(assignment.role_name) === normaliseRole(change.roleName)))
 
     const requiredRole = normaliseRole(
       originalAssignment?.role_name
@@ -1214,7 +1188,44 @@ export function evaluateRecoveryPlan({
     ...facilityResult.conflicts
   ]
 
+  for (const message of list(option.selectionIssues)) {
+    conflicts.push({ type: 'CONTRADICTORY_RECOVERY_SELECTION', message })
+  }
+  // Two absent people cannot both be replaced by one person in the same activity.
+  // Duplicate role records for the SAME original member remain valid.
+  const replacementTargets = new Map()
+  for (const change of list(option.changes)) {
+    if (change.replacementMemberId == null) continue
+    const key = JSON.stringify([String(change.segmentId), String(change.replacementMemberId)])
+    const originals = replacementTargets.get(key) || new Set()
+    originals.add(String(change.replacedMemberId))
+    replacementTargets.set(key, originals)
+  }
+  if ([...replacementTargets.values()].some(originals => originals.size > 1)) {
+    conflicts.push({ type: 'REPLACEMENT_CAPACITY_CONFLICT',
+      message: 'One candidate cannot replace multiple unavailable members in the same activity' })
+  }
+  // Candidate checks must use the PROPOSED timing, not the pre-delay schedule.
+  const proposedById = new Map(plan.segments.map(segment => [String(segment.id), segment]))
+  const candidateData = { ...data, event_segments: list(data.event_segments)
+    .map(segment => proposedById.get(String(segment.id)) || segment) }
+
+  // Keep uncertainty visible in plan evaluation; ranking never proves eligibility.
+  const replacementWarnings = list(option.changes).flatMap(change => {
+    if (change.replacementMemberId == null) return []
+    const candidates = recommendMemberReplacements(candidateData, eventId, change.replacedMemberId, disruptions, Infinity)
+    const candidate = candidates.find(row => sameId(row.id, change.replacementMemberId))
+    const coverage = data.member_replacement_coverage?.byEvent?.[String(eventId)] ?? data.member_replacement_coverage
+    if (!candidate && coverage?.rosterVerified === true) {
+      // A known clash/ineligible membership must not be downgraded to a warning.
+      conflicts.push({ type: 'REPLACEMENT_INELIGIBLE', memberId: change.replacementMemberId,
+        message: 'Replacement failed active membership or availability checks' })
+      return []
+    }
+    return candidate ? candidate.reviewReasons : ['Replacement eligibility could not be verified']
+  })
   const warnings = unique([
+    ...replacementWarnings,
     ...plan.errors,
     ...facilityResult.warnings,
     ...checkReplacementSpecialty(

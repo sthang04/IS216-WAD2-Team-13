@@ -21,7 +21,7 @@ import SignUpView from './views/SignUpView.vue';
 import AvailabilityView from './views/AvailabilityView.vue';
 import OperationsView from './views/OperationsView.vue';
 import EventRiskView from './views/EventRiskView.vue';
-import WhatIfSimulator from './components/WhatIfSimulator.vue';
+
 import PersonalScheduleView from './views/PersonalScheduleView.vue';
 import OslAdminView from './views/OslAdminView.vue';
  
@@ -719,15 +719,15 @@ onMounted(async () => {
         <!-- VIEW 5: Event Risk Planning & What-If Simulator -->
         <div v-show="currentView === 'risk'">
           <EventRiskView :api-mode="apiMode" :read-only="isGuest" />
-          <WhatIfSimulator />
+
         </div>
  
         </div>
       </main>
  
-      <!-- Pip watches notifications and waitlist offers on every page -->
+      <!-- Notifications Pip is shown outside risk planning; EventRiskView owns Simulation Pip. -->
       <PipMascot
-        v-if="pipVisible"
+        v-if="pipVisible && currentView !== 'risk'"
         mode="notifications"
         :unanswered-count="unreadCount"
         :offer-seconds-left="soonestOfferSeconds"
