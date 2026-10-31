@@ -50,8 +50,8 @@ STEP 4: Calculate four scoring components:
 
 Conflict Resolution       = 40%
 Timetable Preservation    = 30%
-Member Workload           = 20%
-Venue Suitability         = 10%
+Member Suitability / Load = 20%
+Venue Evidence / Movement = 10%
 
 Final Score =
     0.40 * conflictScore
@@ -273,7 +273,14 @@ function buildProposedPlan(data, eventId, option) {
   const venueOverrides = new Map()
   const errors = []
 
+  const selectedFields=new Map()
   for (const change of list(option.changes)) {
+    for(const field of ['venueName','starts_at','ends_at','facilityBookingId']){
+      if(change[field]===undefined)continue
+      const key=String(change.segmentId)+':'+field
+      if(selectedFields.has(key)&&selectedFields.get(key)!==change[field])errors.push('Contradictory '+field+' choices for activity '+change.segmentId)
+      selectedFields.set(key,change[field])
+    }
     const segment = segmentMap.get(
       String(change.segmentId)
     )
@@ -650,6 +657,13 @@ function checkFacilityConflicts(data, plan, disruptions) {
     }
 
     for (const venue of venues) {
+      const facility=list(data.facilities).find(f=>sameVenue(f.name,venue))
+      const staff=new Set(plan.assignments.filter(a=>sameId(a.segment_id,segment.id)).map(a=>String(a.member_id))).size
+      if(facility?.is_active===false)conflicts.push({type:'INACTIVE_FACILITY',segmentId:segment.id,message:venue+' is inactive'})
+      if(facility?.capacity!=null && Number.isFinite(Number(facility.capacity)) && Number(facility.capacity)<staff)
+        conflicts.push({type:'FACILITY_CAPACITY',segmentId:segment.id,message:venue+' cannot accommodate assigned members'})
+      if(override)warnings.push('Verify total audience capacity, equipment and club eligibility for '+venue+'; assigned staff alone does not establish suitability')
+
       for (const disruption of disruptions) {
         if (disruption.type === 'FACILITY_UNAVAILABLE' &&
             sameVenue(disruption.venueName, venue) &&
@@ -1188,6 +1202,7 @@ export function evaluateRecoveryPlan({
     ...facilityResult.conflicts
   ]
 
+  for(const message of plan.errors)conflicts.push({type:'INVALID_RECOVERY_PROPOSAL',message})
   for (const message of list(option.selectionIssues)) {
     conflicts.push({ type: 'CONTRADICTORY_RECOVERY_SELECTION', message })
   }
@@ -1211,6 +1226,7 @@ export function evaluateRecoveryPlan({
     .map(segment => proposedById.get(String(segment.id)) || segment) }
 
   // Keep uncertainty visible in plan evaluation; ranking never proves eligibility.
+  const suitabilityScores=[]
   const replacementWarnings = list(option.changes).flatMap(change => {
     if (change.replacementMemberId == null) return []
     const candidates = recommendMemberReplacements(candidateData, eventId, change.replacedMemberId, disruptions, Infinity)
@@ -1222,6 +1238,7 @@ export function evaluateRecoveryPlan({
         message: 'Replacement failed active membership or availability checks' })
       return []
     }
+    if(candidate)suitabilityScores.push(candidate.score)
     return candidate ? candidate.reviewReasons : ['Replacement eligibility could not be verified']
   })
   const warnings = unique([
@@ -1257,8 +1274,10 @@ export function evaluateRecoveryPlan({
       plan
     )
 
-  const venue =
-    calculateVenueScore(plan)
+  const venue = calculateVenueScore(plan)
+  // Accessible evidence affects ranking; absence of evidence is not suitability.
+  const facilityEvidenceScore=facilityResult.conflicts.length?0:facilityResult.warnings.length?50:100
+  venue.score=(venue.score+facilityEvidenceScore)/2
 
   // Conflict score is zero if there are known
   // conflicts, otherwise 100.
@@ -1272,6 +1291,8 @@ export function evaluateRecoveryPlan({
 
   const workloadScore =
     workload.score ?? 0
+  const memberSuitability=suitabilityScores.length ? suitabilityScores.reduce((a,b)=>a+b,0)/suitabilityScores.length : workloadScore
+  const staffingScore=(workloadScore+memberSuitability)/2
 
   const score = round(
     conflictScore *
@@ -1280,7 +1301,7 @@ export function evaluateRecoveryPlan({
     timetable.score *
       RECOVERY_WEIGHTS.timetable +
 
-    workloadScore *
+    staffingScore *
       RECOVERY_WEIGHTS.workload +
 
     venue.score *
@@ -1332,6 +1353,8 @@ export function evaluateRecoveryPlan({
       option.title ||
       'Untitled Recovery Option',
 
+    kind: option.kind,
+    sourceFacilityOptionIds: option.sourceFacilityOptionIds,
     score,
     status,
     feasible: status === 'FEASIBLE',
@@ -1339,7 +1362,8 @@ export function evaluateRecoveryPlan({
     scoreBreakdown: {
       conflict: conflictScore,
       timetable: timetable.score,
-      workload: workload.score,
+      workload: round(staffingScore),
+      memberSuitability: round(memberSuitability),
       venue: venue.score
     },
 

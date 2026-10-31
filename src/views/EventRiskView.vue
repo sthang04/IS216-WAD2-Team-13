@@ -104,10 +104,10 @@ const stages=[{label:'Configure',target:'simulator-scenarios'},{label:'Run simul
 function adoptPreviewInputs(){
  const selected=selectedRecoveryPlan.value;if(!selected || selected.id==='combined-selected')return
  replacementSelections.value=Object.fromEntries(selected.changes.filter(c=>c.replacementMemberId!=null).map(c=>[String(c.replacedMemberId),c.replacementMemberId]))
- selectedFacilityOptions.value=combinedAssessment.value.facilityOptions.some(o=>o.id===selected.id)?[selected.id]:[]
+ selectedFacilityOptions.value=selected.sourceFacilityOptionIds || (combinedAssessment.value.facilityOptions.some(o=>o.id===selected.id)?[selected.id]:[])
 }
 function previewMemberId(id){return selectedRecoveryPlan.value?selectedRecoveryPlan.value.changes.find(c=>String(c.replacedMemberId)===String(id))?.replacementMemberId:replacementSelections.value[String(id)]}
-const displayedFacilityChoices=computed(()=>selectedRecoveryPlan.value?.id==='combined-selected'?selectedFacilityOptions.value:selectedRecoveryPlan.value && combinedAssessment.value.facilityOptions.some(o=>o.id===selectedRecoveryPlan.value.id)?[selectedRecoveryPlan.value.id]:[])
+const displayedFacilityChoices=computed(()=>selectedRecoveryPlan.value?.sourceFacilityOptionIds || (selectedRecoveryPlan.value && combinedAssessment.value.facilityOptions.some(o=>o.id===selectedRecoveryPlan.value.id)?[selectedRecoveryPlan.value.id]:[]))
 async function selectCandidate(assessment,candidate){
  adoptPreviewInputs()
  replacementSelections.value={...replacementSelections.value,[String(assessment.memberId)]:candidate.id}
@@ -532,6 +532,7 @@ const bestRecoveryPlan = computed(() =>
     ?.recommendedPlan ?? null
 )
 
+const displayedRankedPlans=computed(()=>{const plans=rankedRecoveryPlans.value;return plans.some(p=>p.kind==='combined')?plans.filter(p=>p.kind==='combined'||p.kind==='custom').map((p,i)=>({...p,rank:i+1})):plans})
 const rankedRecoveryPlans = computed(() =>
   recoveryEvaluation.value
     ?.rankedPlans || []
@@ -1040,7 +1041,7 @@ function proposedVenueFor(segment) {
       <p class="small text-muted">
         Evaluates concrete proposed recovery plans using
         conflict resolution (40%), timetable preservation
-        (30%), member workload (20%) and venue suitability
+        (30%), member suitability and workload (20%) and venue suitability
         (10%).
       </p>
 
@@ -1064,7 +1065,7 @@ function proposedVenueFor(segment) {
           {{ bestRecoveryPlan.title }}
 
           <div class="mt-1">
-            Recovery Score:
+            Whole-plan score:
             <strong>
               {{ bestRecoveryPlan.score }}/100
             </strong>
@@ -1126,10 +1127,11 @@ function proposedVenueFor(segment) {
           </div>
         </div>
 
+        <p class="small text-muted">Overall options combine available building blocks and are checked against all selected disruptions. Search is limited to four choices per requirement and 64 combinations; this is not an exhaustive optimum. Individual member and facility suggestions remain available above. Missing choices and unresolved conflicts require organizer review.</p>
         <!-- RANKED EVALUATED OPTIONS -->
 
         <div
-          v-for="plan in rankedRecoveryPlans"
+          v-for="plan in displayedRankedPlans"
           :key="plan.id"
           class="p-3 border rounded-3 mb-3 recovery-choice" :class="{'is-selected': selectedRecoveryId===plan.id}" :data-plan-id="plan.id" :data-plan-title="plan.title"
         >
@@ -1163,7 +1165,9 @@ function proposedVenueFor(segment) {
             {{ plan.score }}/100
           </div>
 
-          <button type="button" class="btn btn-pulse-primary btn-sm mb-3" :aria-pressed="selectedRecoveryId===plan.id" @click="selectRecoveryPlan(plan.id)">{{ selectedRecoveryId===plan.id ? 'Selected plan' : 'Select this plan' }}</button>
+          <p class="small text-muted">{{ plan.kind==='combined' ? 'Combined member, facility and timing choices evaluated together.' : plan.kind==='custom' ? 'Custom selection recalculated against every disruption.' : 'Individual building block; other disruptions may remain unresolved.' }} Ranking is not approval.</p><button type="button" class="btn btn-pulse-primary btn-sm mb-3" :aria-pressed="selectedRecoveryId===plan.id" @click="selectRecoveryPlan(plan.id)">{{ selectedRecoveryId===plan.id ? 'Selected plan' : 'Select this plan' }}</button>
+          <p class="small" v-if="plan.changes.some(c=>c.replacementMemberId!=null)">Member acceptance and organizer confirmation required before Apply.</p>
+          <p class="small" v-if="plan.changes.some(c=>c.venueName)">Approved booking evidence, capacity and equipment verification required before Apply.</p>
           <ul class="small selected-changes"><li v-for="(change,i) in plan.changes" :key="i">
             <strong>{{ eventSegments.find(s => String(s.id)===String(change.segmentId))?.title || 'Activity' }}</strong>
             <span v-if="change.starts_at || change.ends_at">: {{ formatTime(change.starts_at) }} to {{ formatTime(change.ends_at) }}</span>
@@ -1200,7 +1204,7 @@ function proposedVenueFor(segment) {
             <div class="col-6 col-md-3">
               <div class="bg-light p-2 rounded">
                 <div class="text-muted">
-                  Workload
+                  Staffing suitability / workload
                 </div>
 
                 <strong>
