@@ -30,6 +30,9 @@ export const STATUSES = {
   CONFIRMED: 'Officially Confirmed Booking'
 }
  
+// Calendar filter value (not a status): bookings our CCA is not part of
+export const OTHER_CCA_FILTER = 'Other CCA Bookings'
+ 
 // Order used when sorting: released slots first, confirmed last
 const STATUS_ORDER = {
   'Proposed Peer Transfer': 0,

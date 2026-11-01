@@ -221,6 +221,7 @@
 .pulse-slot:last-child { border-bottom: 0; }
 .pulse-slot-actions { display: flex; flex-wrap: wrap; gap: 0.4rem; justify-content: flex-end; }
 .pulse-slot-ref { word-break: break-all; }
+.pulse-slot.no-ref { grid-template-columns: 150px 210px 1fr auto; }
 @media (max-width: 991.98px) {
   .pulse-slot { grid-template-columns: 1fr 1fr; padding: 0.85rem 1rem; }
   .pulse-slot-actions { grid-column: 1 / -1; justify-content: flex-start; }
@@ -327,8 +328,7 @@
   to   { transform: translate3d(4%, -3%, 0) rotate(8deg); }
 }
 .pulse-hero-title { letter-spacing: -.02em; }
-.pulse-stat { position: relative; backdrop-filter: blur(6px); border: 1px solid rgba(255, 255, 255, .08); transition: transform .25s var(--pf-ease); }
-.pulse-stat:hover { transform: translateY(-3px); }
+.pulse-stat { position: relative; backdrop-filter: blur(6px); border: 1px solid rgba(255, 255, 255, .08); }
 .pulse-stat::after { content: ''; position: absolute; left: 1rem; right: 1rem; bottom: 0; height: 3px; border-radius: 3px 3px 0 0; background: rgba(255, 255, 255, .25); }
 .pulse-stat-amber::after { background: var(--pf-amber); }
 .pulse-stat-sky::after   { background: var(--pf-sky); }
@@ -480,12 +480,7 @@
   background: linear-gradient(160deg, color-mix(in srgb, var(--tone) 10%, var(--pf-panel)), var(--pf-panel) 60%);
   color: var(--pf-text);
   transition: transform .25s var(--pf-ease), box-shadow .25s;
-  animation: pulse-rise .5s var(--pf-ease) both;
 }
-.pulse-stat-card:nth-child(2) { animation-delay: 50ms; }
-.pulse-stat-card:nth-child(3) { animation-delay: 100ms; }
-.pulse-stat-card:nth-child(4) { animation-delay: 150ms; }
-.pulse-stat-card:nth-child(5) { animation-delay: 200ms; }
 .pulse-stat-card:hover { transform: translateY(-3px); box-shadow: 0 12px 26px color-mix(in srgb, var(--tone) 22%, transparent); }
 .pulse-stat-card-num { font-size: 2rem; font-weight: 800; line-height: 1.1; color: var(--tone); font-variant-numeric: tabular-nums; }
 .pulse-stat-card-label { font-size: .78rem; color: var(--pf-muted); font-weight: 600; }
