@@ -21,7 +21,7 @@ async function mountView(fixture=getSimulationTestData()) {
   const template=compileTemplate({source:descriptor.template.content,filename:'EventRiskView.vue',id:'unified-risk',compilerOptions:{bindingMetadata:script.bindings}})
   assert.deepEqual(template.errors,[])
   const code=script.content.replace(/import[\s\S]*?from ['"][^'"]+['"];?/g,'').replace('export default','return')
-  const deps={ref:Vue.ref,shallowRef:Vue.shallowRef,computed:Vue.computed,onMounted:Vue.onMounted,watch:Vue.watch,nextTick:Vue.nextTick,loadSimulationData:async()=>fixture,runCompleteSimulation,
+  const deps={useRoute:()=>({query:{}}),useRouter:()=>({beforeEach:()=>()=>{},afterEach:()=>()=>{}}),onUnmounted:Vue.onUnmounted,onActivated:Vue.onActivated,onDeactivated:Vue.onDeactivated,window:{addEventListener(){},removeEventListener(){},confirm:()=>true},ref:Vue.ref,shallowRef:Vue.shallowRef,computed:Vue.computed,onMounted:Vue.onMounted,watch:Vue.watch,nextTick:Vue.nextTick,loadSimulationData:async()=>fixture,runCompleteSimulation,
     prepareDisruptionCards,assessCombinedRecovery,buildCombinedRecoveryOptions,evaluateRecoveryPlans,projectRecoveryPreview,presentSimulatorFacilities,
     SimulatorCandidateChooser:{render:()=>null},SimulatorFacilityChoices:{render:()=>null},SimulatorImpactWorkspace:{render:()=>null},SimulatorInvitationInbox:{render:()=>null},SimulatorFacilitySetup:{render:()=>null},SimulatorCalendarActions:{render:()=>null},PipMascot:{render:()=>null},SimulatorRecoveryWorkflow:{render:()=>null},console:{log(){},error(){}}}
   const component=new Function(...Object.keys(deps),code)(...Object.values(deps))
@@ -31,7 +31,14 @@ async function mountView(fixture=getSimulationTestData()) {
   const app=renderer.createApp(component)
   const instance=app.mount({})
   for(let i=0;i<4;i++) await Vue.nextTick()
-  return {app,state:instance.$.setupState}
+  // The merged UI starts with blank outage times and requires Run simulation.
+  // Enter a complete synthetic scenario before exercising candidate controls.
+  const state=instance.$.setupState
+  state.disruptionCards[0].start=state.toSingaporeLocal(state.selectedEvent.starts_at)
+  state.disruptionCards[0].end=state.toSingaporeLocal(state.selectedEvent.ends_at)
+  state.runSimulation()
+  await Vue.nextTick()
+  return {app,state}
 }
 test('unified view adds/removes cards and runs mixed types once into the Pip result',async()=>{
   const {app,state}=await mountView()

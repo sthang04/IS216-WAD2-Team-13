@@ -20,7 +20,7 @@ export function buildRecoveryTracker({plan,invitations=[],audit=[],manualAcknowl
    const accepted=!!invite && state==='Accepted' && consentMatches(plan,invite,c.replacedMemberId)
    const status=!invite?'Invitation required':accepted?'Accepted - organizer confirmation required':state==='Accepted'?'Consent requires renewed review':state==='Pending'?'Awaiting response':state
    add({key:'member:'+c.segmentId+':'+c.replacedMemberId+':'+c.replacementMemberId,kind:'Member acceptance',activity:activity(c.segmentId),change:member(c.replacedMemberId)+' to '+member(c.replacementMemberId),status,satisfied:accepted,
-    delivery:invite?(invite.delivery_status || 'Delivery unverified'):'Not requested',nextAction:!invite?'Create invitation below':accepted?'Review and confirm assignment':state==='Pending'?'Wait for the actual recipient to respond':'Review or create a new invitation',updated:invite?.responded_at || invite?.updated_at || invite?.created_at || updated})
+    delivery:invite?(invite.delivery_status || 'Delivery unverified'):'Not requested',nextAction:!invite?'Create invitation below':accepted?'Review and confirm assignment':state==='Pending'?'Wait for the actual recipient to respond':state==='Declined'?'Choose another replacement and prepare a new recovery':'Review or create a new invitation',updated:invite?.responded_at || invite?.updated_at || invite?.created_at || updated})
   }
   if(c.venueName!=null || c.facilityBookingId!=null){
    const action=(plan.actions || []).find(a=>a.kind==='Room'&&same(a.segmentId,c.segmentId))
