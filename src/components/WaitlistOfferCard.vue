@@ -37,7 +37,6 @@ const urgent = computed(() => remaining.value < 600)
           {{ formatDate(entry.booking_date, true) }}, {{ formatTime(entry.start_time) }} – {{ formatTime(entry.end_time) }}
           · released by <strong>{{ entry.owner_club_name }}</strong>
         </div>
-        <div class="small text-muted font-monospace mt-1">{{ entry.fbs_reference }}</div>
       </div>
       <div class="text-end">
         <div class="pulse-countdown" :class="{ urgent }">{{ formatCountdown(remaining) }}</div>
