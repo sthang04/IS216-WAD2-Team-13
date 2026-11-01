@@ -1,7 +1,8 @@
 /*
 
 PURPOSE:
-This file contains the logic used to simulate disruptions without changing actual facility bookings.
+This file calculates member, facility and schedule-delay impacts on a copied event schedule.
+Actual assignments, bookings and event records are never changed by these calculations.
 
 For example:
 If Studio L7.2 becomes unavailable from 19:00 to 20:00, the simulator checks which existing bookings overlap
@@ -335,6 +336,8 @@ export function runSimulation(data, eventId, disruptions) {
 
 
   // STEP 2: Apply schedule delays first.
+  // Later absence/booking checks must use the shifted times; checking only the
+  // original schedule would miss clashes introduced by the delay.
   // This ensures other disruptions are checked against the updated simulated timings.
 
   for (const d of disruptions) {
@@ -479,6 +482,7 @@ export function runSimulation(data, eventId, disruptions) {
   // This does not automatically mean the later activity is cancelled or blocked.
 
   const downstreamIds = new Set();
+  // Visit each activity once so cycles cannot loop forever or duplicate risk.
   const visited = new Set(directImpacts.keys());
   const queue = [...directImpacts.keys()];
 

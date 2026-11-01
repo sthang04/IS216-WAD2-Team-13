@@ -1,4 +1,6 @@
 <script setup>
+// Saved plans and invitations are server history, separate from scenario inputs.
+// Resetting a hypothetical preview must never delete these persisted records.
 import {computed,ref,watch,onMounted,onUnmounted,nextTick} from 'vue'
 import {supabase} from '../supabase'
 import {buildRecoveryTracker} from '../services/simulatorRecoveryTracker.js'
@@ -16,6 +18,8 @@ const api=createSimulatorWorkflow(supabase,{enabled,allowReadOnly:true})
 const capabilities=ref(null),capabilityError=ref('')
 const applicationEnabled=computed(()=>enabled&&capabilities.value?.application_enabled===true)
 const invitationEnabled=computed(()=>enabled&&capabilities.value?.invitations_enabled===true)
+// Proposal IDs describe unsaved choices; plan IDs identify persisted history.
+// Keeping them separate avoids applying a preview that was never saved/reviewed.
 const selectedOptionId=ref(''),selectedPlanId=ref(''),bookingSelections=ref({}),resolutionReasons=ref({})
 const confirmed=ref(false),manualAcknowledged=ref(false),busy=ref(false),error=ref(''),message=ref('')
 const refreshWarning=ref(''),busyAction=ref('')
@@ -24,6 +28,8 @@ const incoming=ref(null),invitationError=ref(''),pendingAction=ref(null),clock=r
 const invitationId=ref(typeof window==='undefined'?null:new URLSearchParams(window.location.search).get('replacementInvitation'))
 const startRequestId=ref(''),startRequestIds=new Map()
 let historyTimer
+// Context epochs invalidate all outstanding work after event/account changes;
+// per-read versions also prevent older refreshes replacing newer history.
 let contextEpoch=0,historyVersion=0,incomingVersion=0,authId,authSubscription,timer,disposed=false
 const selectedEvent=computed(()=>props.data?.events?.find(e=>String(e.id)===String(props.eventId)))
 // Never use the facility navbar's active club as the event's identity.
@@ -48,6 +54,8 @@ const preview=computed(()=>{
 })
 const readiness=computed(()=>{void clock.value;return workflowReadiness({enabled:applicationEnabled.value,plan:plan.value,invites:history.value.invitations,manualAcknowledged:manualAcknowledged.value})})
 const tracker=computed(()=>{void clock.value;return buildRecoveryTracker({plan:plan.value,invitations:history.value.invitations,audit:history.value.audit,manualAcknowledged:manualAcknowledged.value,enabled:applicationEnabled.value,data:props.data,now:clock.value})})
+// Even a previously ready plan becomes unavailable while its requirements
+// are loading or failed to refresh; stale UI state is not approval.
 const applyReady=computed(()=>!historyLoading.value && !historyError.value && readiness.value.ready && tracker.value.status==='Ready to apply')
 const savedFilter=ref('All')
 const savedCategory=item=>{const t=savedTracker(item);return item.application_status==='Applied'?'Applied':item.application_status==='Undone' || item.application_status==='Cancelled' || ['Stale or blocked','Rejected or expired'].includes(t.status)?'Other':t.requirementsReady?'Ready to Apply':'Pending'}
@@ -126,6 +134,8 @@ function trapConfirmationFocus(event){
  if(event.shiftKey && (document.activeElement===first || document.activeElement===actionDialog.value)){event.preventDefault();last?.focus()}
  else if(!event.shiftKey && (document.activeElement===last || document.activeElement===actionDialog.value)){event.preventDefault();first?.focus()}
 }
+// Capture one reviewed action for the confirmation dialog. Changing its plan,
+// bookings or acknowledgement invalidates the captured confirmation key.
 function queueAction(label,operation,success,settings={}){
  if(!(settings.application?applicationEnabled.value:invitationEnabled.value)){error.value='Live recovery writes remain disabled: the required backend gate is OFF or unverified.';return}
  if(busy.value)return
@@ -161,6 +171,8 @@ async function executePending(){
  }catch(e){if(!disposed&&epoch===contextEpoch){error.value=simulatorWorkflowError(e);await loadHistory()}}
  finally{if(!disposed&&epoch===contextEpoch){busy.value=false;busyAction.value='';confirmed.value=false}}
 }
+// Reuse one UUID for the same reviewed changes, including after a lost reply.
+// Start persists requests atomically; selecting a candidate alone never calls it.
 function startPlan(){
  if(!preview.value.draft)return
  const draft=JSON.parse(JSON.stringify(preview.value.draft)),key=simulatorStartRequestKey(draft)
@@ -178,6 +190,8 @@ function cancelPlan(){const current={...plan.value};queueAction('Cancel Recovery
 function invite(target){const id=plan.value.id;queueAction('Invite '+memberName(target.recipient)+' to replace '+memberName(target.replaced),()=>api.invite(id,target.recipient,target.replaced,true),'Invitation saved in the member inbox. Telegram awaits the configured simulator worker; refresh to check delivery status.')}
 function respond(response){const id=incoming.value.id;queueAction(response+' invitation '+id,()=>api.respond(id,response,true),'Response persisted. No assignment was applied.',{refreshInvitation:true})}
 function cancel(id){queueAction('Cancel invitation '+id,()=>api.cancel(id,true),'Invitation cancelled.')}
+// Apply and Undo use the selected saved revision and a separate confirmation.
+// Local readiness explains blockers; the backend repeats every safety check.
 function applyPlan(){if(!applyReady.value){error.value='Complete the outstanding requirements and review the saved recovery before applying.';return}const current={...plan.value},ack=manualAcknowledged.value;queueAction('Apply selected recovery',()=>api.confirm(current,ack,true),'Recovery committed by the server.',{refresh:true,application:true})}
 function undoPlan(){const current={...plan.value},ack=manualAcknowledged.value;queueAction('Undo Recovery Plan',()=>api.undo(current,ack,true),'Recovery reversed by the server; review the reopened issue.',{refresh:true,application:true})}
 function resolveDisruption(row){
@@ -194,6 +208,8 @@ watch(()=>props.sessionVersion,()=>{
  selectedOptionId.value='';selectedPlanId.value='';bookingSelections.value={};resolutionReasons.value={}
  pendingAction.value=null;confirmed.value=false;manualAcknowledged.value=false;error.value='';message.value=''
 })
+// Authentication/event changes clear private state immediately, then reload
+// server history. Incremented epochs make in-flight responses harmless.
 function resetContext(){
  ++contextEpoch;++historyVersion;++incomingVersion
  capabilities.value=null;capabilityError.value='';history.value={plans:[],invitations:[],audit:[]};historyError.value='';historyLoading.value=false

@@ -1,4 +1,6 @@
 <script setup>
+// This view owns hypothetical scenario state. Persisted recovery history is
+// managed separately so event switches and Reset cannot erase real requests.
 import {
   ref,
   shallowRef,
@@ -109,6 +111,8 @@ const impactData=computed(()=>selectedSavedRecovery.value?.before_state?{...data
 function reviewSavedRecovery(saved){const changed=selectedSavedRecovery.value?.id!==saved?.id || selectedSavedRecovery.value?.application_status!==saved?.application_status;selectedSavedRecovery.value=saved;if(saved && changed)activeComparison.value=saved.application_status==='Undone'?'original':'recovery'}
 const currentStage=computed(()=>['Applied','Undone'].includes(workflowStage.value)?7:workflowStage.value==='Ready to apply'?6:!['Draft',''].includes(workflowStage.value)?5:selectedRecoveryId.value?4:result.value?3:0)
 const stages=[{label:'Configure',target:'simulator-scenarios'},{label:'Run simulation',target:'simulator-scenarios'},{label:'Understand impact',target:'simulator-impact'},{label:'Explore recovery',target:'simulator-recovery'},{label:'Compare plans',target:'simulator-comparison'},{label:'Track requirements',target:'simulator-recovery-workflow'},{label:'Apply',target:'simulator-recovery-workflow'},{label:'Review / Undo',target:'simulator-recovery-workflow'}]
+// Continue editing the selected ranked plan rather than accidentally combining
+// a new room with a replacement left over from an earlier selection.
 function adoptPreviewInputs(){
  const selected=selectedRecoveryPlan.value;if(!selected || selected.id==='combined-selected')return
  replacementSelections.value=Object.fromEntries(selected.changes.filter(c=>c.replacementMemberId!=null).map(c=>[String(c.replacedMemberId),c.replacementMemberId]))
@@ -138,6 +142,8 @@ const navigationEventId = () => props.eventId ?? route.query.eventId ?? route.qu
 const selectedEventId = ref(navigationEventId())
 // Reuse the original simulator's stable card IDs and Add/Remove pattern.
 let nextDisruptionId = 1
+// Cards and resource choices belong to this preview session; saved plans live
+// in the recovery workflow and are not restored into these inputs.
 const disruptionCards = ref([])
 const pristineDisruptions = ref('[]')
 const replacementSelections = ref({})
@@ -297,9 +303,11 @@ function addDelayPreset(){
  disruptionCards.value.push(card)
 }
 function removeDisruption(id) {
-  // Keep one input card, matching WhatIfSimulator's original interaction.
+  // Keep one editable card so the user can configure a fresh scenario.
   if (disruptionCards.value.length > 1) disruptionCards.value = disruptionCards.value.filter(d => d.id !== id)
 }
+// Reset only local proposals and results. The session counter asks child panels
+// to clear confirmations without deleting persisted requests or approval history.
 function resetSelections(resetWorkflow = true) {
   if(resetWorkflow) sessionVersion.value++
   nextDisruptionId = 1
@@ -354,6 +362,8 @@ onUnmounted(() => { removeNavigationGuard(); removeAfterNavigation(); window.rem
 // RUN SIMULATION
 // ========================================================
 
+// Validate every card together before running one calculation. Reusing an old
+// result after invalid input would make the comparison describe the wrong plan.
 function runSimulation() {
   if (
     !data.value ||
@@ -424,6 +434,8 @@ watch(disruptionCards, () => {
 
 /** Reload actual data without applying changes or cancelling invitations.
  * Reset clears hypothetical choices; persisted history belongs to SQL. */
+// Reload authoritative records after a real operation; preserving inputs here
+// is an explicit choice, unlike entering the simulator, which starts clean.
 async function refreshSimulator(preserveScenario=false) {
   loading.value = true
   initialized.value = false
@@ -581,6 +593,7 @@ const bestRecoveryPlan = computed(() =>
     ?.recommendedPlan ?? null
 )
 
+// Disclosure limits the visible list, not the evaluated proposals or selection.
 const rankingLimit = ref(3)
 const overallRankedPlans=computed(()=>{const plans=rankedRecoveryPlans.value;return plans.some(p=>p.kind==='combined')?plans.filter(p=>p.kind==='combined'||p.kind==='custom').map((p,i)=>({...p,rank:i+1})):plans})
 const rankedRecoveryPlans = computed(() =>

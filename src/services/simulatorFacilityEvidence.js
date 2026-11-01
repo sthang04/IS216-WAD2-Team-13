@@ -6,6 +6,8 @@ export function simulatorBookingPeriod(booking){
  const times=String(booking?.time_slot || '').split(/\s*-\s*/)
  return times.length===2?times.map(time=>booking.event_date+'T'+time+(time.split(':').length===2?':00':'')+'+08:00'):[null,null]
 }
+// Staff assignments provide only a lower bound for capacity. Missing visible
+// bookings, audience counts or equipment evidence never establish suitability.
 export function simulatorFacilityFacts(data,segmentId,start,end){
  const same=(a,b)=>a!=null&&b!=null&&String(a)===String(b)
  const key=value=>String(value || '').trim().toLowerCase()

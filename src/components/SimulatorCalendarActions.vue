@@ -1,4 +1,6 @@
 <script setup>
+// Bridge a tentative simulator room suggestion to the normal calendar workflow.
+// A status refresh is a read; the user still confirms any calendar action there.
 import { ref, computed, watch, onUnmounted } from 'vue'
 import { fetchCalendar, bookingActions, weekStartOf } from '../services/facilityService'
 import {simulatorCalendarTarget} from '../services/simulatorCalendarNavigation.js'
@@ -7,6 +9,8 @@ import { session, activeMembership, canManageActiveClub } from '../services/sess
 import { calendarOptionsForRecommendation, readSimulatorCalendarSnapshot } from '../services/simulatorCalendarIntegration.js'
 const props=defineProps({venue:String,facilityId:[String,Number],start:String,end:String,eventClubId:[String,Number],eventClubName:String})
 const rows=ref(null),entries=ref([]),error=ref(''),busy=ref(false)
+// Increment on every context change so a slow response cannot show claim
+// eligibility for the previous club, room or time range.
 let refreshVersion=0
 const clubMatches=computed(()=>props.eventClubId!=null?String(props.eventClubId)===String(session.value.activeClubId):!!props.eventClubName&&activeMembership.value?.club_name===props.eventClubName)
 const options=computed(()=>rows.value===null?[]:calendarOptionsForRecommendation({

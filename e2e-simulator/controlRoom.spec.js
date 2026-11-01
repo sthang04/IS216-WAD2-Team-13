@@ -30,7 +30,6 @@ test('control room expands real impacts, inspects graph and switches original/si
  await expect(workspace.locator('.sim-time-bar')).toHaveCount(16)
  await workspace.getByRole('button',{name:/Simulated Fixture activity 1:/}).click()
  await expect(workspace.locator('.sim-inspection')).toContainText('Simulated:')
- await page.screenshot({path:test.info().outputPath('control-room-desktop.png'),fullPage:false})
 })
 test('facility heatmap shows linked records and simulated outage; missing links remain empty',async({page})=>{
  await boot(page)
@@ -62,7 +61,6 @@ test('a different event uses its own graph and the delay preset uses a real sele
  await expect(page.locator('.sim-graph-node')).toHaveCount(expected)
 })
 test('mobile layout stays within viewport and comparison remains ahead of real recovery controls',async({page})=>{
- await page.setViewportSize({width:390,height:844})
  await boot(page)
  const impact=page.getByRole('region',{name:'Event impact workspace',exact:true})
  await impact.getByRole('button',{name:'Timeline',exact:true}).click()
@@ -73,7 +71,6 @@ test('mobile layout stays within viewport and comparison remains ahead of real r
  expect(order&4).toBeTruthy()
  await expect(page.getByRole('button',{name:'Apply selected recovery',exact:true})).toHaveCount(0)
  await page.getByRole('navigation',{name:'Simulator workflow',exact:true}).getByRole('link',{name:/Understand impact/}).click()
- await page.screenshot({path:test.info().outputPath('control-room-mobile.png'),fullPage:false})
 })
 
 
@@ -145,7 +142,6 @@ test('multi-date event keeps readable bars and heatmap labels within the selecte
  await expect(page.locator('.sim-timeline-axis')).toContainText('4 Mar')
  const bounds=await page.locator('.sim-time-bar.original').first().boundingBox()
  expect(bounds.width).toBeGreaterThan(100)
- await page.setViewportSize({width:390,height:844})
  await expect.poll(()=>page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth+1)).toBe(true)
 })
 
@@ -211,17 +207,14 @@ test('ranking disclosure preserves selection and full page fits desktop, tablet 
  await filter.selectOption('5')
  await expect(cards).toHaveCount(Math.min(5,total)+(total>5?1:0))
  await filter.selectOption('3')
- for(const [name,width,height] of [['desktop',1440,1000],['tablet',900,1000],['mobile',390,844]]){
-  await page.setViewportSize({width,height})
+ { // Each project checks the layout at its own viewport.
   await expect.poll(()=>page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true)
   const dimensions=await page.locator('.sim-visual-grid>section').evaluateAll(nodes=>nodes.map(n=>({height:n.getBoundingClientRect().height,content:n.scrollHeight})))
   expect(dimensions.every(d=>d.content<=d.height+1)).toBe(true)
-  await page.screenshot({path:test.info().outputPath('simulator-full-'+name+'.png'),fullPage:true})
   const details=ranking.locator('.recovery-choice details').first()
   await details.locator('summary').click()
   await expect(details.getByRole('heading',{name:'Full activity changes'})).toBeVisible()
   await expect.poll(()=>page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true)
-  await page.screenshot({path:test.info().outputPath('simulator-expanded-'+name+'.png'),fullPage:true})
   await details.locator('summary').click()
  }
 })

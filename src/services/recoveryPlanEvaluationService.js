@@ -1428,6 +1428,8 @@ Only a FEASIBLE plan may be automatically selected
 as the recommended recovery plan.
 */
 
+// Compare whole proposed schedules so fixing one resource cannot hide a new
+// member, dependency or room conflict introduced elsewhere in the same plan.
 export function evaluateRecoveryPlans({
   data,
   eventId,
@@ -1456,6 +1458,8 @@ export function evaluateRecoveryPlans({
     INFEASIBLE: 2
   }
 
+  // Feasibility outranks the weighted score: a strong timetable score must
+  // never promote a plan with known conflicts above a feasible proposal.
   evaluated.sort((a, b) => {
     const statusDifference =
       statusRank[a.status] -

@@ -10,6 +10,8 @@ export function simulatorCalendarTarget({facilityId,venue,start,end},weekStartOf
  if(facilityId!=null&&/^[1-9][0-9]*$/.test(String(facilityId)))query.simFacilityId=String(facilityId)
  return {path:'/facilities',query}
 }
+// URL query values are untrusted navigation hints. Reject arrays, ambiguous
+// room names and timestamps without offsets instead of guessing a target.
 export function readSimulatorCalendarFocus(query,facilities){
  const requested=SIMULATOR_FOCUS_KEYS.some(k=>query[k]!=null)
  if(!requested)return null
@@ -28,6 +30,7 @@ export function bookingMatchesSimulatorFocus(booking,focus){
  return String(booking.facility_id)===String(focus.facilityId)&&Number.isFinite(start)&&Number.isFinite(end)&&
   start<Date.parse(focus.end)&&Date.parse(focus.start)<end
 }
+// Clearing simulator context must keep the calendar's unrelated query state.
 export function clearSimulatorCalendarFocus(query){
  return Object.fromEntries(Object.entries(query).filter(([key])=>!SIMULATOR_FOCUS_KEYS.includes(key)))
 }

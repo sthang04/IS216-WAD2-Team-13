@@ -24,6 +24,8 @@ export async function readSimulatorRows(client, table, configureQuery, columns =
       throw new Error('Cannot verify complete ' + table + ' data: exact count or rows missing')
     }
     if (expected === null) expected = count
+    // A changing total is not a stable snapshot; fail instead of evaluating
+    // an event against a partially refreshed set of assignments/bookings.
     if (count !== expected) throw new Error(table + ' changed during loading; refresh and try again')
     for (const row of data) {
       if (keys.some(key => row[key] == null)) throw new Error('Missing pagination key in ' + table)

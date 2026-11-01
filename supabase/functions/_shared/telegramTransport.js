@@ -16,6 +16,8 @@ export function createTelegramTransport({botToken,fetchImpl=fetch,timeoutMs=1000
    // Never return fetch errors: they can contain the bot-token URL.
    return {status:'UNKNOWN'}
   }
+  // A successful HTTP exchange without a Telegram message ID still cannot
+  // establish delivery; keep that outcome separate from a known failure.
   if(!response.ok || result?.ok!==true)return {status:'FAILED'}
   if(result?.result?.message_id==null)return {status:'UNKNOWN'}
   return {status:'SENT'}

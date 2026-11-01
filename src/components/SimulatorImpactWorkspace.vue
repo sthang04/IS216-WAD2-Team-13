@@ -1,7 +1,11 @@
 <script setup>
+// Graph, timeline and heatmap share one preview model and playhead so inspecting
+// a recovery never replaces the original schedule or writes to the backend.
 import {computed,ref,watch,onUnmounted} from 'vue'
 import {buildControlRoomModel,controlRoomTime,recoveryControlRoomResult} from '../services/simulatorControlRoomService.js'
 const props=defineProps({data:Object,eventId:[String,Number],result:Object,disruptions:{type:Array,default:()=>[]},loading:Boolean,recovery:Object})
+// Selection, disclosure and playback are shared across the three views; none
+// of these controls changes the scenario or persisted event schedule.
 const tab=ref('dependencies'),timelineView=ref('overlay'),selectedId=ref(null),expanded=ref([]),selectedCell=ref(null)
 const selectedDay=ref('')
 const previewMode=ref('disrupted'),playhead=ref(0),playing=ref(false),cascadeKey=ref(0)
@@ -9,6 +13,8 @@ let playback
 const viewResult=computed(()=>previewMode.value==='recovery' && props.recovery?recoveryControlRoomResult(props.eventId,props.recovery):props.result)
 const model=computed(()=>buildControlRoomModel(props.data || {},props.eventId,viewResult.value,props.disruptions,{day:selectedDay.value}))
 const duration=computed(()=>Math.max(0,(model.value.domain.end-model.value.domain.start)/60000))
+// Playback is minutes from the displayed day window, keeping the heatmap
+// cursor and Time Machine bars aligned even for events on several dates.
 const selectedTime=computed(()=>model.value.domain.start+playhead.value*60000)
 const playheadStyle=computed(()=>({left:(duration.value?playhead.value/duration.value*100:0)+'%'}))
 const activeActivities=computed(()=>model.value.activities.filter(a=>(timelineView.value==='original'?a.originalStart:a.simulatedStart)<=selectedTime.value && selectedTime.value<(timelineView.value==='original'?a.originalEnd:a.simulatedEnd)))
@@ -22,8 +28,10 @@ function togglePlayback(){
 function inspectTime(event){stopPlayback();playhead.value=Number(event.target.value)}
 function inspectCell(cell,facility){selectedCell.value={...cell,facility};stopPlayback();playhead.value=(cell.start-model.value.domain.start)/60000}
 function goTo(view){tab.value=view;document.getElementById('impact-'+view)?.scrollIntoView({behavior:window.matchMedia('(prefers-reduced-motion: reduce)').matches?'auto':'smooth',block:'start'})}
+// A new scenario/day invalidates the old cursor and inspected heatmap cell.
 watch(model,()=>{stopPlayback();playhead.value=0;selectedCell.value=null;cascadeKey.value++})
 watch(()=>props.recovery,plan=>{if(!plan)previewMode.value='disrupted';else if(plan.saved)previewMode.value='recovery'})
+// Leaving the page must stop its timer instead of advancing an invisible view.
 onUnmounted(stopPlayback)
 const selected=computed(()=>model.value.activities.find(a=>String(a.id)===String(selectedId.value)))
 const statusLabel=status=>status==='direct'?'Direct impact':status==='downstream'?'Downstream risk':'No detected impact'

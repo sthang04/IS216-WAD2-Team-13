@@ -1,4 +1,6 @@
 <script setup>
+// This inbox records consent only. Assignment changes belong to the organizer's
+// separately authorized Apply operation; Telegram delivery is independent.
 import {ref,watch,onMounted,onUnmounted,nextTick} from 'vue'
 import {supabase} from '../supabase'
 import {createSimulatorWorkflow,SIMULATOR_WORKFLOW_VERIFIED,effectiveInvitationStatus} from '../services/simulatorWorkflowService.js'
@@ -20,6 +22,8 @@ watch(pending,async action=>{
 function localTime(value){const date=new Date(value);return Number.isFinite(date.getTime())?new Intl.DateTimeFormat('en-SG',{timeZone:'Asia/Singapore',dateStyle:'medium',timeStyle:'short'}).format(date)+' (SGT)':'Time to be confirmed'}
 function venue(invitation,term){return invitation.facilities?.find(f=>String(f.segment_id)===String(term.segment_id))?.venue_name || 'Location to be confirmed'}
 let expiryTimer
+// Request generations prevent a previous account's delayed read/write response
+// from repopulating this account's private inbox.
 let generation=0,disposed=false,subscription,authId
 // Read errors stay separate from persisted response errors. A late request from
 // another authenticated session must never repopulate this recipient-only inbox.
@@ -34,6 +38,8 @@ function respond(invitation,response){
  confirmed.value=false;error.value=''
  pending.value={id:invitation.id,response,terms:JSON.stringify(invitation)}
 }
+// Recheck the exact displayed terms and expiry at confirmation time. The RPC
+// independently validates the real recipient and current server-side terms.
 async function confirmResponse(){
  if(!invitationEnabled.value||busy.value||!confirmed.value||!pending.value)return
  const action=pending.value,current=invitations.value.find(i=>i.id===action.id)
@@ -52,6 +58,8 @@ async function confirmResponse(){
  finally{busy.value=false}
 }
 watch(()=>props.refreshVersion,()=>{void refresh()})
+// Advance the visible expiry clock and reload when authentication changes;
+// the server clock remains authoritative when accepting or declining.
 onMounted(()=>{
  expiryTimer=setInterval(()=>{clock.value=Date.now()},1000)
  void refresh()

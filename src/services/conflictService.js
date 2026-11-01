@@ -8,7 +8,8 @@ PURPOSE:
 Check whether an event schedule violates
 operational rules.
 
-This first version checks dependency timing.
+Checks include dependency timing, member assignments and facility booking
+coverage/overlaps. Shared helpers keep simulation and recovery evaluation consistent.
 
 Example:
 Activity A must finish before Activity B starts.

@@ -56,6 +56,8 @@ function singaporeDate(timestamp) {
 // STEP 1: LOAD DATA FROM SUPABASE (READ-ONLY)
 // ==========================================
 
+// Load only authorized live evidence. Read failures stay errors so incomplete
+// records cannot quietly become an optimistic simulation or demo fallback.
 export async function loadLiveSimulationData() {
 
   if (!isSupabaseConfigured() || !supabase) {
@@ -232,7 +234,7 @@ export async function loadLiveSimulationData() {
   // STEP 4: RETURN DATA TO THE SIMULATOR
   // ==========================================
 
-  // Return the same data structure as simulationTestData.js.
+  // Normalize live records into the shared simulation engine input shape.
   // This allows simulationService.js to work with either
   // local test data or authorised Supabase data.
 

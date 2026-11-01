@@ -1,6 +1,7 @@
 import {workflowReadiness,effectiveInvitationStatus,invitationTerms} from './simulatorWorkflowService.js'
 const same=(a,b)=>a!=null&&b!=null&&String(a)===String(b)
 const canonical=v=>Array.isArray(v)?v.map(canonical):v && typeof v==='object'?Object.fromEntries(Object.keys(v).sort().map(k=>[k,canonical(v[k])])):v
+// Acceptance applies to exact assignment/timing terms, not merely a member ID.
 function consentMatches(plan,invite,replaced){try{return JSON.stringify(canonical(invite.assignment_snapshot))===JSON.stringify(canonical(invitationTerms(plan,replaced)))}catch{return false}}
 const latest=rows=>[...rows].sort((a,b)=>(Date.parse(b.created_at)||0)-(Date.parse(a.created_at)||0)||String(b.id).localeCompare(String(a.id)))[0]
 /** Presentation only. Every readiness statement comes from saved requirements;
@@ -17,6 +18,8 @@ export function buildRecoveryTracker({plan,invitations=[],audit=[],manualAcknowl
   if(c.replacementMemberId!=null){
    const matching=invitations.filter(i=>same(i.plan_id,plan.id)&&same(i.recipient_member_id,c.replacementMemberId)&&same(i.replaced_member_id,c.replacedMemberId))
    const invite=latest(matching),state=effectiveInvitationStatus(invite,now)
+   // Delivery is displayed separately below: a sent Telegram message cannot
+   // satisfy consent, and an old acceptance cannot approve changed terms.
    const accepted=!!invite && state==='Accepted' && consentMatches(plan,invite,c.replacedMemberId)
    const status=!invite?'Invitation required':accepted?'Accepted - organizer confirmation required':state==='Accepted'?'Consent requires renewed review':state==='Pending'?'Awaiting response':state
    add({key:'member:'+c.segmentId+':'+c.replacedMemberId+':'+c.replacementMemberId,kind:'Member acceptance',activity:activity(c.segmentId),change:member(c.replacedMemberId)+' to '+member(c.replacementMemberId),status,satisfied:accepted,
@@ -31,6 +34,8 @@ export function buildRecoveryTracker({plan,invitations=[],audit=[],manualAcknowl
  }
  add({key:'review',kind:'Organizer verification',activity:'Entire recovery',change:'Availability, qualifications and venue suitability',status:manualAcknowledged?'Review acknowledged':'Organizer review required',satisfied:manualAcknowledged,nextAction:'Review evidence and acknowledge below',updated})
  const readiness=workflowReadiness({enabled:true,plan,invites:invitations,manualAcknowledged})
+// Recorded member/room requirements and the organizer acknowledgement are
+ // separate steps; a satisfied row alone does not authorize Apply.
  const requirementsReady=plan.application_status==='Draft' && !(plan.blockers || []).length && rows.filter(r=>r.key!=='review').every(r=>r.satisfied) && workflowReadiness({enabled:true,plan,invites:invitations,manualAcknowledged:true}).ready
  let status=plan.application_status==='Applied'?'Applied':plan.application_status==='Undone'?'Undone':plan.application_status==='Cancelled'?'Cancelled':plan.application_status==='Draft' && plan.lifecycle!=='In Progress'?'Draft':
   (plan.blockers || []).length?'Stale or blocked':rows.some(r=>['Declined','Cancelled','Expired'].includes(r.status))?'Rejected or expired':

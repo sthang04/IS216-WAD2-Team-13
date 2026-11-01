@@ -1,4 +1,6 @@
 <script setup>
+// Inspect event-to-booking links and explicitly associate an existing approved
+// booking. This panel does not create a reservation or approve a transfer.
 import {computed,ref,watch} from 'vue'
 import {supabase} from '../supabase'
 import {ORIGINAL_BOOKING_LINK_VERIFIED,createOriginalBookingWorkflow} from '../services/simulatorOriginalBookingService.js'
@@ -22,6 +24,7 @@ const target=computed(()=>{
 })
 const originalApi=createOriginalBookingWorkflow(supabase)
 const evidence=ref(null),selectedBookingId=ref(''),confirmOriginal=ref(false),working=ref(false),linkError=ref(''),linkMessage=ref('')
+// Discard late discovery responses after switching activity or event.
 let requestVersion=0
 const chosenBooking=computed(()=>evidence.value?.bookings.find(b=>String(b.booking_id)===String(selectedBookingId.value)))
 watch(()=>[props.eventId,selectedId.value,props.data],()=>{++requestVersion;evidence.value=null;selectedBookingId.value='';confirmOriginal.value=false;linkError.value='';linkMessage.value='';working.value=false})
@@ -33,6 +36,8 @@ async function discover(){
  catch(e){if(version===requestVersion)linkError.value=e.message}
  finally{if(version===requestVersion)working.value=false}
 }
+// Send the reviewed event/booking fingerprints so changed evidence cannot be
+// silently linked after the user confirmed a different snapshot.
 async function linkOriginal(){
  if(working.value)return
  const version=requestVersion
