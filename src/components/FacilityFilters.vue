@@ -1,11 +1,13 @@
 <script setup>
 import { computed } from 'vue'
+import { OTHER_CCA_FILTER } from '../services/facilityService'
 
 // Options come from the facilities table, not from hard-coded metadata.
 const props = defineProps({
   facilities: { type: Array, required: true },
   filters: { type: Object, required: true },
-  weekLabel: { type: String, default: '' }
+  weekLabel: { type: String, default: '' },
+  hasActiveClub: { type: Boolean, default: false }   // "Other CCA Bookings" needs a CCA to compare against
 })
 const emit = defineEmits(['update:filters'])
 
@@ -17,11 +19,11 @@ const CAPACITY_OPTIONS = [
   { value: '151+', label: '150+ people' }
 ]
 
-const AVAILABILITY_OPTIONS = [
-  { value: 'All', label: 'All statuses' },
-  { value: 'Booked', label: 'Booked' },
-  { value: 'Proposed Peer Transfer', label: 'Proposed (available to claim)' },
+// Values are the database statuses; labels are what users see
+const STATUS_OPTIONS = [
+  { value: 'Proposed Peer Transfer', label: 'Available to Claim' },
   { value: 'Pending Admin Sign-off', label: 'Pending Admin Sign-off' },
+  { value: 'Booked', label: 'Booked' },
   { value: 'Officially Confirmed Booking', label: 'Officially Confirmed' }
 ]
 
@@ -67,7 +69,13 @@ function update(key, value) {
       <div class="col-12 col-md-6 col-xl-3">
         <label class="form-label small fw-bold mb-1" for="f-availability">Availability</label>
         <select id="f-availability" class="form-select" :value="filters.availability" @change="update('availability', $event.target.value)">
-          <option v-for="opt in AVAILABILITY_OPTIONS" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
+          <option value="All">All bookings</option>
+          <optgroup label="By status">
+            <option v-for="opt in STATUS_OPTIONS" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
+          </optgroup>
+          <optgroup v-if="hasActiveClub" label="By CCA">
+            <option :value="OTHER_CCA_FILTER">Other CCA Bookings</option>
+          </optgroup>
         </select>
       </div>
     </div>
@@ -76,8 +84,8 @@ function update(key, value) {
       <input
         type="search"
         class="form-control pulse-search"
-        placeholder="Search facility, CCA, equipment or FBS reference…"
-        aria-label="Search facility, CCA, equipment or FBS reference"
+        placeholder="Search facility, CCA or equipment…"
+        aria-label="Search facility, CCA or equipment"
         :value="filters.search"
         @input="update('search', $event.target.value)"
       />

@@ -8,6 +8,7 @@ const props = defineProps({
   actions: { type: Array, default: () => [] },
   busy: { type: Boolean, default: false },
   showFacility: { type: Boolean, default: false },
+  showReference: { type: Boolean, default: true },    // the All Facilities calendar hides the FBS reference column
   highlightClubId: { type: Number, default: null },   // the CCA the viewer is acting for
   waitlistEntry: { type: Object, default: null },     // our CCA's place in this booking's queue (Logistics Directors only)
   index: { type: Number, default: 0 }
@@ -21,8 +22,12 @@ const STATUS_CLASS = {
   'Officially Confirmed Booking': 'is-confirmed'
 }
 
+// Our CCA holds this booking (after an approved transfer, the claimer becomes the holder)
+const isOurs = computed(() => !!props.highlightClubId && props.booking.owner_club_id === props.highlightClubId)
+
 const rowClass = computed(() => [
-  STATUS_CLASS[props.booking.status] || '',
+  // Officially Confirmed only gets the green stripe when the slot is ours
+  props.booking.status === 'Officially Confirmed Booking' && !isOurs.value ? '' : (STATUS_CLASS[props.booking.status] || ''),
   {
     'is-mine': props.highlightClubId && props.booking.owner_club_id === props.highlightClubId,
     'is-offered-to-me': props.highlightClubId && props.booking.offered_club_id === props.highlightClubId
@@ -55,7 +60,7 @@ const queueNote = computed(() => {
 </script>
 
 <template>
-  <div class="pulse-slot" :class="rowClass" :style="{ '--i': index }">
+  <div class="pulse-slot" :class="[rowClass, { 'no-ref': !showReference }]" :style="{ '--i': index }">
     <div class="pulse-slot-when">
       <div class="fw-semibold">{{ formatDate(booking.booking_date) }}</div>
       <div class="text-muted small">{{ formatTime(booking.start_time) }} – {{ formatTime(booking.end_time) }}</div>
@@ -63,7 +68,7 @@ const queueNote = computed(() => {
     </div>
 
     <div class="pulse-slot-status">
-      <BookingStatusBadge :status="booking.status" />
+      <BookingStatusBadge :status="booking.status" :ours="isOurs" />
       <div v-if="booking.offered_club_name" class="small mt-1" :class="booking.offered_club_id === highlightClubId ? 'text-pulse fw-semibold' : 'text-muted'">
         {{ booking.offered_club_id === highlightClubId ? 'Offered to you (30 min)' : `Held for ${booking.offered_club_name}` }}
       </div>
@@ -74,18 +79,18 @@ const queueNote = computed(() => {
     <div class="pulse-slot-who small">
       <div>
         <span class="text-muted">Holder:</span>
-        <strong>{{ booking.owner_club_name || 'Unknown CCA' }}</strong>
+        <strong :class="{ 'text-pulse': isOurs }">{{ booking.owner_club_name || 'Unknown CCA' }}</strong>
         <span v-if="highlightClubId && booking.owner_club_id === highlightClubId" class="pulse-you">you</span>
       </div>
       <div v-if="booking.status === 'Pending Admin Sign-off' && booking.claiming_club_name">
-        <span class="text-muted">Claiming:</span> <strong class="text-pulse">{{ booking.claiming_club_name }}</strong>
+        <span class="text-muted">Claiming:</span> <strong :class="{ 'text-pulse': booking.claiming_club_id === highlightClubId }">{{ booking.claiming_club_name }}</strong>
       </div>
       <div v-if="booking.status === 'Officially Confirmed Booking' && booking.releasing_club_name">
         <span class="text-muted">From:</span> {{ booking.releasing_club_name }}
       </div>
     </div>
 
-    <div class="pulse-slot-ref small">
+    <div v-if="showReference" class="pulse-slot-ref small">
       <span class="font-monospace">{{ booking.fbs_reference }}</span>
       <span v-if="booking.is_demo_reference" class="pulse-chip pulse-chip-sm ms-1" title="Illustrative reference, not a real FBS slip">demo</span>
     </div>
@@ -114,7 +119,7 @@ const queueNote = computed(() => {
         </button>
       </template>
       <span v-if="!actions.length && booking.status === 'Pending Admin Sign-off'" class="small text-muted">Awaiting OSL</span>
-      <span v-else-if="!actions.length && booking.status === 'Officially Confirmed Booking'" class="small text-success fw-semibold">✓ Confirmed</span>
+      <span v-else-if="!actions.length && booking.status === 'Officially Confirmed Booking'" class="small fw-semibold" :class="isOurs ? 'text-success' : 'text-muted'">✓ Confirmed</span>
     </div>
   </div>
 </template>

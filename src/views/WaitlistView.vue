@@ -214,14 +214,13 @@ function onExpired() {
 
     <section v-if="history.length" class="pulse-panel overflow-hidden">
       <header class="p-3 border-bottom"><h2 class="h6 fw-bold mb-0">Past waitlist activity</h2></header>
-      <div v-for="entry in history" :key="entry.entry_id" class="pulse-slot text-muted">
+      <div v-for="entry in history" :key="entry.entry_id" class="pulse-slot no-ref text-muted">
         <div class="pulse-slot-when">
           <div class="fw-semibold">{{ formatDate(entry.booking_date) }}</div>
           <div class="small">{{ formatTime(entry.start_time) }} – {{ formatTime(entry.end_time) }}</div>
         </div>
         <div class="pulse-slot-status small">{{ HISTORY_LABELS[entry.status] }}</div>
         <div class="pulse-slot-who small">{{ entry.facility_name }} · {{ entry.owner_club_name }}</div>
-        <div class="pulse-slot-ref small font-monospace">{{ entry.fbs_reference }}</div>
         <div class="pulse-slot-actions"></div>
       </div>
     </section>
@@ -233,8 +232,7 @@ function onExpired() {
     message="Your claim becomes Pending Admin Sign-off until OSL approves it."
     :details="accepting ? [
       { label: 'Facility', value: accepting.facility_name },
-      { label: 'When', value: `${formatDate(accepting.booking_date, true)}, ${formatTime(accepting.start_time)} – ${formatTime(accepting.end_time)}` },
-      { label: 'FBS reference', value: accepting.fbs_reference }
+      { label: 'When', value: `${formatDate(accepting.booking_date, true)}, ${formatTime(accepting.start_time)} – ${formatTime(accepting.end_time)}` }
     ] : []"
     confirm-label="Accept and claim"
     :busy="busyId !== null"
