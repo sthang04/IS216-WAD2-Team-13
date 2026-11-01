@@ -7,6 +7,8 @@ import EventRiskView from '../src/views/EventRiskView.vue'
 import MasterFacilityCalendarView from '../src/views/MasterFacilityCalendarView.vue'
 import 'bootstrap/dist/css/bootstrap.min.css'
 import '../src/style.css'
+// Match main.js: calendar cards and confirmation dialogs need their real styles.
+import '../src/assets/facility-calendar.css'
 const router=createRouter({history:createMemoryHistory(),routes:[{path:'/',component:new URLSearchParams(window.location.search).get('panel')==='invitations'?SimulatorInvitationInbox:EventRiskView},{path:'/facilities',component:MasterFacilityCalendarView},{path:'/away',component:{render:()=>h('p','Away from simulator')}}]})
 const initialEvent=new URLSearchParams(window.location.search).get('eventId')
 if(initialEvent) await router.push({path:'/',query:{eventId:initialEvent}})

@@ -1,13 +1,18 @@
 <script setup>
+// Inspecting a candidate is separate from choosing a hypothetical replacement.
+// Neither interaction creates an invitation or sends a notification.
 import {computed,ref,watch} from 'vue'
 const props=defineProps({assessment:Object,selectedId:[String,Number]})
 const emit=defineEmits(['use'])
+// Inspection and filtering are local UI state; only the explicit use event
+// tells the parent to change its hypothetical recovery selection.
 const inspectedId=ref(null),search=ref(''),showAll=ref(false)
 const candidates=computed(()=>props.assessment?.eligible || [])
 const inspected=computed(()=>candidates.value.find(c=>String(c.id)===String(inspectedId.value)) || candidates.value.find(c=>String(c.id)===String(props.selectedId)) || candidates.value[0])
 const filtered=computed(()=>candidates.value.filter(c=>(c.name+' '+c.specialty).toLowerCase().includes(search.value.toLowerCase())))
 const visible=computed(()=>showAll.value || search.value?filtered.value:filtered.value.slice(0,5))
 watch(()=>props.selectedId,id=>{if(id!=null)inspectedId.value=id})
+// A different unavailable member needs a fresh search and inspection context.
 watch(()=>props.assessment?.memberId,()=>{inspectedId.value=null;search.value='';showAll.value=false})
 </script>
 <template>

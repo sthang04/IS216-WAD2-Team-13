@@ -2,6 +2,8 @@ import {compareFacilityScheduleConflicts} from './conflictService.js'
 import {bookingEvidence} from './simulatorWorkflowService.js'
 // Describe existing links only. This is NOT a room recommendation/ranking
 // algorithm and never inserts, claims, approves or links a booking.
+// Missing links/evidence remain visible as blockers, rather than being filled
+// with whichever booking happens to use a similarly named room.
 export function describeSimulatorFacilityLinks(data,eventId){
  const same=(a,b)=>a!=null&&b!=null&&String(a)===String(b)
  const event=data?.events?.find(e=>same(e.id,eventId))

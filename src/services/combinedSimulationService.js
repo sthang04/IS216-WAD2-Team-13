@@ -1,3 +1,5 @@
+// Proposals stay hypothetical: merge choices here, then evaluate the complete
+// schedule before ranking. A high rank never supplies consent or booking approval.
 import { assessMemberReplacements, recommendFacilityRecovery, buildFacilityAndDelayRecoveryOptions } from './recoveryRecommendationService.js'
 
 const same = (a,b) => a != null && b != null && String(a) === String(b)
@@ -108,6 +110,8 @@ export function buildCombinedRecoveryOptions(assessment,selections={},facilityOp
   const facilities = assessment.facilityOptions.filter(o => requestedIds.includes(o.id))
   const delayedById = new Map(assessment.delayedChanges.map(c => [String(c.segmentId),c]))
   const merged = new Map(assessment.delayedChanges.map(c => [String(c.segmentId),{...c}]))
+  // Conflicting room/time choices are recorded as invalid instead of letting
+  // the last selected option silently overwrite an earlier choice.
   const overrides = new Map(), selectionIssues = []
   for (const option of facilities) {
     for (const change of option.changes) {
@@ -151,6 +155,8 @@ export function buildCombinedRecoveryOptions(assessment,selections={},facilityOp
         (c.starts_at && c.starts_at!==base.get(String(c.segmentId))?.starts_at))))
       dimensions.push(choices.slice(0,4).map(option=>({facility:option.id})))
     }
+    // Cap the Cartesian search so several disrupted members/rooms do not
+    // freeze the UI. Generated options still pass the full plan evaluator.
     let count=0
     const visit=(index,members,rooms)=>{
       if(count>=64)return

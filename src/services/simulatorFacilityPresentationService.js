@@ -4,6 +4,8 @@ const venueKey=value=>String(value || '').trim().toLowerCase()
 // Presentation adapter only: joins EXISTING recommendations, suitability facts
 // and evaluator ranks. No weights, scores or new ranking rules are introduced.
 export function presentSimulatorFacilities({data,recommendations=[],options=[],rankedPlans=[],simulatedSegments=[]}){
+ // Use plan identity to carry the existing evaluator score into each card;
+ // recomputing a room-only score here could contradict combined-plan ranking.
  const ranks=new Map(rankedPlans.map((p,index)=>[p.id,{plan:p,index}]))
  return recommendations.map(recommendation=>{
   const segment=simulatedSegments.find(s=>same(s.id,recommendation.segmentId))
@@ -14,6 +16,8 @@ export function presentSimulatorFacilities({data,recommendations=[],options=[],r
    const option=options.find(o=>o.changes?.some(c=>same(c.segmentId,recommendation.segmentId)&&venueKey(c.venueName)===venueKey(venue)))
    const evaluated=ranks.get(option?.id)
    const fact=facts.find(f=>venueKey(f.name)===venueKey(venue))
+   // A member conflict may keep the whole plan unresolved without making this
+   // room unusable. Only room-specific evidence excludes a venue card.
    const rejected=(evaluated?.plan.conflicts || []).filter(c=>
     ['FACILITY_UNAVAILABLE','FACILITY_DOUBLE_BOOKING'].includes(c.type)&&same(c.segmentId,recommendation.segmentId)&&
     (!c.venue||venueKey(c.venue)===venueKey(venue))).map(c=>c.message)

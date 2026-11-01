@@ -9,6 +9,8 @@ export function simulatorWorkflowActivation(env={}){
  if(ref===production&&env.VITE_SIMULATOR_PRODUCTION_APPROVED!=='true')return {enabled:false,reason:'Production recovery activation requires separate explicit approval.'}
  return {enabled:true,projectRef:ref,reason:'Frontend RPC requests enabled for '+(ref===staging?'PULSE-Staging':'PULSE')+'. Backend authorization and release gates still apply.'}
 }
+// Keep revision conflicts actionable without retrying a mutation against a
+// newer plan that the organizer has not reviewed.
 export function simulatorWorkflowError(error){
  const message=error?.message || String(error)
  if(error?.code==='55000'||/not released for real operations/i.test(message))

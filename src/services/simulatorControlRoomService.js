@@ -51,6 +51,8 @@ export function buildControlRoomModel(data={},eventId,result=null,disruptions=[]
   const row=rows.get(level)||0;rows.set(level,row+1)
   return {...activity,level,x:20+level*265,y:20+row*136}
  })
+ // Convert recorded prerequisite IDs into drawable edges after assigning
+ // dependency levels; the graph reflects evidence, not an invented schedule.
  const nodeMap=new Map(nodes.map(n=>[String(n.id),n]))
  const edges=dependencies.map(d=>({from:nodeMap.get(String(d.prerequisite_segment_id)),to:nodeMap.get(String(d.dependent_segment_id))}))
  // A day window keeps multi-day events readable; dates are sorted as ISO local days.
@@ -67,6 +69,8 @@ export function buildControlRoomModel(data={},eventId,result=null,disruptions=[]
   .filter(([a,b])=>day && valid(a,b) && overlap(a,b,midnight,midnight+86400000))
  const bounds=windows.flatMap(([a,b])=>[Math.max(a,midnight),Math.min(b,midnight+86400000)])
  const start=bounds.length?Math.min(...bounds):null,end=bounds.length?Math.max(...bounds):null,span=end-start
+ // Clip both original and simulated bars to the same Singapore day window,
+ // preventing distant event dates from compressing every bar into a sliver.
  const position=(a,b)=>valid(start,end)&&valid(a,b)&&overlap(a,b,start,end)?{left:Math.max(0,(a-start)/span*100),width:(Math.min(b,end)-Math.max(a,start))/span*100}:null
  const timeline=activities.map(a=>({...a,originalBar:position(a.originalStart,a.originalEnd),simulatedBar:position(a.simulatedStart,a.simulatedEnd)})).filter(a=>a.originalBar || a.simulatedBar)
  const bookings=data.facility_bookings || data.facility_slots || []
@@ -99,6 +103,8 @@ export function buildControlRoomModel(data={},eventId,result=null,disruptions=[]
     if(String(a.id)!==String(b.id)&&valid(Math.max(time(as),time(bs)),Math.min(time(ae),time(be)))&&overlap(Math.max(time(as),time(bs)),Math.min(time(ae),time(be)),cell.start,cell.end))competingPairs.push([a.id,b.id])
    }))
    const competing=competingPairs.length>0
+   // Outage has display priority. An unused cell describes this event only;
+   // it must not advertise a facility as vacant or approved for booking.
    const status=outage?'outage':simultaneous||competing?'conflict':inUse.length?'in-use':'no-event-use'
    return {...cell,status,conflictDetails:[...(simultaneous?['Event activities overlap in this room.']:[]),...competingPairs.map(pair=>'Recorded reservations '+pair.join(' and ')+' overlap. Approval is checked separately.')],activities:inUse.map(a=>a.title),label:status==='outage'?'Simulated outage':status==='conflict'?'Scheduling conflict':status==='in-use'?'Event activity':'No event use shown'}
   })}

@@ -96,6 +96,8 @@ export function prepareRecoveryDraft(data,eventId,option,disruptions,bookingSele
 
 /** Local readiness is explanatory only. The SQL apply/undo RPC repeats all
  * checks against live rows. An Accepted invitation is NOT an applied assignment. */
+// Consent, booking approval and manual review are independent prerequisites.
+// This summary never replaces the server transaction's final validation.
 export function workflowReadiness({enabled=false,plan,invites=[],manualAcknowledged=false}) {
   const reasons=[]
   if (!enabled) reasons.push('Live workflow is disabled until deployment and staging verification.')
@@ -130,6 +132,8 @@ function selectedPlanId(plan) {
  * ID is never passed as proof of identity. Disabled means ZERO network requests.
  * All real mutations require explicit confirmation from the UI. */
 export function createSimulatorWorkflow(client,{enabled=false,allowReadOnly=false}={}) {
+  // Share the captured payload between concurrent Start calls and retries;
+  // each reviewed UUID must describe one immutable request.
   const startRequests=new Map()
   const call=async(name,args,confirmed=false,write=false)=>{
     if(!enabled && !(allowReadOnly && !write)) throw new Error('Live simulator workflow has not been deployed and verified.')

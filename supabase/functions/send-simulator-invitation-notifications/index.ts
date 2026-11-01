@@ -3,5 +3,7 @@ import {createSimulatorInvitationHandler} from '../_shared/simulatorInvitationWo
 
 // Reuse project-wide backend configuration. No new bot/token, browser trigger,
 // invocation of send-telegram-notifications, or changes to its scheduled job.
+// Use backend credentials only inside this function. The handler validates
+// its service bearer before claiming work; browser code never calls Telegram.
 const client=createClient(Deno.env.get('SUPABASE_URL')!,Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!)
 Deno.serve(createSimulatorInvitationHandler({client,env:Deno.env}))

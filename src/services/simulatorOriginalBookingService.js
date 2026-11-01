@@ -1,6 +1,8 @@
 // Separate from recovery-plan booking attachment. Never insert links in Vue.
 export const ORIGINAL_BOOKING_LINK_VERIFIED=false
 const fingerprint=value=>typeof value==='string'&&/^[a-f0-9]{64}$/.test(value)
+// Discovery returns evidence only. Linking requires explicit confirmation and
+// both server fingerprints to prevent attaching a changed booking or event.
 export function createOriginalBookingWorkflow(client,{enabled=ORIGINAL_BOOKING_LINK_VERIFIED}={}){
  const call=async(name,args)=>{
   if(!client)throw Error('Supabase is unavailable.')

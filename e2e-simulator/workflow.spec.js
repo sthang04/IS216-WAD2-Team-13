@@ -3,7 +3,7 @@ import {test,expect} from '@playwright/test'
 // Real Chromium UI, mocked loader. No production data or live workflow calls.
 test.beforeEach(async({page})=>{
  await page.route('**/src/services/simulationDataService.js*',route=>route.fulfill({contentType:'application/javascript',body:
-  "import {getSimulationTestData} from '/src/data/simulationTestData.js'; export async function loadSimulationData(){window.__simLoads=(window.__simLoads||0)+1;return getSimulationTestData()}"}))
+  "import {getSimulationTestData} from '/e2e-simulator/fixtures/simulationTestData.js'; export async function loadSimulationData(){window.__simLoads=(window.__simLoads||0)+1;return getSimulationTestData()}"}))
  await page.route('https://**',route=>route.abort())
  await page.goto('/e2e-simulator/harness.html')
  await expect(page.getByRole('heading',{name:'Choose Disruption Scenarios'})).toBeVisible()

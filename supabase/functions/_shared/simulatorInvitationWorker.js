@@ -4,6 +4,8 @@ import {createTelegramTransport} from './telegramTransport.js'
  * recipients, original sender invocations, test-chat fanout or automatic retries. */
 export function createSimulatorInvitationHandler({client,env,fetchImpl=fetch}) {
  return async request => {
+  // Authenticate before reading private queue rows. Browser JWTs do not
+  // authorize this backend worker or select its notification recipients.
   const serviceKey=env.get('SUPABASE_SERVICE_ROLE_KEY')
   if(!serviceKey || request.headers.get('Authorization')!=='Bearer '+serviceKey)
    return Response.json({error:'Unauthorized'},{status:401})
@@ -20,6 +22,8 @@ export function createSimulatorInvitationHandler({client,env,fetchImpl=fetch}) {
    url.pathname='/personal-schedule';url.search='';url.hash='simulator-invitation-inbox'
    link=url.toString()
   }catch{return Response.json({error:'A public HTTPS PULSE_BASE_URL is required'},{status:503})}
+  // The database atomically claims eligible invitations once. Sending is
+  // separate from acceptance and does not change event assignments.
   let invitations
   try {
    const {data,error}=await client.rpc('rpc_simulator_claim_telegram')
@@ -28,6 +32,8 @@ export function createSimulatorInvitationHandler({client,env,fetchImpl=fetch}) {
   }catch{return Response.json({error:'Private invitation queue unavailable'},{status:503})}
   const send=createTelegramTransport({botToken,fetchImpl})
   const results=[]
+  // Make one network attempt per claim. A timeout is ambiguous, so automatic
+  // retries could notify the same member twice.
   for(const invitation of invitations){
    let delivery='FAILED'
    try {

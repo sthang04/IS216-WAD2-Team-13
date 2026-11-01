@@ -22,9 +22,8 @@ test('candidate inspection is separate from explicit preview selection and works
  await expect(workspace).toHaveAttribute('data-selected-recovery','combined-selected')
  await expect(page.locator('#simulator-comparison')).toContainText(name)
  await expect(details).toContainText('No invitation, Telegram message or live assignment has been made.')
- await page.setViewportSize({width:390,height:844})
  await expect.poll(()=>page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth+1)).toBe(true)
- await details.scrollIntoViewIfNeeded();await page.screenshot({path:test.info().outputPath('candidate-mobile.png')})
+ await details.scrollIntoViewIfNeeded();
 })
 test('facility choices replace incompatible venues and prepare the exact selected room',async({page})=>{
  await boot(page)
@@ -42,4 +41,25 @@ test('facility choices replace incompatible venues and prepare the exact selecte
  await expect(page.getByRole('region',{name:'Persisted recovery workflow',exact:true})).toContainText(name)
  await expect(page.locator('#combined-facility-option')).toHaveCount(0)
  await expect(cards.nth(1)).not.toContainText('Other recovery issue:')
+})
+
+// Replaces the source-view regression: verify the visible choice survives a
+// subsequent room edit, not just that clicking a ranked card changes its border.
+test('ranked replacement remains selected when a different facility is combined',async({page})=>{
+ await boot(page)
+ await page.getByRole('button',{name:'Add disruption',exact:true}).click()
+ await page.getByLabel('Disruption type',{exact:true}).nth(1).selectOption('FACILITY_UNAVAILABLE')
+ await page.getByLabel('Unavailable from (Singapore)',{exact:true}).nth(1).fill('2026-11-02T10:00')
+ await page.getByLabel('Unavailable until (Singapore)',{exact:true}).nth(1).fill('2026-11-02T10:30')
+ await page.getByRole('button',{name:'Run combined simulation (2)',exact:true}).click()
+ await page.locator('[data-candidate-id="2"]').click()
+ await page.getByRole('button',{name:'Use in recovery preview',exact:true}).click()
+ await page.getByLabel('Number of ranked plans').selectOption('all')
+ const ranked=page.locator('.recovery-choice[data-plan-id^="overall-"]').filter({hasText:'replace Fixture affected member with Fixture review standby'}).first()
+ await ranked.getByRole('button',{name:'Select this plan',exact:true}).click()
+ await expect(page.getByRole('region',{name:'Candidate details',exact:true})).toContainText('Fixture review standby')
+ await page.locator('[data-facility-option]:not(.chosen)').first().getByRole('button',{name:'Use this alternative',exact:true}).click()
+ await expect(page.locator('.recovery-choice[data-plan-id="combined-selected"]')).toContainText('Fixture review standby')
+ await expect(page.locator('#simulator-comparison')).toContainText('Fixture review standby')
+ await expect(page.getByRole('region',{name:'Persisted recovery workflow',exact:true})).toHaveAttribute('data-selected-recovery','combined-selected')
 })

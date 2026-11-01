@@ -4,6 +4,8 @@
  * Membership does not establish role experience or timetable availability.
  */
 export async function loadEventReplacementRosters(client, events) {
+  // Events may share a club: deduplicate membership evidence while retaining
+  // each event's authorization/coverage result independently.
   const membershipsByKey = new Map()
   const byEvent = {}
   const membersById = new Map()

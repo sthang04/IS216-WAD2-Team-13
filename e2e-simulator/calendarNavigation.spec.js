@@ -1,5 +1,7 @@
 import {test,expect} from '@playwright/test'
 async function boot(page,canManage=true){
+ // Keep the fixture outside the calendar's four-day transfer lock.
+ await page.clock.setFixedTime(new Date('2026-10-25T00:00:00+08:00'))
  page.on('pageerror',error=>console.log('ISOLATED calendar error: '+error.message))
  await page.route('https://**',route=>route.abort())
  await page.route('**/src/services/simulationDataService.js*',route=>route.fulfill({contentType:'application/javascript',

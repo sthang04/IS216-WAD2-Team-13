@@ -1,4 +1,6 @@
 // Decorate an existing room recommendation without ranking, removing or replacing it.
+// Calendar hints reuse normal booking actions and cannot upgrade a pending
+// transfer into an approved reservation for the recovery plan.
 export function calendarOptionsForRecommendation({venue,start,end,rows,clubId,bookingActions,canClaim=false,isOslAdmin=false,waitlistEntries=[]}) {
  const begin=Date.parse(start),finish=Date.parse(end)
  if(!Number.isFinite(begin)||!Number.isFinite(finish)||begin>=finish)return [{action:'Unavailable',reason:'Activity times are missing or invalid.'}]

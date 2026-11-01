@@ -101,6 +101,8 @@ const distinct = values => [...new Set(values)]
  * coverage are simulator metadata, not guessed database columns or permissions.
  * A missing clash does not prove availability when schedule coverage is unknown.
  */
+// Evaluate all affected assignments together. Exact recorded role experience
+// improves rank; missing timetable evidence still requires manual review.
 export function assessMemberReplacements(data, eventId, memberId, disruptions = [], limit = Infinity) {
   const excluded = []
   const empty = message => ({ eligible: [], excluded: [], warnings: [message] })

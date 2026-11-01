@@ -1,8 +1,12 @@
 <script setup>
+// Display evaluated venue/time alternatives per activity. Choosing a card emits
+// a preview selection; reservations and approvals stay in Facility Calendar.
 import {computed} from 'vue'
 import SimulatorCalendarActions from './SimulatorCalendarActions.vue'
 const props=defineProps({recommendations:Array,options:Array,rankedPlans:Array,selected:{type:Array,default:()=>[]},data:Object,event:Object})
 const emit=defineEmits(['choose'])
+// Join alternatives by activity, preserving evaluator evidence and hiding
+// rooms already rejected by the shared facility checks.
 const groups=computed(()=>{
  const map=new Map((props.recommendations || []).map(r=>[String(r.segmentId),{...r,choices:[]}]))
  for(const option of props.options || []){
@@ -15,6 +19,8 @@ const groups=computed(()=>{
  }
  return [...map.values()]
 })
+// A time-changing proposal overrides the original activity when opening the
+// calendar, so the user reviews the interval they actually intend to recover.
 const times=(row)=>{const original=props.data?.event_segments?.find(s=>String(s.id)===String(row.change.segmentId));const changes=row.option.changes.filter(c=>String(c.segmentId)===String(row.change.segmentId));return {start:changes.find(c=>c.starts_at!=null)?.starts_at || row.fact?.starts_at || original?.starts_at,end:changes.find(c=>c.ends_at!=null)?.ends_at || row.fact?.ends_at || original?.ends_at}}
 </script>
 <template>

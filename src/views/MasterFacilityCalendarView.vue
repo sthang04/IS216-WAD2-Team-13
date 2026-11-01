@@ -214,7 +214,7 @@ function matchesAvailability(booking) {
 const visibleBookings = computed(() => {
   return bookings.value.filter((booking) => {
     // Keep simulator filtering
-    if (!bookingMatchesSimulatorFocus(booking)) {
+    if (!bookingMatchesSimulatorFocus(booking,simulatorFocus.value)) {
       return false
     }
 
@@ -447,6 +447,16 @@ async function runAction(booking, action) {
       { label: 'Pending approval', value: counts.pending, tone: 'sky' }
     ]"
   />
+
+  <section v-if="simulatorFocus" data-testid="simulator-calendar-focus" class="pulse-banner pulse-banner-view" aria-label="Simulator facility request">
+    <p v-if="simulatorFocus.error" role="status">{{ simulatorFocus.error }}</p>
+    <template v-else>
+      <strong>{{ simulatorFocus.facilityName }}</strong>
+      <p class="mb-2">Requested (Singapore): {{ simulatorRequestedPeriod }}</p>
+      <p class="mb-2">This focus does not reserve a room. Normal permissions and approval still apply.</p>
+    </template>
+    <button type="button" class="btn btn-outline-secondary btn-sm" @click="clearSimulatorFocus">Clear simulator focus</button>
+  </section>
 
   <WeekNavigator
     v-model:week-start="weekStart"

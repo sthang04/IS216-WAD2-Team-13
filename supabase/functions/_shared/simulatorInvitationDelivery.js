@@ -3,6 +3,8 @@
  * the team's existing single-recipient notification sender. Never accept message
  * details or recipient identity straight from a browser. No sender exists here.
  * Accept/Decline stays inside Pulse; Telegram buttons are intentionally omitted. */
+// Compatibility helper for an injected sender, not the deployed worker.
+// Queue/claim guarantees belong to the backend adapter that supplies that sender.
 export async function deliverSimulatorInvitation(invitation,{origin,sendExistingNotification}={}) {
   if(typeof sendExistingNotification!=='function') throw new Error('Existing Telegram sender adapter is not connected.')
   const url=new URL(origin)
