@@ -35,4 +35,3 @@ select cron.schedule('pulse-send-telegram', '* * * * *', $$
     body    := '{}'::jsonb)
 $$);
 
--- Web Push is not used, so its sender is not scheduled.

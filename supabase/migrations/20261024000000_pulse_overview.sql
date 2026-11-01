@@ -26,7 +26,6 @@
 --   0200 logic     the rules: permission checks, release/claim/waitlist, OSL approval,
 --                  48h deadline, emails and notifications (functions named rpc_* are
 --                  the only ones the website may call)
---   0500 web push  optional browser push subscriptions
 --   0300 demo      the 4 login personas and sample transfers (only when demo_mode is on)
 --   0350 check     prints "Pulse install OK" if everything is in place
 --   0400 schedules optional, run separately: timed jobs (offer expiry, OSL deadline, email/Telegram sending)

@@ -433,10 +433,6 @@ begin
   update facility_transfers set email_status = case email_status
            when 'QUEUED' then 'SENT' when 'CONFIRMATION_QUEUED' then 'CONFIRMATION_SENT' else email_status end;
   update notifications set telegram_status = 'NOT_REQUIRED' where telegram_status = 'PENDING';
-  -- push_status exists once 20261024000500 is installed.
-  if exists (select 1 from information_schema.columns where table_name = 'notifications' and column_name = 'push_status') then
-    execute $q$update notifications set push_status = 'NOT_REQUIRED' where push_status = 'PENDING'$q$;
-  end if;
 
   return jsonb_build_object('reset_at', now(), 'demo_bookings', v_new,
                             'transfers', (select count(*) from facility_transfers));

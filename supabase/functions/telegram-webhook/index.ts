@@ -1,86 +1,413 @@
-// Telegram calls this when someone messages the bot. "/start <code>" links
-// the chat to the member who generated the code in Pulse
-// (rpc_create_telegram_link_code). Register with setWebhook and a
-// secret_token equal to TELEGRAM_WEBHOOK_SECRET. Deploy with --no-verify-jwt.
-//
-// Testers: anyone whose @username is in TELEGRAM_TEST_HANDLES (comma separated,
-// e.g. chloeanggggg,TinkerThian,gixellee,angellow365,Jerica_koh,ahlixia) who
-// sends /start is saved in telegram_test_chats. In TELEGRAM_DELIVERY_MODE=test
-// every Telegram alert goes to all of them. Bots can't message a @username
-// first, so each tester has to /start the bot once.
-//
-// Safety: links are only made in private chats (never a group), a chat is
-// linked to one Pulse account at a time (the newest link wins), each code
-// works once and expires after 10 minutes, the reply names the Pulse
-// account that was linked, and /stop unlinks this chat at any time.
 import { createClient } from 'jsr:@supabase/supabase-js@2'
 
-const supabase = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!)
-const token = Deno.env.get('TELEGRAM_BOT_TOKEN')
-const testHandles = (Deno.env.get('TELEGRAM_TEST_HANDLES') ?? '')
-  .split(',').map((h) => h.trim().replace(/^@/, '').toLowerCase()).filter(Boolean)
+// ============================================================
+// PULSE TELEGRAM WEBHOOK
+//
+// Features:
+// 1. Register approved Telegram testers using plain /start
+// 2. Link PULSE accounts using /start <18-character-code>
+// 3. Disconnect Telegram chats using /stop
+// 4. Reject group-chat linking
+// 5. Log registration failures for debugging
+//
+// The webhook is called automatically by Telegram.
+// It must validate TELEGRAM_WEBHOOK_SECRET.
+//
+// Required Supabase secrets:
+// - SUPABASE_URL
+// - SUPABASE_SERVICE_ROLE_KEY
+// - TELEGRAM_BOT_TOKEN
+// - TELEGRAM_WEBHOOK_SECRET
+// - TELEGRAM_TEST_HANDLE
+// ============================================================
 
-async function reply(chatId: number, text: string) {
-  await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
-    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ chat_id: chatId, text })
-  })
+const supabase = createClient(
+  Deno.env.get('SUPABASE_URL')!,
+  Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
+)
+
+const token = Deno.env.get('TELEGRAM_BOT_TOKEN') ?? ''
+const webhookSecret = Deno.env.get('TELEGRAM_WEBHOOK_SECRET') ?? ''
+
+const testHandles = (
+  Deno.env.get('TELEGRAM_TEST_HANDLE') ?? ''
+)
+  .split(',')
+  .map((handle) =>
+    handle.trim().replace(/^@/, '').toLowerCase()
+  )
+  .filter(Boolean)
+
+type TelegramMessage = {
+  message_id?: number
+  text?: string
+  chat: {
+    id: number
+    type: string
+  }
+  from?: {
+    id: number
+    username?: string
+  }
 }
 
-Deno.serve(async (req) => {
-  if (req.headers.get('X-Telegram-Bot-Api-Secret-Token') !== Deno.env.get('TELEGRAM_WEBHOOK_SECRET')) {
-    return new Response('forbidden', { status: 403 })
-  }
-  const update = await req.json()
-  const message = update?.message
-  const match = /^\/start\s+([a-f0-9]{18})$/.exec(message?.text ?? '')
-  if (!message) return new Response('ok')
- 
-  // /stop: this chat stops getting Pulse notifications
-  if (/^\/stop\b/.test(message.text ?? '')) {
-    await supabase.from('telegram_links')
-      .update({ telegram_chat_id: null, linked_at: null })
-      .eq('telegram_chat_id', message.chat.id)
-    await supabase.from('telegram_test_chats').delete().eq('chat_id', message.chat.id)
-    await reply(message.chat.id, 'Disconnected. Pulse will no longer message this chat. Use Connect Telegram in Pulse to link again.')
-    return new Response('ok')
-  }
- 
-  // Never link a group chat: everyone in it would see someone's notifications
-  if (message.chat?.type !== 'private') {
-    if (match) await reply(message.chat.id, 'Pulse can only be connected in a private chat with the bot.')
-    return new Response('ok')
+type TelegramUpdate = {
+  update_id?: number
+  message?: TelegramMessage
+}
+
+// ============================================================
+// SEND TELEGRAM REPLY
+// ============================================================
+
+async function reply(chatId: number, text: string) {
+  if (!token) {
+    throw new Error('TELEGRAM_BOT_TOKEN is missing')
   }
 
-  // Tester registration: a plain /start from a listed @username.
-  const username = (message.from?.username ?? '').toLowerCase()
-  if (!match && /^\/start\b/.test(message.text ?? '') && testHandles.includes(username)) {
-    await supabase.from('telegram_test_chats')
-      .upsert({ username, chat_id: message.chat.id, registered_at: new Date().toISOString() })
-    await reply(message.chat.id, `Hi @${message.from.username}, you'll now get Pulse test notifications here.`)
-    return new Response('ok')
-  }
-  if (!match) return new Response('ok')
-
-  const { data: link } = await supabase
-    .from('telegram_links').select('member_id, code_expires_at').eq('link_code', match[1]).maybeSingle()
-  if (!link || new Date(link.code_expires_at) < new Date()) {
-    await reply(message.chat.id, 'That Pulse link code has expired. Generate a new one in Pulse.')
-    return new Response('ok')
-  }
-  // One Telegram chat belongs to one Pulse account: linking it here unlinks
-  // it from anyone it was linked to before, so it never gets two people's alerts
-  await supabase.from('telegram_links')
-    .update({ telegram_chat_id: null, linked_at: null })
-    .eq('telegram_chat_id', message.chat.id)
-    .neq('member_id', link.member_id)
-  await supabase.from('telegram_links')
-    .update({ telegram_chat_id: message.chat.id, linked_at: new Date().toISOString(), link_code: null })
-    .eq('member_id', link.member_id)
-  const { data: member } = await supabase.from('members').select('full_name').eq('id', link.member_id).maybeSingle()
-  await reply(
-    message.chat.id,
-    `Connected to the Pulse account of ${member?.full_name ?? 'this member'}. ` +
-    'Pulse will send waitlist offers and transfer updates here. Not you? Send /stop to disconnect.'
+  const response = await fetch(
+    `https://api.telegram.org/bot${token}/sendMessage`,
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        chat_id: chatId,
+        text
+      })
+    }
   )
-  return new Response('ok')
+
+  const result = await response.json()
+
+  if (!response.ok || !result.ok) {
+    console.error('Telegram sendMessage failed:', {
+      status: response.status,
+      description: result.description
+    })
+
+    throw new Error('Telegram could not send the reply')
+  }
+}
+
+// ============================================================
+// REGISTER TESTER
+// ============================================================
+
+async function registerTester(
+  username: string,
+  chatId: number
+) {
+  const { error } = await supabase
+    .from('telegram_test_chats')
+    .upsert(
+      {
+        username,
+        chat_id: chatId,
+        registered_at: new Date().toISOString()
+      },
+      {
+        onConflict: 'username'
+      }
+    )
+
+  if (error) {
+    console.error('Tester registration failed:', {
+      username,
+      error: error.message
+    })
+
+    throw new Error('Unable to save Telegram tester')
+  }
+
+  console.log('Telegram tester registered:', username)
+}
+
+// ============================================================
+// DISCONNECT CHAT
+// ============================================================
+
+async function disconnectChat(chatId: number) {
+  const { error: linkError } = await supabase
+    .from('telegram_links')
+    .update({
+      telegram_chat_id: null,
+      linked_at: null,
+      link_code: null,
+      code_expires_at: null
+    })
+    .eq('telegram_chat_id', chatId)
+
+  if (linkError) {
+    throw new Error(
+      `Unable to disconnect PULSE account: ${linkError.message}`
+    )
+  }
+
+  const { error: testError } = await supabase
+    .from('telegram_test_chats')
+    .delete()
+    .eq('chat_id', chatId)
+
+  if (testError) {
+    throw new Error(
+      `Unable to disconnect tester: ${testError.message}`
+    )
+  }
+
+  console.log('Telegram chat disconnected')
+}
+
+// ============================================================
+// LINK PULSE ACCOUNT
+// ============================================================
+
+async function linkPulseAccount(
+  chatId: number,
+  code: string
+) {
+  const { data: link, error: lookupError } = await supabase
+    .from('telegram_links')
+    .select('member_id, code_expires_at')
+    .eq('link_code', code)
+    .maybeSingle()
+
+  if (lookupError) {
+    throw new Error(
+      `Link lookup failed: ${lookupError.message}`
+    )
+  }
+
+  if (
+    !link ||
+    !link.code_expires_at ||
+    new Date(link.code_expires_at).getTime() <= Date.now()
+  ) {
+    await reply(
+      chatId,
+      'This PULSE link code is invalid or has expired. Please generate a new one in PULSE.'
+    )
+    return
+  }
+
+  // Consume the code only if it is still valid.
+  // Clear any existing PULSE link associated with this chat.
+  const { error: previousLinkError } = await supabase
+    .from('telegram_links')
+    .update({
+      telegram_chat_id: null,
+      linked_at: null
+    })
+    .eq('telegram_chat_id', chatId)
+    .neq('member_id', link.member_id)
+
+  if (previousLinkError) {
+    throw new Error(
+      `Previous chat unlink failed: ${previousLinkError.message}`
+    )
+  }
+
+  const { data: updatedLinks, error: updateError } = await supabase
+    .from('telegram_links')
+    .update({
+      telegram_chat_id: chatId,
+      linked_at: new Date().toISOString(),
+      link_code: null,
+      code_expires_at: null
+    })
+    .eq('member_id', link.member_id)
+    .eq('link_code', code)
+    .gt('code_expires_at', new Date().toISOString())
+    .select('member_id')
+
+  if (updateError) {
+    throw new Error(
+      `Link update failed: ${updateError.message}`
+    )
+  }
+
+  if (!updatedLinks || updatedLinks.length === 0) {
+    await reply(
+      chatId,
+      'This link code has already been used or has expired.'
+    )
+    return
+  }
+
+  const { data: member, error: memberError } = await supabase
+    .from('members')
+    .select('full_name')
+    .eq('id', link.member_id)
+    .maybeSingle()
+
+  if (memberError) {
+    console.error('Member lookup failed:', memberError.message)
+  }
+
+  console.log('PULSE member linked:', link.member_id)
+
+  await reply(
+    chatId,
+    `Connected to the PULSE account of ${member?.full_name ?? 'this member'}. ` +
+    'You will receive PULSE notifications for this account. ' +
+    'Not you? Send /stop to disconnect.'
+  )
+}
+
+// ============================================================
+// MAIN WEBHOOK
+// ============================================================
+
+Deno.serve(async (req) => {
+  // Only accept POST requests
+  if (req.method !== 'POST') {
+    return new Response('Method not allowed', { status: 405 })
+  }
+
+  // Check Telegram webhook secret
+  if (
+    !webhookSecret ||
+    req.headers.get('X-Telegram-Bot-Api-Secret-Token') !==
+      webhookSecret
+  ) {
+    console.warn('Rejected request: invalid webhook secret')
+    return new Response('Forbidden', { status: 403 })
+  }
+
+  try {
+    const update = await req.json() as TelegramUpdate
+    const message = update.message
+
+    if (!message) {
+      return new Response('ok')
+    }
+
+    const chatId = message.chat.id
+    const chatType = message.chat.type
+
+    const username = (
+      message.from?.username ?? ''
+    ).trim().toLowerCase()
+
+    const messageText = (
+      message.text ?? ''
+    ).trim()
+
+    const linkMatch =
+      /^\/start\s+([a-f0-9]{18})$/.exec(messageText)
+
+    const isAllowedTester = testHandles.includes(username)
+
+    // Log registration diagnostics without logging
+    // Telegram chat IDs, bot tokens or link codes.
+    console.log('Telegram incoming update:', {
+      username,
+      chatType,
+      command: messageText.split(/\s+/)[0],
+      hasLinkCode: Boolean(linkMatch),
+      isAllowedTester
+    })
+
+    // --------------------------------------------------------
+    // /stop
+    // --------------------------------------------------------
+
+    if (/^\/stop(?:\s|$)/.test(messageText)) {
+      if (chatType !== 'private') {
+        return new Response('ok')
+      }
+
+      await disconnectChat(chatId)
+
+      await reply(
+        chatId,
+        'Disconnected. You will no longer receive PULSE Telegram notifications here.'
+      )
+
+      return new Response('ok')
+    }
+
+    // --------------------------------------------------------
+    // Reject group chats
+    // --------------------------------------------------------
+
+    if (chatType !== 'private') {
+      if (/^\/start\b/.test(messageText)) {
+        await reply(
+          chatId,
+          'Please open a private chat with the PULSE bot to connect.'
+        )
+      }
+
+      return new Response('ok')
+    }
+
+    // --------------------------------------------------------
+    // Plain /start = tester registration
+    // --------------------------------------------------------
+
+    if (/^\/start$/.test(messageText)) {
+      if (!username) {
+        await reply(
+          chatId,
+          'Please set a Telegram username in Settings, then send /start again.'
+        )
+
+        console.warn('Tester registration rejected: no username')
+        return new Response('ok')
+      }
+
+      if (!isAllowedTester) {
+        console.warn(
+          'Tester registration rejected: username not allowed',
+          username
+        )
+
+        await reply(
+          chatId,
+          'Your Telegram username is not on the PULSE tester list. Please contact your team administrator.'
+        )
+
+        return new Response('ok')
+      }
+
+      await registerTester(username, chatId)
+
+      await reply(
+        chatId,
+        `Hi @${username}! You are now registered for PULSE test notifications.`
+      )
+
+      return new Response('ok')
+    }
+
+    // --------------------------------------------------------
+    // /start CODE = PULSE account linking
+    // --------------------------------------------------------
+
+    if (linkMatch) {
+      await linkPulseAccount(chatId, linkMatch[1])
+      return new Response('ok')
+    }
+
+    // Invalid /start formats
+    if (/^\/start\b/.test(messageText)) {
+      await reply(
+        chatId,
+        'To register as a tester, send /start. To link a PULSE account, use Connect Telegram on the website.'
+      )
+    }
+
+    return new Response('ok')
+
+  } catch (error) {
+    console.error(
+      'Telegram webhook error:',
+      error instanceof Error ? error.message : String(error)
+    )
+
+    // Telegram may retry failed deliveries; keep diagnostics in logs.
+    return new Response('Internal server error', { status: 500 })
+  }
 })
