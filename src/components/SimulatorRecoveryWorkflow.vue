@@ -65,6 +65,7 @@ const inviteTargets=computed(()=>{
  for(const change of plan.value?.changes || [])if(change.replacementMemberId!=null)pairs.set(change.replacedMemberId+':'+change.replacementMemberId,{replaced:change.replacedMemberId,recipient:change.replacementMemberId})
  return [...pairs.values()]
 })
+function requestExists(target){return history.value.invitations.some(i=>String(i.plan_id)===String(plan.value?.id)&&String(i.recipient_member_id)===String(target.recipient)&&String(i.replaced_member_id)===String(target.replaced)&&['Pending','Accepted'].includes(effectiveInvitationStatus(i,clock.value)))}
 function memberName(id){return props.data?.members?.find(m=>String(m.id)===String(id))?.full_name || 'Member '+id}
 function activityName(id){return props.data?.event_segments?.find(s=>String(s.id)===String(id))?.title || 'Activity '+id}
 function facilitySuggestions(change){
@@ -174,7 +175,7 @@ function attachBooking(change){
  queueAction('Associate booking '+bookingId+' with '+activityName(change.segmentId),()=>api.attachBooking(current,change.segmentId,bookingId,true),'Calendar booking associated. Approval is still checked separately.')
 }
 function cancelPlan(){const current={...plan.value};queueAction('Cancel Recovery Plan',()=>api.cancelPlan(current,true),'Recovery cancelled. Event records are unchanged; handle calendar claims separately.')}
-function invite(target){const id=plan.value.id;queueAction('Invite '+memberName(target.recipient)+' to replace '+memberName(target.replaced),()=>api.invite(id,target.recipient,target.replaced,true),'Invitation persisted in the protected Pulse inbox. No public notification or Telegram message was sent.')}
+function invite(target){const id=plan.value.id;queueAction('Invite '+memberName(target.recipient)+' to replace '+memberName(target.replaced),()=>api.invite(id,target.recipient,target.replaced,true),'Invitation saved in the member inbox. Telegram awaits the configured simulator worker; refresh to check delivery status.')}
 function respond(response){const id=incoming.value.id;queueAction(response+' invitation '+id,()=>api.respond(id,response,true),'Response persisted. No assignment was applied.',{refreshInvitation:true})}
 function cancel(id){queueAction('Cancel invitation '+id,()=>api.cancel(id,true),'Invitation cancelled.')}
 function applyPlan(){if(!applyReady.value){error.value='Complete the outstanding requirements and review the saved recovery before applying.';return}const current={...plan.value},ack=manualAcknowledged.value;queueAction('Apply selected recovery',()=>api.confirm(current,ack,true),'Recovery committed by the server.',{refresh:true,application:true})}
@@ -318,10 +319,10 @@ onUnmounted(()=>{disposed=true;++contextEpoch;++historyVersion;++incomingVersion
 
     <div v-for="target in inviteTargets" :key="target.replaced+':'+target.recipient" class="small my-2">
       Invite {{ memberName(target.recipient) }} to replace {{ memberName(target.replaced) }}:
-      <button class="btn btn-outline-primary btn-sm" :disabled="!invitationEnabled || busy || plan?.application_status!=='Draft'" @click="invite(target)">Create replacement invitation</button>
+      <button class="btn btn-outline-primary btn-sm" :disabled="!invitationEnabled || busy || requestExists(target) || plan?.application_status!=='Draft'" @click="invite(target)">Send replacement request</button>
     </div>
     <div v-for="invitation in history.invitations.filter(i => String(i.plan_id)===String(plan?.id))" :key="invitation.id" class="small border rounded p-2 my-2">
-      {{ memberName(invitation.recipient_member_id) }}: {{ invitation.status }} | Delivery: {{ invitation.delivery_status }} (Telegram integration unavailable)
+      {{ memberName(invitation.recipient_member_id) }}: {{ effectiveInvitationStatus(invitation,clock) }} | Telegram: {{ ['Sending','UNKNOWN'].includes(invitation.delivery_status) ? 'Delivery unconfirmed (do not resend)' : invitation.delivery_status === 'Pending Delivery' ? 'Awaiting configured sender' : invitation.delivery_status === 'NO_CHAT' ? 'Account not linked' : invitation.delivery_status === 'FAILED' ? 'Notification failed' : invitation.delivery_status }}
       <button class="btn btn-outline-danger btn-sm ms-2" :disabled="!invitationEnabled || busy || !['Pending','Accepted'].includes(invitation.status)" @click="cancel(invitation.id)">Cancel invitation</button>
     </div>
     <p v-if="incoming" class="small">Your replacement invitation is available in <RouterLink to="/personal-schedule#simulator-invitation-inbox">Personal Schedule - My replacement invitations</RouterLink>. Accepting it does not apply an assignment.</p>
