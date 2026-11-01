@@ -206,7 +206,7 @@ const modal = computed(() => {
   }
   return {
     title: 'Reject this transfer?',
-    message: 'The claim is kept in the audit history and the slot returns to Proposed Peer Transfer.',
+    message: 'The claim is kept in the audit history and the slot goes back to Available to Claim.',
     confirmLabel: 'Reject transfer',
     danger: true,
     reasonLabel: 'Reason (shared with both CCAs)',
