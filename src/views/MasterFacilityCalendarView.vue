@@ -15,7 +15,7 @@ import ConfirmActionModal from '../components/ConfirmActionModal.vue'
 import { loadOffers } from '../services/notificationStore'
 import { session, activeClubName, canManageActiveClub, showToast } from '../services/sessionState'
 import {
-  STATUSES, fetchFacilities, fetchCalendar, releaseBooking, undoRelease, claimBooking,
+  STATUSES, OTHER_CCA_FILTER, fetchFacilities, fetchCalendar, releaseBooking, undoRelease, claimBooking,
   listenForCalendarChanges, bookingActions, defaultWeekStart, weekStartOf, addDays,
   formatWeekLabel, formatDate, formatTime
 } from '../services/facilityService'
@@ -171,16 +171,63 @@ function matchesFacility(facility) {
   return matchesCapacity(facility.capacity)
 }
 
+// True when the CCA we act for is part of this booking:
+//   - we currently hold it (owner_club_id; every booking has exactly one owner), or
+//   - we released it and it is still Available to Claim, or
+//   - it is Pending Admin Sign-off and we are the releasing or claiming CCA.
+// Anything else (including slots other CCAs released that we could claim) is another CCA's booking.
+function involvesOurClub(booking, clubId) {
+  if (booking.owner_club_id === clubId) {
+    return true
+  }
+  if (booking.status === STATUSES.PROPOSED && booking.releasing_club_id === clubId) {
+    return true
+  }
+  if (booking.status === STATUSES.PENDING) {
+    return booking.releasing_club_id === clubId || booking.claiming_club_id === clubId
+  }
+  return false
+}
+
+// "Other CCA Bookings": every booking, in any status, that our CCA is not part of
+function isOtherCcaBooking(booking) {
+  const clubId = session.value.activeClubId
+  if (!clubId) {
+    return false
+  }
+  return !involvesOurClub(booking, clubId)
+}
+
+function matchesAvailability(booking) {
+  const choice = filters.value.availability
+  if (choice === 'All') {
+    return true
+  }
+  if (choice === OTHER_CCA_FILTER) {
+    // No CCA to compare against (guest, OSL): show everything instead of nothing
+    return !session.value.activeClubId || isOtherCcaBooking(booking)
+  }
+  return booking.status === choice
+}
+
 // Bookings that pass the status and day filters
 const visibleBookings = computed(() => {
   return bookings.value.filter((booking) => {
-    if(!bookingMatchesSimulatorFocus(booking,simulatorFocus.value))return false
-    if (filters.value.availability !== 'All' && booking.status !== filters.value.availability) {
+    // Keep simulator filtering
+    if (!bookingMatchesSimulatorFocus(booking)) {
       return false
     }
+
+    // Use updated booking availability filtering from main
+    if (!matchesAvailability(booking)) {
+      return false
+    }
+
+    // Keep existing selected day filtering
     if (selectedDay.value && booking.booking_date !== selectedDay.value) {
       return false
     }
+
     return true
   })
 })
@@ -270,7 +317,7 @@ const actionsByBooking = computed(() => {
 const CONFIRM_TEXT = {
   release: {
     title: 'Release this slot?',
-    message: 'It becomes a Proposed Peer Transfer. If other CCAs are waitlisted, the first one gets a 30-minute offer; otherwise any CCA can claim it.',
+    message: 'It becomes Available to Claim. If other CCAs are waitlisted, the first one gets a 30-minute offer; otherwise any CCA can claim it.',
     confirmLabel: 'Release slot'
   },
   undo: {
@@ -420,15 +467,6 @@ async function runAction(booking, action) {
     Look for "Accept offer" below, or open the <RouterLink to="/facilities/waitlist">Waitlist</RouterLink> tab.
   </div>
 
-  <div v-if="simulatorFocus && !loading" class="pulse-banner pulse-banner-view" role="status" data-testid="simulator-calendar-focus">
-    <template v-if="simulatorFocus.error">{{ simulatorFocus.error }}</template>
-    <template v-else>
-      <strong>{{ simulatorFocus.facilityName }}</strong> | Requested (Singapore): {{ simulatorRequestedPeriod }}.
-      Showing overlapping calendar slots; check full time coverage, capacity and suitability.
-      This request has not booked or claimed anything. Use the normal calendar actions and approvals.
-    </template>
-    <button type="button" class="btn btn-sm btn-outline-secondary ms-2" @click="clearSimulatorFocus">Clear simulator focus</button>
-  </div>
   <FacilityFilters v-model:filters="filters" :facilities="facilities" :week-label="weekLabel" />
 
   <div v-if="loading" class="text-center py-5">

@@ -59,6 +59,12 @@ const sessionPersona = ref(null) // who signed in
 const activePersona = ref(GUEST_PERSONA) // who the app is acting as (only Dev can switch this)
 const selectedClub = ref(null)
 const profileMenuOpen = ref(false)
+ 
+// 'Darren Koh' -> 'DK' for the round avatar in the header
+const personaInitials = computed(() => {
+  const words = (activePersona.value.name || '').trim().split(/\s+/).filter(Boolean)
+  return words.slice(0, 2).map((w) => w[0].toUpperCase()).join('') || '?'
+})
 const profileMenu = ref(null)
  
 // Close the profile menu when pressing outside it, or with Escape (same as the bell)
@@ -377,11 +383,11 @@ onMounted(async () => {
     <div v-else class="min-vh-100 d-flex flex-column" style="background-color: var(--pulse-bg);">
       
       <!-- Top Modern SaaS Header -->
-      <header class="pulse-header px-3 px-lg-5 py-2">
-        <div class="container-fluid d-flex flex-wrap justify-content-between align-items-center gap-2">
+      <header class="pulse-header px-3 px-lg-4 py-2">
+        <div class="container-fluid d-flex flex-wrap flex-lg-nowrap align-items-center gap-2 gap-lg-3">
           
           <!-- Left: Logo & Community Switcher (Scoped per persona) -->
-          <div class="d-flex align-items-center gap-3">
+          <div class="d-flex align-items-center gap-3 flex-shrink-0">
             <a href="#" class="pulse-brand-logo text-decoration-none" @click.prevent="router.push('/facilities')">
               <div class="pulse-logo-badge">
                 <span>P</span>
@@ -437,15 +443,12 @@ onMounted(async () => {
                   <option v-for="club in allowedClubs" :key="club" :value="club">{{ club }}</option>
                 </select>
               </div>
-              <span class="badge bg-light text-muted border ms-2 px-2 py-1 d-none d-xl-inline" style="font-size: 0.65rem;">
-                Scoped: {{ selectedClub }}
-              </span>
             </div>
           </div>
  
           <!-- Center: Navigation Tabs (Role-tailored) -->
           <!-- OSL Admin View: Administrative Oversight & Governance -->
-          <nav v-if="isAdmin" class="d-none d-lg-flex align-items-center gap-1">
+          <nav v-if="isAdmin" class="d-none d-lg-flex align-items-center gap-1 pulse-header-nav">
             <button
               type="button"
               class="pulse-nav-pill"
@@ -465,7 +468,7 @@ onMounted(async () => {
           </nav>
  
           <!-- Student ExCo View: Complete 5-Feature Operational Suite -->
-          <nav v-else class="d-none d-lg-flex align-items-center gap-1">
+          <nav v-else class="d-none d-lg-flex align-items-center gap-1 pulse-header-nav">
             <button 
               type="button" 
               class="pulse-nav-pill" 
@@ -513,13 +516,13 @@ onMounted(async () => {
           </nav>
  
           <!-- Right: Presentation Utility Bar (API Mode, Reset, Role & Sign Out) -->
-          <div class="d-flex align-items-center gap-2 ms-auto flex-wrap justify-content-end">
+          <div class="d-flex align-items-center gap-2 ms-auto flex-shrink-0">
             
             <!-- Reset Demo Button -->
             <button
               v-if="canResetDemo"
               type="button"
-              class="btn btn-outline-danger btn-sm px-3 fw-bold rounded-pill"
+              class="btn btn-outline-danger btn-sm px-3 fw-bold rounded-pill d-none d-lg-inline-block"
               :disabled="isAutoRunning"
               @click="handleResetDemo"
             >
@@ -529,7 +532,7 @@ onMounted(async () => {
             <!-- Toggle API Badges (Defaults to OFF; Toggleable for Pitch / Architecture review) -->
             <button
               type="button"
-              class="btn btn-sm rounded-pill fw-bold d-flex align-items-center gap-1 pulse-api-toggle-btn"
+              class="btn btn-sm rounded-pill fw-bold d-none d-xxl-flex align-items-center gap-1 pulse-api-toggle-btn"
               :class="apiMode ? 'pulse-api-active' : 'pulse-api-inactive'"
               title="Toggle API architecture tags across all views"
               @click="apiMode = !apiMode"
@@ -545,19 +548,13 @@ onMounted(async () => {
             <div ref="profileMenu" class="position-relative">
               <button
                 type="button"
-                class="btn btn-pulse-outline btn-sm d-flex align-items-center gap-2 rounded-pill px-3 bg-white"
+                class="pulse-avatar-btn"
                 :aria-expanded="profileMenuOpen"
+                :aria-label="`Account menu for ${activePersona.name}`"
+                :title="activePersona.name"
                 @click="profileMenuOpen = !profileMenuOpen"
               >
-                <!-- Clean SVG User Icon (No Emoji) -->
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
-                  <circle cx="12" cy="7" r="4"></circle>
-                </svg>
-                <span class="fw-bold" style="font-size: 0.775rem;">
-                  {{ activePersona.name }}
-                </span>
-                <span style="font-size: 0.65rem;">▼</span>
+                {{ personaInitials }}
               </button>
  
               <div 
@@ -565,8 +562,8 @@ onMounted(async () => {
                 class="card shadow-lg position-absolute end-0 mt-2 p-2 border-0" 
                 style="min-width: 260px; z-index: 1050; border-radius: 0.85rem;"
               >
-                <!-- Signed-in identity (everyone except Dev sees just this) -->
-                <div v-if="!canSwitchPersona" class="p-2 border-bottom mb-2">
+                <!-- Signed-in identity (the avatar only shows initials) -->
+                <div class="p-2 border-bottom mb-2">
                   <div class="fw-bold" style="font-size: 0.825rem;">{{ activePersona.name }}</div>
                   <small class="text-muted d-block" style="font-size: 0.7rem;">{{ activePersona.roleLabel }}</small>
                   <small v-if="activePersona.email" class="text-muted d-block" style="font-size: 0.7rem;">{{ activePersona.email }}</small>

@@ -193,7 +193,7 @@ function onBookingAction(type, booking) {
       id: booking.booking_id,
       row: booking,
       title: 'Release this slot?',
-      message: 'It becomes a Proposed Peer Transfer. Waitlisted CCAs are offered it first, in queue order.',
+      message: 'It becomes Available to Claim. Waitlisted CCAs are offered it first, in queue order.',
       confirmLabel: 'Release slot',
       details: slotDetails(booking)
     }
@@ -356,7 +356,7 @@ async function confirmPending() {
         <header class="pulse-section-head tone-amber">
           <div>
             <h2 class="h6 fw-bold mb-0">Released by My Club</h2>
-            <p class="text-muted small mb-0">Offered as Proposed Peer Transfers this week and not claimed yet.</p>
+            <p class="text-muted small mb-0">Released by us this week and still available to claim.</p>
           </div>
           <span class="pulse-count">{{ released.length }}</span>
         </header>
@@ -383,14 +383,14 @@ async function confirmPending() {
           <span class="pulse-count">{{ successfulTransfers.length }}</span>
         </header>
         <p v-if="!successfulTransfers.length" class="p-3 text-muted small mb-0">No approved transfers this week.</p>
-        <div v-for="(t, i) in successfulTransfers" :key="t.transfer_id" class="pulse-slot is-confirmed" :style="{ '--i': i }">
+        <div v-for="(t, i) in successfulTransfers" :key="t.transfer_id" class="pulse-slot" :class="{ 'is-confirmed': t.direction !== 'OUTGOING' }" :style="{ '--i': i }">
           <div class="pulse-slot-when">
             <div class="fw-semibold">{{ formatDate(t.booking_date) }}</div>
             <div class="small text-muted">{{ formatTime(t.start_time) }} – {{ formatTime(t.end_time) }}</div>
             <div class="small fw-semibold mt-1">{{ t.facility_name }}</div>
           </div>
           <div class="pulse-slot-status">
-            <BookingStatusBadge status="Officially Confirmed Booking" />
+            <BookingStatusBadge status="Officially Confirmed Booking" :ours="t.direction !== 'OUTGOING'" />
             <div class="small mt-1"><span class="pulse-direction" :class="t.direction === 'OUTGOING' ? 'out' : 'in'">{{ t.direction === 'OUTGOING' ? '↗ Handed over' : '↙ Received' }}</span></div>
           </div>
           <div class="pulse-slot-who small">{{ t.releasing_club_name }} → <strong>{{ t.claiming_club_name }}</strong></div>
