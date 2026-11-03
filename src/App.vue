@@ -384,10 +384,10 @@ onMounted(async () => {
       
       <!-- Top Modern SaaS Header -->
       <header class="pulse-header px-3 px-lg-4 py-2">
-        <div class="container-fluid d-flex flex-wrap flex-lg-nowrap align-items-center gap-2 gap-lg-3">
+        <div class="container-fluid d-flex flex-nowrap align-items-center justify-content-between gap-1 gap-sm-2 gap-lg-3">
           
           <!-- Left: Logo & Community Switcher (Scoped per persona) -->
-          <div class="d-flex align-items-center gap-3 flex-shrink-0">
+          <div class="d-flex align-items-center gap-2 gap-sm-3 flex-shrink-1 min-w-0">
             <a href="#" class="pulse-brand-logo text-decoration-none" @click.prevent="router.push('/facilities')">
               <div class="pulse-logo-badge">
                 <span>P</span>
@@ -636,11 +636,82 @@ onMounted(async () => {
           </div>
  
         </div>
-      <nav v-if="!isAdmin" class="d-lg-none px-3 pb-2" aria-label="Mobile PULSE navigation">
-        <label for="pulse-mobile-page" class="visually-hidden">Navigate PULSE</label>
-        <select id="pulse-mobile-page" class="form-select form-select-sm" style="min-height:44px" :value="currentView" @change="currentView = $event.target.value">
-          <option v-for="item in [{view:'facilities',label:'Master Facility Calendar'},{view:'schedule',label:'Personal Schedule'},{view:'heatmap',label:'Availability Heatmap'},{view:'operations',label:'Day-of Operations'},{view:'risk',label:'Event Risk Planning'}].filter(item=>canOpenView(activePersona,item.view))" :key="item.view" :value="item.view">{{ item.label }}</option>
-        </select>
+      <!-- Dynamic Mobile Feature Segmented Pill Navigation Bar -->
+      <nav class="d-lg-none pulse-mobile-nav-container" aria-label="Mobile PULSE navigation">
+        <!-- Case A: OSL Admin Mobile Navigation -->
+        <div v-if="isAdmin" class="pulse-mobile-nav">
+          <button
+            type="button"
+            class="pulse-mobile-pill"
+            :class="{ active: currentView === 'facilities' && !isOslReviewRoute }"
+            @click="router.push('/facilities')"
+          >
+            <span class="pill-icon">🏛️</span>
+            <span>Facility Calendar</span>
+          </button>
+          <button
+            type="button"
+            class="pulse-mobile-pill"
+            :class="{ active: isOslReviewRoute }"
+            @click="router.push('/facilities/admin')"
+          >
+            <span class="pill-icon">⚖️</span>
+            <span>OSL Review</span>
+          </button>
+        </div>
+
+        <!-- Case B: Student ExCo Mobile Navigation (All 5 Core Features) -->
+        <div v-else class="pulse-mobile-nav">
+          <button 
+            type="button" 
+            class="pulse-mobile-pill" 
+            :class="{ active: currentView === 'facilities' }"
+            @click="currentView = 'facilities'"
+          >
+            <span class="pill-icon">🏛️</span>
+            <span>Facilities</span>
+          </button>
+          <button 
+            v-if="canOpenView(activePersona, 'schedule')"
+            type="button" 
+            class="pulse-mobile-pill" 
+            :class="{ active: currentView === 'schedule' }"
+            @click="currentView = 'schedule'"
+          >
+            <span class="pill-icon">📋</span>
+            <span>My Schedule</span>
+          </button>
+          <button 
+            v-if="canOpenView(activePersona, 'heatmap')"
+            type="button" 
+            class="pulse-mobile-pill" 
+            :class="{ active: currentView === 'heatmap' }"
+            @click="currentView = 'heatmap'"
+          >
+            <span class="pill-icon">🟢</span>
+            <span>Heatmap</span>
+          </button>
+          <button 
+            v-if="canOpenView(activePersona, 'operations')"
+            type="button" 
+            class="pulse-mobile-pill" 
+            :class="{ active: currentView === 'operations' }"
+            @click="currentView = 'operations'"
+          >
+            <span class="pill-icon">⚡</span>
+            <span>Day-of Ops</span>
+          </button>
+          <button 
+            v-if="canOpenView(activePersona, 'risk')"
+            type="button" 
+            class="pulse-mobile-pill" 
+            :class="{ active: currentView === 'risk' }"
+            @click="currentView = 'risk'"
+          >
+            <span class="pill-icon">🛡️</span>
+            <span>Risk Sandbox</span>
+          </button>
+        </div>
       </nav>
       </header>
  
