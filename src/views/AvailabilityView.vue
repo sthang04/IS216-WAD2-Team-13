@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue';
+import { ref, computed, watch, nextTick, onMounted, onBeforeUnmount } from 'vue';
 import { useRoute } from 'vue-router';
 import { session, activeClubName, setActiveClub } from '../services/sessionState';
 import { parseIcs, icsEventAt } from '../services/icsBaseline';
@@ -87,7 +87,7 @@ const canUse = computed(() => !!(session.value.ready && myId.value && clubId.val
 const roster = ref([])                         // everyone in the CCA
 const myBaseline = ref({ fileName: '', events: [] })
 const clubBaselines = ref({})                  // { memberId: [busy events] } for everyone else
-const snapshot = ref({ meeting: null, participants: [], availability: [] })
+const snapshot = ref({ meeting: null, participants: [], availability: [], weekMeetings: [] })
 const isLoading = ref(false)
 const clockOffset = ref(0)                     // server time minus browser time, for the countdown
 
@@ -112,10 +112,13 @@ async function loadClubData() {
   }
 }
 
+// A week can have several meetings; this is the one shown in the sidebar (null = the server picks)
+const selectedMeetingId = ref(null)
+
 let loadSeq = 0
-async function loadMeeting(meetingId = null) {
+async function loadMeeting(meetingId = selectedMeetingId.value) {
   if (!canUse.value) {
-    snapshot.value = { meeting: null, participants: [], availability: [] }
+    snapshot.value = { meeting: null, participants: [], availability: [], weekMeetings: [] }
     return
   }
   const seq = ++loadSeq
@@ -123,10 +126,16 @@ async function loadMeeting(meetingId = null) {
   try {
     const data = await fetchMeetingSnapshot({ clubId: clubId.value, weekStart: weekKey.value, meetingId })
     if (seq !== loadSeq) return // a newer load started meanwhile
+    // A picked meeting from another week (e.g. a stale id) falls back to this week's
+    if (data.meeting && data.meeting.week_start !== weekKey.value) {
+      selectedMeetingId.value = null
+      return loadMeeting(null)
+    }
     snapshot.value = {
       meeting: data.meeting,
       participants: data.participants || [],
-      availability: data.availability || []
+      availability: data.availability || [],
+      weekMeetings: data.week_meetings || []
     }
     if (data.meeting) {
       clockOffset.value = new Date(data.meeting.server_now).getTime() - Date.now()
@@ -141,6 +150,22 @@ async function loadMeeting(meetingId = null) {
 const meeting = computed(() => snapshot.value.meeting)
 const isOpenRequest = computed(() => meeting.value && ['COLLECTING', 'EXPIRED'].includes(meeting.value.status))
 const isConfirmed = computed(() => meeting.value?.status === 'CONFIRMED')
+
+const weekMeetings = computed(() => snapshot.value.weekMeetings || [])
+const hasConfirmedThisWeek = computed(() => weekMeetings.value.some((w) => w.status === 'CONFIRMED'))
+
+function statusBadge(status) {
+  if (status === 'CONFIRMED') return { cls: 'pulse-badge-confirmed', label: 'Confirmed' }
+  if (status === 'EXPIRED') return { cls: 'pulse-badge-rejected', label: 'Expired' }
+  return { cls: 'pulse-badge-pending', label: 'Collecting' }
+}
+
+function selectMeeting(id) {
+  showCreateForm.value = false
+  showConfirmForm.value = false
+  selectedMeetingId.value = id
+  loadMeeting(id)
+}
 
 /* ================================================================== */
 /* 5. LIVE UPDATES                                                     */
@@ -163,7 +188,10 @@ function listen() {
 }
 
 watch([clubId, myId, () => session.value.ready], () => { loadClubData(); loadMeeting() }, { immediate: true })
-watch(weekKey, () => loadMeeting())
+watch(weekKey, () => {
+  selectedMeetingId.value = null
+  loadMeeting()
+})
 watch([clubId, () => meeting.value?.id], listen, { immediate: true })
 
 // Telegram / bell links open /availability?meeting=ID: jump to that meeting's CCA and week
@@ -175,6 +203,8 @@ async function openLinkedMeeting() {
     if (!data.meeting) return
     if (data.meeting.club_id !== clubId.value) setActiveClub(data.meeting.club_id)
     weekStart.value = parseISO(data.meeting.week_start)
+    await nextTick() // let the week change reset the selection first
+    selectMeeting(id)
   } catch (err) {
     console.error('Could not open the meeting link:', err.message)
   }
@@ -240,10 +270,11 @@ const baselineMemberIds = computed(() => {
   return ids.filter((id) => id !== myId.value)
 })
 
+// Title of a confirmed meeting this week at that hour, or ''
 function confirmedAt(iso, hour) {
-  const m = meeting.value
-  return !!m && m.status === 'CONFIRMED' && m.confirmed_date === iso &&
-    hour >= m.confirmed_start_hour && hour < m.confirmed_end_hour
+  const m = (snapshot.value.weekMeetings || []).find((w) => w.status === 'CONFIRMED' && w.confirmed_date === iso &&
+    hour >= w.confirmed_start_hour && hour < w.confirmed_end_hour)
+  return m ? m.title : ''
 }
 
 // Everything one cell needs, worked out once per change
@@ -265,10 +296,15 @@ const grid = computed(() => HOURS.map((hour) => weekDates.value.map((day) => {
 
 const totalParticipants = computed(() => snapshot.value.participants.length)
 
-// White when nobody is free; greener as more participants are free
-function heatLevel(cell) {
-  if (!isOpenRequest.value || cell.free.length === 0 || totalParticipants.value === 0) return 0
-  return Math.max(1, Math.ceil((cell.free.length / totalParticipants.value) * 4))
+// Share of participants free: red below 50%, amber 50-75%, green above 75%, deep green when everyone is.
+// Nobody free yet: no colour (white, or grey if someone has class then).
+function heatClass(cell) {
+  if (!isOpenRequest.value || cell.free.length === 0 || totalParticipants.value === 0) return ''
+  const share = cell.free.length / totalParticipants.value
+  if (share >= 1) return 'avail-all'
+  if (share > 0.75) return 'avail-green'
+  if (share >= 0.5) return 'avail-amber'
+  return 'avail-red'
 }
 
 const canVote = computed(() => !props.readOnly && amParticipant.value && votingOpen.value)
@@ -419,7 +455,7 @@ async function submitCreate() {
 
   isSubmitting.value = true
   try {
-    await createMeeting({
+    const newId = await createMeeting({
       clubId: clubId.value,
       title: form.value.title.trim(),
       weekStart: form.value.week,
@@ -428,7 +464,8 @@ async function submitCreate() {
     })
     showCreateForm.value = false
     weekStart.value = parseISO(form.value.week)
-    await loadMeeting()
+    await nextTick() // let the week change reset the selection first
+    selectMeeting(newId)
     showToast(`Meeting request sent to ${selectedCount.value - 1} participant${selectedCount.value === 2 ? '' : 's'} on Telegram.`)
   } catch (err) {
     showToast(err.message, 'danger')
@@ -565,7 +602,7 @@ async function cancelRequest() {
   try {
     await cancelMeeting(meeting.value.id)
     showConfirmForm.value = false
-    await loadMeeting()
+    selectMeeting(null)
     showToast('Meeting request cancelled.')
   } catch (err) {
     showToast(err.message, 'danger')
@@ -663,11 +700,12 @@ function exportConfirmed() {
             <div class="d-flex flex-wrap align-items-center gap-3 legend">
               <span><span class="legend-swatch swatch-class"></span>Class</span>
               <template v-if="isOpenRequest">
-                <span><span class="legend-swatch swatch-empty"></span>No one free</span>
-                <span><span class="legend-swatch heat-2"></span><span class="legend-swatch heat-4"></span>More free</span>
+                <span><span class="legend-swatch avail-red"></span>Below 50% free</span>
+                <span><span class="legend-swatch avail-amber"></span>50–75%</span>
+                <span><span class="legend-swatch avail-green"></span>Above 75%</span>
                 <span><span class="legend-swatch swatch-mine"></span>You</span>
               </template>
-              <span v-if="isConfirmed"><span class="legend-swatch swatch-meeting"></span>Meeting</span>
+              <span v-if="hasConfirmedThisWeek"><span class="legend-swatch swatch-meeting"></span>Meeting</span>
             </div>
           </div>
 
@@ -687,29 +725,34 @@ function exportConfirmed() {
 
                   <td v-for="cell in row" :key="cell.key" class="p-1">
                     <!-- Confirmed meeting -->
-                    <div v-if="cell.confirmed" class="slot slot-meeting rounded-2" :title="meeting.title">
-                      <span class="slot-name">{{ meeting.title }}</span>
+                    <div v-if="cell.confirmed" class="slot slot-meeting rounded-2" :title="cell.confirmed">
+                      <span class="slot-name">{{ cell.confirmed }}</span>
                     </div>
 
                     <!-- Your own class (from your timetable) -->
                     <div v-else-if="cell.myClass" class="pulse-class-pill rounded-2" :title="cellTitle(cell)">
                       <span class="pulse-class-name">{{ cell.myClass }}</span>
                       <!-- Others in class at the same time would otherwise be hidden under your own class -->
-                      <span v-if="cell.othersInClass.length" class="slot-class slot-class-extra">+{{ cell.othersInClass.length }} in class</span>
+                      <span v-if="cell.othersInClass.length" class="slot-class-extra">+{{ cell.othersInClass.length }} in class</span>
                     </div>
 
-                    <!-- Everyone else: white unless someone marked it free -->
+                    <!-- Everyone else: coloured by how many are free; otherwise white, or grey when others have class -->
                     <div
                       v-else
                       class="slot rounded-2 position-relative"
-                      :class="[`heat-${heatLevel(cell)}`, { 'slot-mine': cell.mine, 'slot-clickable': canVote }]"
+                      :class="[
+                        heatClass(cell) || (cell.othersInClass.length ? 'slot-baseline' : ''),
+                        { 'slot-mine': cell.mine, 'slot-clickable': canVote }
+                      ]"
                       :title="cellTitle(cell)"
                       :role="canVote ? 'button' : null"
                       :aria-pressed="canVote ? cell.mine : null"
                       @click="toggleCell(cell)"
                     >
-                      <span v-if="isOpenRequest && cell.free.length" class="slot-count">{{ cell.free.length }}/{{ totalParticipants }}</span>
-                      <span v-if="cell.othersInClass.length" class="slot-class">Class{{ cell.othersInClass.length > 1 ? ` ×${cell.othersInClass.length}` : '' }}</span>
+                      <span v-if="heatClass(cell)" class="slot-count">{{ cell.free.length }}/{{ totalParticipants }}</span>
+                      <span v-else-if="cell.othersInClass.length" class="slot-baseline-text">
+                        {{ cell.othersInClass.length === 1 ? 'Class' : `${cell.othersInClass.length} Classes` }}
+                      </span>
                       <span v-if="cell.mine" class="slot-you">You</span>
                     </div>
                   </td>
@@ -729,8 +772,42 @@ function exportConfirmed() {
           <p class="text-muted small mb-0">Sign in as a CCA ExCo to schedule meetings.</p>
         </div>
 
-        <!-- ============ No meeting this week ============ -->
-        <div v-else-if="!meeting" class="pulse-card p-4 shadow-sm">
+        <template v-else>
+
+        <!-- ============ This week's meetings (a week can have several) ============ -->
+        <div v-if="weekMeetings.length" class="pulse-card p-3 shadow-sm mb-4">
+          <div class="small fw-bold text-muted text-uppercase mb-2">This week</div>
+          <div class="d-flex flex-column gap-2">
+            <button
+              v-for="w in weekMeetings"
+              :key="w.id"
+              type="button"
+              class="match-card text-start d-flex justify-content-between align-items-center gap-2"
+              :class="{ selected: !showCreateForm && meeting && meeting.id === w.id }"
+              @click="selectMeeting(w.id)"
+            >
+              <span class="small">
+                <strong class="d-block">{{ w.title }}</strong>
+                <span v-if="w.status === 'CONFIRMED'" class="text-muted member-meta">
+                  {{ shortLabel(parseISO(w.confirmed_date)) }}, {{ hourLabel(w.confirmed_start_hour) }} – {{ hourLabel(w.confirmed_end_hour) }}
+                </span>
+                <span v-else class="text-muted member-meta">Organised by {{ w.organiser_name }}</span>
+              </span>
+              <span class="pulse-badge" :class="statusBadge(w.status).cls">{{ statusBadge(w.status).label }}</span>
+            </button>
+          </div>
+          <button
+            v-if="!showCreateForm"
+            type="button"
+            class="btn btn-sm btn-pulse-outline w-100 mt-2 fw-bold"
+            @click="openCreateForm"
+          >
+            + Schedule another meeting
+          </button>
+        </div>
+
+        <!-- ============ Schedule a meeting ============ -->
+        <div v-if="showCreateForm || !meeting" class="pulse-card p-4 shadow-sm">
           <template v-if="!showCreateForm">
             <h6 class="fw-bold mb-3">Schedule Meeting</h6>
             <button type="button" class="btn btn-pulse-primary w-100 py-2 fw-bold" @click="openCreateForm">
@@ -990,6 +1067,8 @@ function exportConfirmed() {
           </button>
         </div>
 
+        </template>
+
       </div>
     </div>
   </div>
@@ -998,7 +1077,7 @@ function exportConfirmed() {
 <style scoped>
 .scheduler-grid { min-width: 640px; table-layout: fixed; }
 .pulse-class-pill { overflow: hidden; padding: 0 0.25rem; }
-.slot-class.slot-class-extra { background: #e2e8f0; margin-top: 1px; white-space: nowrap; }
+.slot-class-extra { font-size: 0.58rem; font-weight: 700; color: #64748b; white-space: nowrap; }
 /* Make room for the "+N in class" tag: one line of class name */
 .pulse-class-pill:has(.slot-class-extra) .pulse-class-name { -webkit-line-clamp: 1; line-clamp: 1; }
 .pulse-class-name { overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical; }
@@ -1006,7 +1085,8 @@ function exportConfirmed() {
 .scheduler-grid .day-col { font-size: 0.75rem; line-height: 1.2; }
 .scheduler-grid td { height: 3.1rem; }
 
-/* One hour slot. White by default; greener as more participants are free. */
+/* One hour slot. White when nobody is free, grey when others have class,
+   red / amber / green by the share of participants who are free. */
 .slot {
   height: 2.75rem;
   width: 100%;
@@ -1022,26 +1102,24 @@ function exportConfirmed() {
 .slot-clickable { cursor: pointer; }
 .slot-clickable:hover { border-color: #16a34a; }
 
-.heat-1 { background: #f0fdf4; }
-.heat-2 { background: #bbf7d0; }
-.heat-3 { background: #4ade80; }
-.heat-4 { background: #16a34a; color: #fff; }
+.avail-red   { background: #f6dcdc; color: #a35555; border-color: #f0c4c4; }
+.avail-amber { background: #fbf1cc; color: #8a6a14; border-color: #f3e2a0; }
+.avail-green { background: #d9efe0; color: #3d7a52; border-color: #bfe3cb; }
+.avail-all   { background: #16a34a; color: #fff; border-color: #16a34a; }
+
+/* Brighter once you've marked yourself free there */
+.slot-mine.avail-red   { background: #ef4444; color: #fff; }
+.slot-mine.avail-amber { background: #facc15; color: #3b2a00; }
+.slot-mine.avail-green { background: #22c55e; color: #fff; }
+
+.slot-baseline { background: #f1f5f9; border-color: #cbd5e1; }
+.slot-baseline-text { font-size: 0.7rem; font-weight: 800; color: #475569; }
 
 .slot-mine {
-  outline: 2px solid var(--pulse-primary, #e11d48);
+  outline: 2px solid #334155;
   outline-offset: -2px;
 }
 .slot-count { font-size: 0.72rem; font-weight: 800; color: inherit; }
-.slot-class {
-  font-size: 0.58rem;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.02em;
-  color: #64748b;
-  background: #f1f5f9;
-  border-radius: 999px;
-  padding: 0 0.35rem;
-}
 .slot-you {
   position: absolute;
   top: 2px;
@@ -1050,7 +1128,10 @@ function exportConfirmed() {
   font-weight: 800;
   color: var(--pulse-primary, #e11d48);
 }
-.heat-4 .slot-you { color: #fff; }
+.slot-you { color: #334155; }
+.avail-all .slot-you,
+.slot-mine.avail-red .slot-you,
+.slot-mine.avail-green .slot-you { color: #fff; }
 
 .slot-meeting {
   background: var(--pulse-primary, #e11d48);
@@ -1080,7 +1161,7 @@ function exportConfirmed() {
 }
 .swatch-class { background: #f1f5f9; border-color: #cbd5e1; }
 .swatch-empty { background: #fff; }
-.swatch-mine { background: #fff; outline: 2px solid var(--pulse-primary, #e11d48); outline-offset: -2px; }
+.swatch-mine { background: #fff; outline: 2px solid #334155; outline-offset: -2px; }
 .swatch-meeting { background: var(--pulse-primary, #e11d48); border-color: var(--pulse-primary, #e11d48); }
 
 .member-list { max-height: 220px; overflow-y: auto; }
