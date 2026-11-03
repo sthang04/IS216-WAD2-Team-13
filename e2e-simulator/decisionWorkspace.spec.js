@@ -3,8 +3,8 @@ async function boot(page){
  await page.route('https://**',r=>r.abort())
  await page.route('**/src/services/simulationDataService.js*',r=>r.fulfill({contentType:'application/javascript',body:"import {campusConnectFixture} from '/e2e-simulator/fixtures/campusConnect.js';export async function loadSimulationData(){const d=campusConnectFixture();d.facilities.push({id:3,name:'Fixture third room',is_active:true,capacity:60});d.facility_slots.push({...d.facility_slots[1],id:3,venue_name:'Fixture third room'});d.facility_bookings.push({...d.facility_bookings[1],id:3,facility_id:3});return d}"}))
  await page.goto('/e2e-simulator/harness.html')
- await page.getByLabel('Unavailable from (Singapore)',{exact:true}).fill('2026-11-02T10:00')
- await page.getByLabel('Unavailable until (Singapore)',{exact:true}).fill('2026-11-02T10:30')
+ await page.getByLabel('Unavailable from (Singapore)',{exact:true}).selectOption('2026-11-02T10:00')
+ await page.getByLabel('Unavailable until (Singapore)',{exact:true}).selectOption('2026-11-02T10:30')
  await page.getByRole('button',{name:'Run combined simulation (1)',exact:true}).click()
 }
 test('candidate inspection is separate from explicit preview selection and works on mobile',async({page})=>{
@@ -49,8 +49,8 @@ test('ranked replacement remains selected when a different facility is combined'
  await boot(page)
  await page.getByRole('button',{name:'Add disruption',exact:true}).click()
  await page.getByLabel('Disruption type',{exact:true}).nth(1).selectOption('FACILITY_UNAVAILABLE')
- await page.getByLabel('Unavailable from (Singapore)',{exact:true}).nth(1).fill('2026-11-02T10:00')
- await page.getByLabel('Unavailable until (Singapore)',{exact:true}).nth(1).fill('2026-11-02T10:30')
+ await page.getByLabel('Unavailable from (Singapore)',{exact:true}).nth(1).selectOption('2026-11-02T10:00')
+ await page.getByLabel('Unavailable until (Singapore)',{exact:true}).nth(1).selectOption('2026-11-02T10:30')
  await page.getByRole('button',{name:'Run combined simulation (2)',exact:true}).click()
  await page.locator('[data-candidate-id="2"]').click()
  await page.getByRole('button',{name:'Use in recovery preview',exact:true}).click()

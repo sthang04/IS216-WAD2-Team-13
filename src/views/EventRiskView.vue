@@ -29,8 +29,11 @@ import {
   evaluateRecoveryPlans
 } from '../services/recoveryPlanEvaluationService.js'
 
+import { singaporeLocal as toSingaporeLocal, scheduleRange } from '../services/disruptionScheduleService.js'
+
 import PipMascot from '../components/PipMascot.vue'
 import {notificationStore, setPipStatic, setPipQuiet} from '../services/notificationStore'
+import SimulatorDisruptionInterval from '../components/SimulatorDisruptionInterval.vue'
 import SimulatorImpactWorkspace from '../components/SimulatorImpactWorkspace.vue'
 import SimulatorRecoveryWorkflow from '../components/SimulatorRecoveryWorkflow.vue'
 import {projectRecoveryPreview} from '../services/simulatorWorkflowService.js'
@@ -265,6 +268,7 @@ function formatTime(value) {
 
   return date.toLocaleString('en-SG', {
     timeZone: 'Asia/Singapore',
+    year: 'numeric',
     day: '2-digit',
     month: 'short',
     hour: '2-digit',
@@ -272,20 +276,8 @@ function formatTime(value) {
   })
 }
 
-function toSingaporeLocal(value) {
-  if (!value) return ''
-
-  const date = new Date(value)
-
-  if (Number.isNaN(date.getTime())) {
-    return ''
-  }
-
-  return new Date(
-    date.getTime() + 8 * 60 * 60 * 1000
-  ).toISOString().slice(0, 16)
-}
-
+// UI bounds and submission validation share the loaded event schedule.
+const eventSchedule = computed(() => scheduleRange(selectedEvent.value))
 // ========================================================
 // INITIALIZE INPUTS
 // ========================================================
@@ -312,7 +304,8 @@ function removeDisruption(id) {
 function resetSelections(resetWorkflow = true) {
   if(resetWorkflow) sessionVersion.value++
   nextDisruptionId = 1
-  disruptionCards.value = [{...createDisruption(), start:'', end:''}]
+  // Switching events discards stale cards and uses the new event's actual bounds.
+  disruptionCards.value = [createDisruption()]
   selectedRecoveryId.value = ''
   if(resetWorkflow) selectedSavedRecovery.value = null
   workflowStage.value = 'Draft'
@@ -968,6 +961,8 @@ function proposedVenueFor(segment) {
       <select id="simulation-event" :value="selectedEventId" @change="changeEvent" class="form-select form-select-sm mb-3" :disabled="loading">
         <option v-for="event in events" :key="event.id" :value="event.id">{{ event.name }}</option>
       </select>
+      <p v-if="eventSchedule" class="small text-muted" data-testid="event-schedule">Event schedule (Singapore): {{ formatTime(selectedEvent.starts_at) }} to {{ formatTime(selectedEvent.ends_at) }}</p>
+      <p v-else class="alert alert-warning small">This event has a missing or invalid schedule. Verify its start and end before simulating.</p>
       <p class="small text-muted">Add member, facility and delay disruptions together. Repeated delays on one activity accumulate. Times use Singapore time.</p>
       <div v-for="(d,index) in disruptionCards" :key="d.id" class="simulator-scenario-card mt-3 p-3 rounded-3 bg-light border">
         <div class="d-flex justify-content-between align-items-center mb-2">
@@ -1003,21 +998,13 @@ function proposedVenueFor(segment) {
           <select :id="d.id + '-segment'" v-model="d.segmentId" class="form-select form-select-sm mb-2">
             <option v-for="segment in eventSegments" :key="segment.id" :value="segment.id">{{ segment.title }}</option>
           </select>
+          <p class="small text-muted">Activity schedule (Singapore): {{ formatTime(eventSegments.find(s => String(s.id) === String(d.segmentId))?.starts_at) }} to {{ formatTime(eventSegments.find(s => String(s.id) === String(d.segmentId))?.ends_at) }}. Delay starts at this activity's scheduled start; its finish may extend beyond the event.</p>
           <label class="small fw-bold" :for="d.id + '-delay'">Delay (minutes)</label>
           <input :id="d.id + '-delay'" v-model.number="d.delayMinutes" type="number" min="1" max="1440" class="form-control form-control-sm">
         </template>
         <p v-if="d.type==='FACILITY_UNAVAILABLE' && !eventLinkedBookings.length" class="small text-warning">No linked facility booking is available. Arrange the original booking in Facility Setup / Booking Readiness below before simulating an outage.</p>
         <div v-if="d.type==='FACILITY_UNAVAILABLE'" class="my-2"><label class="small fw-bold" :for="d.id+'-window'">Outage interval</label><select :id="d.id+'-window'" class="form-select form-select-sm" :value="d.intervalMode || 'custom'" @change="setOutageWindow(d,$event.target.value)"><option value="custom">Specific time interval</option><option value="event">Entire event</option></select></div>
-        <div v-if="d.type !== 'SCHEDULE_DELAY'" class="row g-2">
-          <div class="col-md-6">
-            <label class="small fw-bold" :for="d.id + '-start'">Unavailable from (Singapore)</label>
-            <input :id="d.id + '-start'" v-model="d.start" :disabled="d.intervalMode==='event'" type="datetime-local" class="form-control form-control-sm">
-          </div>
-          <div class="col-md-6">
-            <label class="small fw-bold" :for="d.id + '-end'">Unavailable until (Singapore)</label>
-            <input :id="d.id + '-end'" v-model="d.end" :disabled="d.intervalMode==='event'" type="datetime-local" class="form-control form-control-sm">
-          </div>
-        </div>
+        <SimulatorDisruptionInterval v-if="d.type !== 'SCHEDULE_DELAY'" :id="d.id" :index="index+1" :event="selectedEvent" v-model:start="d.start" v-model:end="d.end" :disabled="d.intervalMode==='event'" />
       </div>
 
       <div class="d-flex flex-wrap gap-2 mt-3">

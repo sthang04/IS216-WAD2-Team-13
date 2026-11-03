@@ -28,8 +28,8 @@ async function boot(page,canManage=true){
   };`}))
  await page.goto('/e2e-simulator/harness.html')
  await page.getByLabel('Disruption type',{exact:true}).selectOption('FACILITY_UNAVAILABLE')
- await page.getByLabel('Unavailable from (Singapore)',{exact:true}).fill('2026-11-02T10:00')
- await page.getByLabel('Unavailable until (Singapore)',{exact:true}).fill('2026-11-02T10:30')
+ await page.getByLabel('Unavailable from (Singapore)',{exact:true}).selectOption('2026-11-02T10:00')
+ await page.getByLabel('Unavailable until (Singapore)',{exact:true}).selectOption('2026-11-02T10:30')
  await page.getByRole('button',{name:'Run combined simulation (1)',exact:true}).click()
  page.once('dialog',dialog=>dialog.accept())
  await page.getByTestId('facility-alternative').getByRole('link',{name:'View / Request this facility',exact:true}).click()
@@ -70,7 +70,7 @@ test('combined member/facility recommendations retain the relevant roster warnin
  await page.getByLabel('Disruption type',{exact:true}).nth(1).selectOption('FACILITY_UNAVAILABLE')
  for(const label of ['Unavailable from (Singapore)','Unavailable until (Singapore)']){
   const value=label.startsWith('Unavailable from')?'2026-11-02T10:00':'2026-11-02T10:30'
-  await page.getByLabel(label,{exact:true}).nth(0).fill(value);await page.getByLabel(label,{exact:true}).nth(1).fill(value)
+  await page.getByLabel(label,{exact:true}).nth(0).selectOption(value);await page.getByLabel(label,{exact:true}).nth(1).selectOption(value)
  }
  await page.getByRole('button',{name:'Run combined simulation (2)',exact:true}).click()
  await expect(page.getByText('Candidate availability has not been confirmed. Check with your selected replacement before proceeding.',{exact:true})).toBeVisible()

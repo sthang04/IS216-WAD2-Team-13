@@ -16,8 +16,8 @@ for(const scenario of ['verified','manual','none','no-facility','facility-manual
    await page.getByLabel('Delay (minutes)',{exact:true}).fill('30')
   }else{
    if(['no-facility','facility-manual','unlinked','blocked'].includes(scenario))await page.getByLabel('Disruption type',{exact:true}).selectOption('FACILITY_UNAVAILABLE')
-   await page.getByLabel('Unavailable from (Singapore)',{exact:true}).fill('2026-11-02T10:00')
-   await page.getByLabel('Unavailable until (Singapore)',{exact:true}).fill('2026-11-02T10:30')
+   await page.getByLabel('Unavailable from (Singapore)',{exact:true}).selectOption('2026-11-02T10:00')
+   await page.getByLabel('Unavailable until (Singapore)',{exact:true}).selectOption('2026-11-02T10:30')
   }
   if(scenario!=='unlinked') await page.getByRole('button',{name:'Run combined simulation (1)',exact:true}).click()
   if(scenario==='unlinked'){
@@ -65,8 +65,8 @@ test('facility recommendations follow two selected events and actual linked book
   await page.getByLabel('Disruption type',{exact:true}).selectOption('FACILITY_UNAVAILABLE')
   await expect(page.getByLabel('Unavailable facility',{exact:true})).toHaveValue(bookingId)
   await expect(page.getByLabel('Unavailable facility',{exact:true}).locator('option:checked')).toContainText('Booking '+bookingId)
-  await page.getByLabel('Unavailable from (Singapore)',{exact:true}).fill(date+'T10:00')
-  await page.getByLabel('Unavailable until (Singapore)',{exact:true}).fill(date+'T10:30')
+  await page.getByLabel('Unavailable from (Singapore)',{exact:true}).selectOption(date+'T10:00')
+  await page.getByLabel('Unavailable until (Singapore)',{exact:true}).selectOption(date+'T10:30')
   await page.getByRole('button',{name:'Run combined simulation (1)',exact:true}).click()
   await expect(page.getByRole('heading',{name:'Facility and schedule alternatives',exact:true})).toBeVisible()
   const card=page.getByTestId('facility-alternative')
