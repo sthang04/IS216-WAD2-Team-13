@@ -1,1031 +1,1113 @@
 <script setup>
-import { ref, computed, watch } from 'vue';
+import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue';
+import { useRoute } from 'vue-router';
+import { session, activeClubName, setActiveClub } from '../services/sessionState';
+import { parseIcs, icsEventAt } from '../services/icsBaseline';
+import {
+  fetchMeetingSnapshot, fetchClubRoster, createMeeting, setAvailability, submitNoAvailability,
+  nudgeParticipants, confirmMeeting, cancelMeeting,
+  fetchMyBaseline, fetchClubBaselines, saveMyBaseline, clearMyBaseline, listenForMeetings
+} from '../services/meetingService';
 
 const props = defineProps({
-  apiMode: { type: Boolean, default: false },
+  apiMode: { type: Boolean, default: true },
   readOnly: { type: Boolean, default: false }
 });
 
-const emit = defineEmits(['back', 'meeting-scheduled']);
+const route = useRoute();
 
 /* ================================================================== */
 /* 1. BASICS: toast message + guest check                              */
 /* ================================================================== */
-const showClassBaseline = ref(true)
 const toastMsg = ref('')
+const toastType = ref('success')
+let toastTimer = null
 
-// Show a message at the top for a few seconds
-function showToast(msg, ms = 4000) {
+function showToast(msg, type = 'success', ms = 4000) {
   toastMsg.value = msg
-  setTimeout(() => { toastMsg.value = '' }, ms)
+  toastType.value = type
+  clearTimeout(toastTimer)
+  toastTimer = setTimeout(() => { toastMsg.value = '' }, ms)
 }
 
-// Guests can look around but not make changes
 function blockedForGuest() {
   if (!props.readOnly) return false
-  showToast('Guest view is read-only. Sign in as a CCA ExCo to make changes.')
+  showToast('Guest view is read-only. Sign in as a CCA ExCo to make changes.', 'warning')
   return true
 }
 
 /* ================================================================== */
-/* 2. DATE HELPERS (turn dates into text and back)                     */
+/* 2. DATE HELPERS (Singapore time; the grid runs 08:00 to 22:00)      */
 /* ================================================================== */
 const WEEKDAYS_SHORT = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 const WEEKDAYS_LONG = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
 const MONTHS_SHORT = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
-const MONTHS_LONG = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
+const HOURS = [8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21]
 
 function pad(n) { return String(n).padStart(2, '0') }
-
-// Date -> "2026-10-16"
 function toISO(dt) { return `${dt.getFullYear()}-${pad(dt.getMonth() + 1)}-${pad(dt.getDate())}` }
-
-// "2026-10-16" -> Date (or null if empty)
 function parseISO(s) {
   if (!s) return null
   const [y, m, d] = s.split('-').map(Number)
   return new Date(y, m - 1, d)
 }
-
 function addDays(dt, n) { return new Date(dt.getFullYear(), dt.getMonth(), dt.getDate() + n) }
-
-// Mon = 0, Tue = 1, ... Sun = 6 (JS normally starts the week on Sunday)
-function dayIndex(dt) { return (dt.getDay() + 6) % 7 }
-function mondayOf(dt) { return addDays(dt, -dayIndex(dt)) }
-
-function shortLabel(dt) { return `${WEEKDAYS_SHORT[dt.getDay()]} ${dt.getDate()} ${MONTHS_SHORT[dt.getMonth()]}` }               // Fri 16 Oct
-function longLabel(dt) { return `${WEEKDAYS_LONG[dt.getDay()]}, ${dt.getDate()} ${MONTHS_LONG[dt.getMonth()]} ${dt.getFullYear()}` } // Friday, 16 October 2026
-
-function hourLabel(h) { return `${pad(h)}:00` }          // 8 -> "08:00"
-function hourNum(label) { return parseInt(label, 10) }   // "08:00" -> 8
+function mondayOf(dt) { return addDays(dt, -((dt.getDay() + 6) % 7)) }
+function hourLabel(h) { return `${pad(h)}:00` }
+function shortLabel(dt) { return `${WEEKDAYS_SHORT[dt.getDay()]} ${dt.getDate()} ${MONTHS_SHORT[dt.getMonth()]}` }
+function longLabel(dt) { return `${WEEKDAYS_LONG[dt.getDay()]}, ${dt.getDate()} ${MONTHS_SHORT[dt.getMonth()]} ${dt.getFullYear()}` }
+function weekLabel(monday) {
+  const sun = addDays(monday, 6)
+  return `${monday.getDate()} ${MONTHS_SHORT[monday.getMonth()]} – ${sun.getDate()} ${MONTHS_SHORT[sun.getMonth()]} ${sun.getFullYear()}`
+}
+function deadlineLabel(iso) {
+  const dt = new Date(iso)
+  return `${shortLabel(dt)}, ${pad(dt.getHours())}:${pad(dt.getMinutes())}`
+}
+// <input type="datetime-local"> wants "YYYY-MM-DDTHH:MM" in local time
+function toLocalInput(dt) { return `${toISO(dt)}T${pad(dt.getHours())}:${pad(dt.getMinutes())}` }
 
 /* ================================================================== */
 /* 3. WEEK NAVIGATION                                                  */
 /* ================================================================== */
-const EXAMPLE_WEEK_START = new Date(2026, 9, 12) // Mon 12 Oct 2026
-const weekStart = ref(EXAMPLE_WEEK_START)        // the Monday of the week being shown
-
+const THIS_WEEK = mondayOf(new Date())
+const weekStart = ref(THIS_WEEK)
 const weekKey = computed(() => toISO(weekStart.value))
 const weekDates = computed(() => Array.from({ length: 7 }, (_, i) => addDays(weekStart.value, i)))
-const days = computed(() => weekDates.value.map(shortLabel)) // column headings
-
-const weekRangeLabel = computed(() => {
-  const first = weekDates.value[0]
-  const last = weekDates.value[6]
-  return `${first.getDate()} ${MONTHS_SHORT[first.getMonth()]} – ${last.getDate()} ${MONTHS_SHORT[last.getMonth()]} ${last.getFullYear()}`
-})
 
 function shiftWeek(n) { weekStart.value = addDays(weekStart.value, n * 7) }
-function goToExampleWeek() { weekStart.value = EXAMPLE_WEEK_START }
 
 /* ================================================================== */
-/* 4. AVAILABILITY DATA                                                */
+/* 4. WHO IS LOOKING, AND THE CCA'S DATA                               */
 /* ================================================================== */
-const hours = ['08:00', '09:00', '10:00', '11:00', '12:00', '13:00', '14:00', '15:00', '16:00', '17:00', '18:00', '19:00', '20:00', '21:00']
-const TOTAL_MEMBERS = 12
-const CURRENT_USER_ID = 1 // Rachel Tan
+const clubId = computed(() => session.value.activeClubId)
+const myId = computed(() => session.value.memberId)
+const canUse = computed(() => !!(session.value.ready && myId.value && clubId.value))
 
-// Example data: how many of the 12 members are free. Rows = Mon..Sun, columns = the hours above.
-// TODO (apiMode): replace with a Supabase query for the week being shown.
-// For now EVERY week shows this same example data.
-const EXAMPLE_MATRIX = [
-  [0, 8, 0, 4, 8, 0, 4, 0, 0, 0, 0, 8, 4, 0], // Mon
-  [0, 0, 4, 8, 4, 0, 0, 8, 0, 4, 8, 8, 4, 0], // Tue
-  [0, 0, 8, 0, 0, 0, 0, 0, 4, 8, 4, 0, 0, 8], // Wed
-  [4, 8, 0, 4, 0, 8, 4, 0, 8, 12, 12, 4, 8, 0], // Thu
-  [8, 4, 0, 0, 8, 0, 0, 4, 12, 12, 12, 8, 4, 0], // Fri
-  [0, 0, 4, 8, 0, 4, 0, 8, 4, 0, 0, 4, 0, 4], // Sat
-  [4, 0, 8, 4, 0, 0, 8, 0, 4, 8, 8, 4, 0, 8]  // Sun
-]
+const roster = ref([])                         // everyone in the CCA
+const myBaseline = ref({ fileName: '', events: [] })
+const clubBaselines = ref({})                  // { memberId: [busy events] } for everyone else
+const snapshot = ref({ meeting: null, participants: [], availability: [] })
+const isLoading = ref(false)
+const clockOffset = ref(0)                     // server time minus browser time, for the countdown
 
-// Slots where YOU start off as available (already included in the numbers above). Format: "dayIndex_hourIndex"
-const INITIAL_MINE = new Set(['4_8', '4_9', '4_10', '3_9', '3_10'])
+const nameOf = computed(() => Object.fromEntries(roster.value.map((m) => [m.member_id, m.full_name])))
 
-// Slots you have clicked. Key = "weekKey|dayIndex|hourIndex", value = true (available) or false (not available)
-const myClicks = ref({})
-
-// Are YOU available in this slot? (your click if you made one, otherwise the starting value)
-function isMine(wk, d, h) {
-  const clicked = myClicks.value[`${wk}|${d}|${h}`]
-  return clicked === undefined ? INITIAL_MINE.has(`${d}_${h}`) : clicked
-}
-
-// How many members are free in this slot? Start from the example number, then adjust if you changed your own slot.
-function getCount(wk, d, h) {
-  const startedAsMine = INITIAL_MINE.has(`${d}_${h}`)
-  const count = EXAMPLE_MATRIX[d][h] + (isMine(wk, d, h) ? 1 : 0) - (startedAsMine ? 1 : 0)
-  return Math.max(0, Math.min(TOTAL_MEMBERS, count))
-}
-
-// Colour rule: below 50% = red, 50-75% = yellow, above 75% = green
-function heatClass(count) {
-  const percent = count / TOTAL_MEMBERS
-  if (percent < 0.5) return 'avail-red'
-  if (percent <= 0.75) return 'avail-yellow'
-  return 'avail-green'
-}
-
-// Which members are free in this slot? (Example names only, there is no per-person data yet.)
-// We keep the order of the other 11 members, rotate it differently each day, and say the first N are free.
-function freeMemberIds(wk, d, h) {
-  const mine = isMine(wk, d, h)
-  const othersFreeCount = getCount(wk, d, h) - (mine ? 1 : 0)
-
-  const others = allMembers.filter(m => m.id !== CURRENT_USER_ID)
-  const shift = (d * 4) % others.length
-  const rotated = [...others.slice(shift), ...others.slice(0, shift)]
-
-  const freeIds = rotated.slice(0, othersFreeCount).map(m => m.id)
-  if (mine) freeIds.push(CURRENT_USER_ID)
-  return freeIds
-}
-
-// Click on a heatmap cell = toggle your own availability
-function handleCellClick(d, h, dIdx, hIdx) {
-  if (blockedForGuest()) return
-  const nowAvailable = !isMine(weekKey.value, dIdx, hIdx)
-  myClicks.value[`${weekKey.value}|${dIdx}|${hIdx}`] = nowAvailable
-
-  const total = getCount(weekKey.value, dIdx, hIdx)
-  showToast(`When2Meet: Marked Rachel Tan as ${nowAvailable ? 'Available' : 'Unavailable'} on ${d} @ ${h} (${nowAvailable ? '+1' : '-1'} member). Total: ${total}/12 members.`)
-}
-
-/* ================================================================== */
-/* 5. CLASS BLOCKS (same every week)                                   */
-/* ================================================================== */
-function isClassBlock(dIdx, hIdx) {
-  if (dIdx === 0 && hIdx >= 7 && hIdx <= 9) return true   // Mon: CS101
-  if (dIdx === 2 && hIdx >= 7 && hIdx <= 10) return true  // Wed: IS216
-  return false
-}
-// Only drawn on the grid when the toggle button is on
-function isClassSlot(dIdx, hIdx) { return showClassBaseline.value && isClassBlock(dIdx, hIdx) }
-function getClassName(dIdx) { return dIdx === 0 ? 'CS101' : dIdx === 2 ? 'IS216' : '' }
-
-/* ================================================================== */
-/* 6. TELEGRAM REMINDERS                                               */
-/* ================================================================== */
-const unconfirmedMembers = ref([
-  { name: 'Darren Koh', role: 'Performance Lead', handle: '@darrenk' },
-  { name: 'Marcus Tan', role: 'Stage Manager', handle: '@marcustan' },
-  { name: 'Sarah Lim', role: 'Audio Tech', handle: '@sarahlim' }
-])
-
-function pingMemberOnTelegram(member) {
-  if (blockedForGuest()) return
-  showToast(`Telegram reminder dispatched to ${member.name} (${member.handle}): "Please confirm your availability for SMU Arts Festival rehearsals."`)
-}
-
-function pingAllOnTelegram() {
-  if (blockedForGuest()) return
-  showToast('Automated Telegram broadcast dispatched to all 3 unconfirmed ExCo members!')
-}
-
-/* ================================================================== */
-/* 7. AI SCHEDULING ENGINE: find every slot where all 12 are free      */
-/* ================================================================== */
-const refreshCount = ref(0)       // goes up by 1 on every refresh, which makes bestMatches recalculate
-const isRefreshing = ref(false)
-const lastRefreshed = ref(new Date())
-const lastRefreshedLabel = computed(() => `${pad(lastRefreshed.value.getHours())}:${pad(lastRefreshed.value.getMinutes())}`)
-
-function refreshMatches() {
-  if (isRefreshing.value) return
-  isRefreshing.value = true
-  // TODO (apiMode): re-query Supabase here before recalculating
-  setTimeout(() => {
-    refreshCount.value++
-    lastRefreshed.value = new Date()
-    isRefreshing.value = false
-    showToast('Scheduling engine refreshed with the latest ExCo availability.', 3000)
-  }, 700)
-}
-
-// The most members free in any single slot this week (class blocks are skipped).
-// This is 12 if there is a slot where everyone is free, otherwise 11, 10, and so on.
-const bestCount = computed(() => {
-  refreshCount.value // read it so this recalculates when Refresh is pressed
-  let best = 0
-  for (let d = 0; d < 7; d++) {
-    for (let h = 0; h < hours.length; h++) {
-      if (!isClassBlock(d, h)) best = Math.max(best, getCount(weekKey.value, d, h))
-    }
+async function loadClubData() {
+  if (!canUse.value) {
+    roster.value = []
+    myBaseline.value = { fileName: '', events: [] }
+    clubBaselines.value = {}
+    return
   }
-  return best
+  try {
+    const [r, mine, others] = await Promise.all([
+      fetchClubRoster(clubId.value), fetchMyBaseline(), fetchClubBaselines(clubId.value)
+    ])
+    roster.value = r
+    myBaseline.value = mine
+    clubBaselines.value = others
+  } catch (err) {
+    console.error('Could not load the CCA timetables:', err.message)
+  }
+}
+
+let loadSeq = 0
+async function loadMeeting(meetingId = null) {
+  if (!canUse.value) {
+    snapshot.value = { meeting: null, participants: [], availability: [] }
+    return
+  }
+  const seq = ++loadSeq
+  isLoading.value = true
+  try {
+    const data = await fetchMeetingSnapshot({ clubId: clubId.value, weekStart: weekKey.value, meetingId })
+    if (seq !== loadSeq) return // a newer load started meanwhile
+    snapshot.value = {
+      meeting: data.meeting,
+      participants: data.participants || [],
+      availability: data.availability || []
+    }
+    if (data.meeting) {
+      clockOffset.value = new Date(data.meeting.server_now).getTime() - Date.now()
+    }
+  } catch (err) {
+    console.error('Could not load the meeting:', err.message)
+  } finally {
+    if (seq === loadSeq) isLoading.value = false
+  }
+}
+
+const meeting = computed(() => snapshot.value.meeting)
+const isOpenRequest = computed(() => meeting.value && ['COLLECTING', 'EXPIRED'].includes(meeting.value.status))
+const isConfirmed = computed(() => meeting.value?.status === 'CONFIRMED')
+
+/* ================================================================== */
+/* 5. LIVE UPDATES                                                     */
+/* ================================================================== */
+let stopListening = null
+let refreshTimer = null
+
+function scheduleRefresh() {
+  // Several rows change at once (e.g. a vote + "responded"), so wait a moment and reload once
+  clearTimeout(refreshTimer)
+  refreshTimer = setTimeout(() => loadMeeting(), 300)
+}
+
+function listen() {
+  if (stopListening) stopListening()
+  stopListening = null
+  if (canUse.value) {
+    stopListening = listenForMeetings(clubId.value, meeting.value?.id || null, scheduleRefresh)
+  }
+}
+
+watch([clubId, myId, () => session.value.ready], () => { loadClubData(); loadMeeting() }, { immediate: true })
+watch(weekKey, () => loadMeeting())
+watch([clubId, () => meeting.value?.id], listen, { immediate: true })
+
+// Telegram / bell links open /availability?meeting=ID: jump to that meeting's CCA and week
+async function openLinkedMeeting() {
+  const id = Number(route.query.meeting)
+  if (!id || !canUse.value) return
+  try {
+    const data = await fetchMeetingSnapshot({ clubId: clubId.value, weekStart: weekKey.value, meetingId: id })
+    if (!data.meeting) return
+    if (data.meeting.club_id !== clubId.value) setActiveClub(data.meeting.club_id)
+    weekStart.value = parseISO(data.meeting.week_start)
+  } catch (err) {
+    console.error('Could not open the meeting link:', err.message)
+  }
+}
+watch([() => route.query.meeting, canUse], openLinkedMeeting, { immediate: true })
+
+/* ================================================================== */
+/* 6. COUNTDOWN TO THE VOTING DEADLINE                                 */
+/* ================================================================== */
+const now = ref(Date.now())
+let clock = null
+
+const secondsLeft = computed(() => {
+  if (!meeting.value) return 0
+  const ms = new Date(meeting.value.vote_deadline).getTime() - (now.value + clockOffset.value)
+  return Math.max(0, Math.floor(ms / 1000))
+})
+const votingOpen = computed(() => meeting.value?.status === 'COLLECTING' && secondsLeft.value > 0)
+
+const countdownText = computed(() => {
+  const s = secondsLeft.value
+  const days = Math.floor(s / 86400)
+  const hms = `${pad(Math.floor((s % 86400) / 3600))}:${pad(Math.floor((s % 3600) / 60))}:${pad(s % 60)}`
+  return days > 0 ? `${days}d ${hms}` : hms
 })
 
-// Is this slot one of the best ones this week?
-function isBestSlot(d, h) {
-  return !isClassBlock(d, h) && getCount(weekKey.value, d, h) === bestCount.value
+onMounted(() => {
+  clock = setInterval(() => {
+    const wasOpen = votingOpen.value
+    now.value = Date.now()
+    // The deadline just passed: the server closes voting, so reload to show it
+    if (wasOpen && !votingOpen.value) loadMeeting()
+  }, 1000)
+})
+
+onBeforeUnmount(() => {
+  clearInterval(clock)
+  clearTimeout(refreshTimer)
+  clearTimeout(toastTimer)
+  if (stopListening) stopListening()
+})
+
+/* ================================================================== */
+/* 7. THE CALENDAR GRID                                                */
+/* ================================================================== */
+const participantIds = computed(() => snapshot.value.participants.map((p) => p.member_id))
+const amParticipant = computed(() => !!meeting.value?.is_participant)
+
+// "YYYY-MM-DD|hour" -> member ids free then
+const freeBySlot = computed(() => {
+  const map = {}
+  snapshot.value.availability.forEach((a) => {
+    const key = `${a.slot_date}|${a.hour}`
+    if (!map[key]) map[key] = []
+    map[key].push(a.member_id)
+  })
+  return map
+})
+
+// Whose timetables to show: the meeting's participants, or the whole CCA when there is no request
+const baselineMemberIds = computed(() => {
+  const ids = meeting.value && !isConfirmed.value ? participantIds.value : roster.value.map((m) => m.member_id)
+  return ids.filter((id) => id !== myId.value)
+})
+
+function confirmedAt(iso, hour) {
+  const m = meeting.value
+  return !!m && m.status === 'CONFIRMED' && m.confirmed_date === iso &&
+    hour >= m.confirmed_start_hour && hour < m.confirmed_end_hour
 }
 
-// Go through each day and join consecutive best slots into one window (e.g. 16:00 - 19:00)
-const bestMatches = computed(() => {
-  if (bestCount.value === 0) return [] // nobody is free at all
-  const matches = []
+// Everything one cell needs, worked out once per change
+const grid = computed(() => HOURS.map((hour) => weekDates.value.map((day) => {
+  const iso = toISO(day)
+  const free = freeBySlot.value[`${iso}|${hour}`] || []
+  const othersInClass = baselineMemberIds.value.filter((id) => icsEventAt(clubBaselines.value[id] || [], day, hour))
+  return {
+    key: `${iso}|${hour}`,
+    iso,
+    hour,
+    myClass: icsEventAt(myBaseline.value.events, day, hour),
+    othersInClass,
+    free,
+    mine: free.includes(myId.value),
+    confirmed: confirmedAt(iso, hour)
+  }
+})))
 
-  for (let d = 0; d < 7; d++) {
+const totalParticipants = computed(() => snapshot.value.participants.length)
+
+// White when nobody is free; greener as more participants are free
+function heatLevel(cell) {
+  if (!isOpenRequest.value || cell.free.length === 0 || totalParticipants.value === 0) return 0
+  return Math.max(1, Math.ceil((cell.free.length / totalParticipants.value) * 4))
+}
+
+const canVote = computed(() => !props.readOnly && amParticipant.value && votingOpen.value)
+
+function cellTitle(cell) {
+  const parts = [`${shortLabel(parseISO(cell.iso))} ${hourLabel(cell.hour)}`]
+  if (isOpenRequest.value) parts.push(`${cell.free.length}/${totalParticipants.value} free`)
+  if (cell.free.length) parts.push('Free: ' + cell.free.map((id) => nameOf.value[id] || 'Member').join(', '))
+  if (cell.othersInClass.length) parts.push('In class: ' + cell.othersInClass.map((id) => nameOf.value[id] || 'Member').join(', '))
+  return parts.join('\n')
+}
+
+async function toggleCell(cell) {
+  if (!canVote.value) return
+  const nowFree = !cell.mine
+  // Show the change straight away; the realtime update / reload confirms it
+  const before = snapshot.value.availability
+  snapshot.value.availability = nowFree
+    ? [...before, { member_id: myId.value, slot_date: cell.iso, hour: cell.hour }]
+    : before.filter((a) => !(a.member_id === myId.value && a.slot_date === cell.iso && a.hour === cell.hour))
+  try {
+    await setAvailability(meeting.value.id, cell.iso, cell.hour, nowFree)
+  } catch (err) {
+    snapshot.value.availability = before
+    showToast(err.message, 'danger')
+    loadMeeting()
+  }
+}
+
+/* ================================================================== */
+/* 8. TIMETABLE IMPORT (.ics) — saved to Supabase                      */
+/* ================================================================== */
+const icsInput = ref(null)
+const isImporting = ref(false)
+
+function pickIcsFile() {
+  if (blockedForGuest()) return
+  if (!canUse.value) {
+    showToast('Sign in as an ExCo to import your timetable.', 'warning')
+    return
+  }
+  icsInput.value.click()
+}
+
+async function handleIcsFile(event) {
+  const file = event.target.files[0]
+  event.target.value = '' // so picking the same file again still triggers a change
+  if (!file) return
+  isImporting.value = true
+  try {
+    const events = parseIcs(await file.text())
+    if (events.length === 0) {
+      showToast(`No timed events found in ${file.name}. Export your timetable as an .ics calendar file.`, 'warning')
+      return
+    }
+    const saved = await saveMyBaseline(events, file.name)
+    myBaseline.value = { fileName: file.name, events }
+    showToast(`Imported ${saved} events from ${file.name}.`)
+  } catch (err) {
+    showToast(`Could not import ${file.name}: ${err.message}`, 'danger')
+  } finally {
+    isImporting.value = false
+  }
+}
+
+async function removeTimetable() {
+  if (blockedForGuest()) return
+  try {
+    await clearMyBaseline()
+    myBaseline.value = { fileName: '', events: [] }
+    showToast('Timetable removed.')
+  } catch (err) {
+    showToast(err.message, 'danger')
+  }
+}
+
+/* ================================================================== */
+/* 9. SCHEDULE MEETING (create a request)                              */
+/* ================================================================== */
+const showCreateForm = ref(false)
+const isSubmitting = ref(false)
+const form = ref({ title: '', week: '', deadline: '', memberIds: [] })
+
+// This week and the next 7
+const weekOptions = computed(() => Array.from({ length: 8 }, (_, i) => {
+  const monday = addDays(THIS_WEEK, i * 7)
+  return { value: toISO(monday), label: weekLabel(monday) }
+}))
+
+const subcommittees = computed(() =>
+  [...new Set(roster.value.map((m) => m.subcommittee).filter(Boolean))].sort()
+)
+
+function weekEnd(weekIso) { return addDays(parseISO(weekIso), 7) } // next Monday 00:00
+
+// Default deadline: two days from now at 23:59, but before the meeting week ends
+function defaultDeadline(weekIso) {
+  const inTwoDays = addDays(new Date(), 2)
+  inTwoDays.setHours(23, 59, 0, 0)
+  const latest = new Date(weekEnd(weekIso).getTime() - 60 * 60 * 1000)
+  return toLocalInput(inTwoDays < latest ? inTwoDays : latest)
+}
+
+const deadlineMin = computed(() => toLocalInput(new Date()))
+const deadlineMax = computed(() => form.value.week ? toLocalInput(new Date(weekEnd(form.value.week).getTime() - 60 * 1000)) : '')
+
+function openCreateForm() {
+  if (blockedForGuest()) return
+  const week = weekStart.value >= THIS_WEEK ? weekKey.value : toISO(THIS_WEEK)
+  form.value = {
+    title: `${activeClubName.value || 'ExCo'} Meeting`,
+    week,
+    deadline: defaultDeadline(week),
+    memberIds: roster.value.map((m) => m.member_id)
+  }
+  showCreateForm.value = true
+}
+
+watch(() => form.value.week, (week, oldWeek) => {
+  if (oldWeek && week) form.value.deadline = defaultDeadline(week)
+})
+
+function isSelected(id) { return form.value.memberIds.includes(id) }
+
+function toggleMember(id) {
+  if (id === myId.value) return // the organiser always takes part
+  form.value.memberIds = isSelected(id)
+    ? form.value.memberIds.filter((x) => x !== id)
+    : [...form.value.memberIds, id]
+}
+
+function selectEveryone() { form.value.memberIds = roster.value.map((m) => m.member_id) }
+
+function selectSubcommittee(name) {
+  const ids = roster.value.filter((m) => m.subcommittee === name).map((m) => m.member_id)
+  form.value.memberIds = [...new Set([...ids, myId.value])]
+}
+
+const selectedCount = computed(() => new Set([...form.value.memberIds, myId.value]).size)
+
+async function submitCreate() {
+  if (blockedForGuest()) return
+  const deadline = new Date(form.value.deadline)
+  if (!form.value.title.trim()) return showToast('Give the meeting a title.', 'warning')
+  if (Number.isNaN(deadline.getTime()) || deadline <= new Date()) return showToast('The voting deadline must be in the future.', 'warning')
+  if (deadline >= weekEnd(form.value.week)) return showToast('The voting deadline must be before the end of the meeting week.', 'warning')
+  if (selectedCount.value < 2) return showToast('Pick at least one other participant.', 'warning')
+
+  isSubmitting.value = true
+  try {
+    await createMeeting({
+      clubId: clubId.value,
+      title: form.value.title.trim(),
+      weekStart: form.value.week,
+      voteDeadline: deadline.toISOString(),
+      memberIds: form.value.memberIds
+    })
+    showCreateForm.value = false
+    weekStart.value = parseISO(form.value.week)
+    await loadMeeting()
+    showToast(`Meeting request sent to ${selectedCount.value - 1} participant${selectedCount.value === 2 ? '' : 's'} on Telegram.`)
+  } catch (err) {
+    showToast(err.message, 'danger')
+  } finally {
+    isSubmitting.value = false
+  }
+}
+
+/* ================================================================== */
+/* 10. COLLECTING: responses, nudges                                   */
+/* ================================================================== */
+const pending = computed(() => snapshot.value.participants.filter((p) => !p.responded_at))
+const myResponse = computed(() => snapshot.value.participants.find((p) => p.member_id === myId.value))
+const mySlotCount = computed(() => snapshot.value.availability.filter((a) => a.member_id === myId.value).length)
+const isOrganiser = computed(() => !!meeting.value?.is_organiser)
+
+async function answerNoneWork() {
+  if (blockedForGuest()) return
+  try {
+    await submitNoAvailability(meeting.value.id)
+    await loadMeeting()
+    showToast('Response saved: none of these times work for you.')
+  } catch (err) {
+    showToast(err.message, 'danger')
+  }
+}
+
+const nudging = ref(null) // member id being nudged, or 'all'
+
+function recentlyNudged(p) {
+  return p.last_nudged_at && (now.value + clockOffset.value) - new Date(p.last_nudged_at).getTime() < 15 * 60 * 1000
+}
+
+async function nudge(memberId = null) {
+  if (blockedForGuest()) return
+  nudging.value = memberId || 'all'
+  try {
+    const count = await nudgeParticipants(meeting.value.id, memberId)
+    await loadMeeting()
+    showToast(count
+      ? `Telegram reminder sent to ${count === 1 && memberId ? nameOf.value[memberId] || 'them' : `${count} participants`}.`
+      : 'Everyone pending was nudged in the last 15 minutes.', count ? 'success' : 'warning')
+  } catch (err) {
+    showToast(err.message, 'danger')
+  } finally {
+    nudging.value = null
+  }
+}
+
+/* ================================================================== */
+/* 11. CHOOSE THE DAY & CONFIRM                                        */
+/* ================================================================== */
+const showConfirmForm = ref(false)
+const pick = ref({ date: '', start: 16, end: 18, venue: '' })
+
+// Longest runs of hours where the most participants are free
+const bestTimes = computed(() => {
+  if (!isOpenRequest.value) return []
+  let best = 0
+  grid.value.forEach((row) => row.forEach((c) => { best = Math.max(best, c.free.length) }))
+  if (best === 0) return []
+
+  const windows = []
+  weekDates.value.forEach((day, d) => {
     let h = 0
-    while (h < hours.length) {
-      if (isBestSlot(d, h)) {
-        const startHour = h
-        while (h < hours.length && isBestSlot(d, h)) h++
-        matches.push({
-          iso: toISO(weekDates.value[d]),
-          label: longLabel(weekDates.value[d]),
-          start: hours[startHour],
-          end: hourLabel(8 + h), // the hours list starts at 08:00
-          duration: h - startHour
-        })
+    while (h < HOURS.length) {
+      if (grid.value[h][d].free.length === best) {
+        const start = h
+        while (h < HOURS.length && grid.value[h][d].free.length === best) h++
+        windows.push({ date: toISO(day), label: longLabel(day), start: HOURS[start], end: HOURS[h - 1] + 1, free: best })
       } else {
         h++
       }
     }
-  }
-  return matches
-})
-
-/* ================================================================== */
-/* 8. PICK ANY DATE + SEE WHO IS UNAVAILABLE                           */
-/* ================================================================== */
-const selectedSlot = ref({ date: '2026-10-16', start: '16:00', end: '19:00' })
-
-const startOptions = hours
-// "To" can only be later than "From"
-const endOptions = computed(() =>
-  [...hours, '22:00'].filter(t => hourNum(t) > hourNum(selectedSlot.value.start))
-)
-
-function isMatchSelected(m) {
-  return selectedSlot.value.date === m.iso && selectedSlot.value.start === m.start && selectedSlot.value.end === m.end
-}
-function selectMatch(m) {
-  selectedSlot.value = { date: m.iso, start: m.start, end: m.end }
-}
-
-// If "From" moves past "To", push "To" forward
-watch(() => selectedSlot.value.start, () => {
-  if (!endOptions.value.includes(selectedSlot.value.end)) {
-    selectedSlot.value.end = endOptions.value[0]
-  }
-})
-
-// When you pick a new date, show that date's week in the grid
-watch(() => selectedSlot.value.date, (newDate) => {
-  const dt = parseISO(newDate)
-  if (dt) weekStart.value = mondayOf(dt)
-})
-
-// Works out who is free / unavailable for the selected date and time window
-const slotReport = computed(() => {
-  const dt = parseISO(selectedSlot.value.date)
-  if (!dt) return null
-
-  const wk = toISO(mondayOf(dt))
-  const d = dayIndex(dt)
-  const firstHour = hourNum(selectedSlot.value.start)
-  const lastHour = hourNum(selectedSlot.value.end) // not included
-
-  const busyHoursByMember = {} // memberId -> list of hours they are unavailable
-  let classClash = ''
-
-  for (let hour = firstHour; hour < lastHour; hour++) {
-    const h = hour - 8 // position in the hours list
-    if (isClassBlock(d, h)) classClash = getClassName(d)
-
-    const freeIds = freeMemberIds(wk, d, h)
-    allMembers.forEach(m => {
-      if (!freeIds.includes(m.id)) {
-        if (!busyHoursByMember[m.id]) busyHoursByMember[m.id] = []
-        busyHoursByMember[m.id].push(hourLabel(hour))
-      }
-    })
-  }
-
-  const unavailable = allMembers
-    .filter(m => busyHoursByMember[m.id])
-    .map(m => ({ id: m.id, name: m.name, role: m.role, busyAt: busyHoursByMember[m.id].join(', ') }))
-
-  return {
-    dateLabel: longLabel(dt),
-    unavailable,
-    freeCount: allMembers.length - unavailable.length,
-    classClash
-  }
-})
-
-/* ================================================================== */
-/* 9. MEETING FORM + MODAL                                             */
-/* ================================================================== */
-const showMeetingModal = ref(false)
-const meetingConfirmed = ref(false)
-const meetingForm = ref({
-  date: 'Friday, 16 October 2026',
-  time: '16:00 – 19:00',
-  title: 'SMU Eurhythmix — Arts Festival Run-of-Show Alignment',
-  venue: 'SMU Connexion Meeting Room 3',
-  agenda: '1. Stage positioning & lighting cues alignment (Act 1 & 2)\n2. OneMap transit buffer and performer holding area protocol\n3. Address late performer check-in protocols and props handover',
-  attendees: 12
-})
-
-const allMembers = [
-  { id: 1, name: 'Rachel Tan', handle: '@racheltan', role: 'President', subcommittee: 'Executive' },
-  { id: 2, name: 'Angel Low', handle: '@angellow', role: 'Vice President & Lead Dancer', subcommittee: 'Dancers' },
-  { id: 3, name: 'Rachel Chua', handle: '@rachelc', role: 'Choreography Lead', subcommittee: 'Dancers' },
-  { id: 4, name: 'Darren Koh', handle: '@darrenk', role: 'Logistics & Props Head', subcommittee: 'Logistics' },
-  { id: 5, name: 'Marcus Lim', handle: '@marcuslim', role: 'Sound & Tech Specialist', subcommittee: 'Technical' },
-  { id: 6, name: 'Sarah Lim', handle: '@sarahlim', role: 'Rehearsal Coordinator', subcommittee: 'Dancers' },
-  { id: 7, name: 'Kevin Wong', handle: '@kevinw', role: 'Marketing & Ticketing Head', subcommittee: 'Marketing' },
-  { id: 8, name: 'Chloe Goh', handle: '@chloeg', role: 'Wardrobe & Costume Lead', subcommittee: 'Logistics' },
-  { id: 9, name: 'Benjamin Teo', handle: '@benteo', role: 'Stage Operations Lead', subcommittee: 'Technical' },
-  { id: 10, name: 'Nadia Syafira', handle: '@nadias', role: 'Welfare Director', subcommittee: 'Executive' },
-  { id: 11, name: 'Isaac Tan', handle: '@isaact', role: 'Finance Director', subcommittee: 'Executive' },
-  { id: 12, name: 'Valerie Chee', handle: '@valeriec', role: 'Front-of-House Manager', subcommittee: 'Marketing' },
-]
-
-// Who receives the Telegram broadcast (starts with everyone)
-const selectedRecipientIds = ref([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12])
-const recipientSearch = ref('')
-
-const filteredRecipients = computed(() => {
-  const query = recipientSearch.value.trim().toLowerCase()
-  if (!query) return allMembers
-  return allMembers.filter(m =>
-    m.name.toLowerCase().includes(query) ||
-    m.handle.toLowerCase().includes(query) ||
-    m.role.toLowerCase().includes(query) ||
-    m.subcommittee.toLowerCase().includes(query)
-  )
-})
-
-function selectAllRecipients() {
-  selectedRecipientIds.value = allMembers.map(m => m.id)
-}
-function selectDancersOnly() {
-  selectedRecipientIds.value = allMembers.filter(m => m.subcommittee === 'Dancers').map(m => m.id)
-}
-function selectLogisticsOnly() {
-  selectedRecipientIds.value = allMembers.filter(m => m.subcommittee === 'Logistics' || m.subcommittee === 'Technical').map(m => m.id)
-}
-function selectExecutiveOnly() {
-  selectedRecipientIds.value = allMembers.filter(m => m.subcommittee === 'Executive').map(m => m.id)
-}
-function toggleRecipient(id) {
-  if (selectedRecipientIds.value.includes(id)) {
-    if (selectedRecipientIds.value.length === 1) return // keep at least 1
-    selectedRecipientIds.value = selectedRecipientIds.value.filter(i => i !== id)
-  } else {
-    selectedRecipientIds.value.push(id)
-  }
-}
-
-// Open the modal, filled in with the date and time chosen in the "Meeting Slot" card
-function openMeetingModal() {
-  if (blockedForGuest()) return
-  const dt = parseISO(selectedSlot.value.date)
-  if (dt) meetingForm.value.date = longLabel(dt)
-  meetingForm.value.time = `${selectedSlot.value.start} – ${selectedSlot.value.end}`
-  showMeetingModal.value = true
-}
-
-function confirmAndBroadcastMeeting() {
-  meetingConfirmed.value = true
-  showMeetingModal.value = false
-
-  exportToCalendar(meetingForm.value) // downloads the .ics file
-
-  const count = selectedRecipientIds.value.length
-  const sampleHandles = allMembers
-    .filter(m => selectedRecipientIds.value.includes(m.id))
-    .slice(0, 3)
-    .map(m => m.handle)
-    .join(', ')
-  const handlesText = count > 3 ? `${sampleHandles} +${count - 3} more` : sampleHandles
-
-  showToast(`Meeting scheduled! Telegram broadcast dispatched to ${count} members (${handlesText}) with agenda and calendar invite.`, 6000)
-
-  // Tell App.vue so it can add this to the notifications bell
-  emit('meeting-scheduled', {
-    title: meetingForm.value.title,
-    day: meetingForm.value.date,
-    time: meetingForm.value.time,
-    venue: meetingForm.value.venue,
-    agenda: meetingForm.value.agenda,
-    recipientsCount: count
   })
+  return windows.sort((a, b) => (b.end - b.start) - (a.end - a.start)).slice(0, 5)
+})
+
+const confirmBlockedReason = computed(() => {
+  if (!meeting.value || meeting.value.can_confirm) return ''
+  const n = pending.value.length
+  return `Waiting for ${n} response${n === 1 ? '' : 's'} or the voting deadline.`
+})
+
+function openConfirmForm() {
+  if (blockedForGuest()) return
+  const top = bestTimes.value[0]
+  pick.value = top
+    ? { date: top.date, start: top.start, end: top.end, venue: '' }
+    : { date: toISO(weekDates.value[0]), start: 16, end: 18, venue: '' }
+  showConfirmForm.value = true
 }
 
-/* ================================================================== */
-/* 10. CALENDAR (.ics) EXPORT                                          */
-/* ================================================================== */
-// "2026-10-16" + "16:00" -> "20261016T080000Z" (Singapore is 8 hours ahead of UTC)
-function toUtcStamp(iso, time) {
-  const [y, m, d] = iso.split('-').map(Number)
-  const utc = new Date(Date.UTC(y, m - 1, d, hourNum(time) - 8))
-  return utc.toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '')
-}
+function usePick(w) { pick.value = { ...pick.value, date: w.date, start: w.start, end: w.end } }
+function isPicked(w) { return pick.value.date === w.date && pick.value.start === w.start && pick.value.end === w.end }
 
-// Uses the date and time currently chosen in the "Meeting Slot" card
-function exportToCalendar(details = null) {
-  const slot = selectedSlot.value
-  if (!parseISO(slot.date)) {
-    showToast('Pick a valid date before exporting to calendar.', 3000)
-    return
+const endHourOptions = computed(() => [...HOURS.map((h) => h + 1)].filter((h) => h > pick.value.start))
+watch(() => pick.value.start, () => {
+  if (pick.value.end <= pick.value.start) pick.value.end = pick.value.start + 1
+})
+
+const pickFreeCount = computed(() => {
+  // People free for the whole chosen window
+  const ids = participantIds.value.filter((id) => {
+    for (let h = pick.value.start; h < pick.value.end; h++) {
+      if (!(freeBySlot.value[`${pick.value.date}|${h}`] || []).includes(id)) return false
+    }
+    return true
+  })
+  return ids.length
+})
+
+async function submitConfirm() {
+  if (blockedForGuest()) return
+  isSubmitting.value = true
+  try {
+    await confirmMeeting(meeting.value.id, {
+      date: pick.value.date, startHour: pick.value.start, endHour: pick.value.end, venue: pick.value.venue
+    })
+    showConfirmForm.value = false
+    await loadMeeting()
+    showToast('Meeting confirmed. Participants are being notified on Telegram.')
+  } catch (err) {
+    showToast(err.message, 'danger')
+    loadMeeting()
+  } finally {
+    isSubmitting.value = false
   }
+}
 
-  const title = details?.title || 'SMU Eurhythmix ExCo Weekly Logistics Sync'
-  const location = details?.venue || 'SMU Connexion Meeting Room 3'
-  const description = details?.agenda || 'Weekly logistics review for SMU Arts Festival Opening Night run-of-show. Exported via Pulse Availability Finder.'
+async function cancelRequest() {
+  if (blockedForGuest()) return
+  if (!window.confirm(`Cancel "${meeting.value.title}"? Participants will be told on Telegram.`)) return
+  try {
+    await cancelMeeting(meeting.value.id)
+    showConfirmForm.value = false
+    await loadMeeting()
+    showToast('Meeting request cancelled.')
+  } catch (err) {
+    showToast(err.message, 'danger')
+  }
+}
 
-  const icsContent = [
+/* ================================================================== */
+/* 12. EXPORT THE CONFIRMED MEETING (.ics)                             */
+/* ================================================================== */
+function toUtcStamp(iso, hour) {
+  const [y, m, d] = iso.split('-').map(Number)
+  return new Date(Date.UTC(y, m - 1, d, hour - 8)).toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '')
+}
+
+function exportConfirmed() {
+  const m = meeting.value
+  if (!m || m.status !== 'CONFIRMED') return
+  const ics = [
     'BEGIN:VCALENDAR',
     'VERSION:2.0',
     'PRODID:-//SMU Pulse//Meeting Scheduler//EN',
-    'CALSCALE:GREGORIAN',
-    'METHOD:PUBLISH',
     'BEGIN:VEVENT',
-    `UID:pulse-meeting-${slot.date}-${slot.start.replace(':', '')}@smu.edu.sg`,
+    `UID:pulse-meeting-${m.id}@smu.edu.sg`,
     `DTSTAMP:${new Date().toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '')}`,
-    `DTSTART:${toUtcStamp(slot.date, slot.start)}`,
-    `DTEND:${toUtcStamp(slot.date, slot.end)}`,
-    `SUMMARY:${title}`,
-    `DESCRIPTION:${description.replace(/\n/g, '\\n')}`,
-    `LOCATION:${location}`,
-    'STATUS:CONFIRMED',
+    `DTSTART:${toUtcStamp(m.confirmed_date, m.confirmed_start_hour)}`,
+    `DTEND:${toUtcStamp(m.confirmed_date, m.confirmed_end_hour)}`,
+    `SUMMARY:${m.title}`,
+    m.venue ? `LOCATION:${m.venue}` : '',
     'END:VEVENT',
     'END:VCALENDAR'
-  ].join('\r\n')
+  ].filter(Boolean).join('\r\n')
 
-  // Make a temporary download link and click it
-  const blob = new Blob([icsContent], { type: 'text/calendar;charset=utf-8' })
   const link = document.createElement('a')
-  link.href = window.URL.createObjectURL(blob)
-  link.setAttribute('download', 'smu-eurhythmix-meeting.ics')
+  link.href = URL.createObjectURL(new Blob([ics], { type: 'text/calendar;charset=utf-8' }))
+  link.download = `pulse-meeting-${m.confirmed_date}.ics`
   document.body.appendChild(link)
   link.click()
   document.body.removeChild(link)
-
-  if (!details) {
-    showToast('Downloaded smu-eurhythmix-meeting.ics! Open file to add to Google, Outlook, or Apple Calendar.', 4500)
-  }
 }
 </script>
 
 <template>
   <div class="py-2">
 
-    <!-- Top Bar with Navigation & Actions -->
+    <!-- Header -->
     <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-4">
       <div>
-        <div class="d-flex align-items-center gap-2 mb-1">
-          <span class="badge bg-danger rounded-pill px-2 py-1" style="font-size: 0.65rem; font-weight: 800;">FEATURE 2</span>
-          <span v-if="apiMode" class="pulse-api-tag">Supabase DB Availability Query</span>
-          <span v-if="apiMode" class="pulse-api-tag">iCalendar RFC 5545 API</span>
-        </div>
-        <h3 class="fw-bold mb-1">Weekly ExCo Availability Finder</h3>
-        <p class="text-muted small mb-0">
-          Aggregates schedules across 12 ExCos with timetable pre-loading, eliminating fragmented Telegram polls.
-        </p>
+        <h3 class="fw-bold mb-1">Weekly Meeting Scheduler</h3>
+        <p class="text-muted small mb-0">{{ activeClubName || 'Your CCA' }}</p>
       </div>
 
-      <div class="d-flex flex-wrap gap-2">
-        <!-- Toggle Recurring Class Blocks -->
-        <button
-          type="button"
-          class="btn btn-sm btn-pulse-outline d-flex align-items-center gap-2"
-          @click="showClassBaseline = !showClassBaseline"
-        >
-          <span>{{ showClassBaseline ? '✓' : '○' }}</span>
-          <span>Show Class Baselines (IS216, CS101)</span>
+      <div class="d-flex flex-wrap align-items-center gap-2">
+        <span v-if="myBaseline.fileName" class="small text-muted text-truncate" style="max-width: 14rem;" :title="myBaseline.fileName">
+          Timetable: {{ myBaseline.fileName }}
+        </span>
+        <input ref="icsInput" type="file" accept=".ics,text/calendar" class="d-none" @change="handleIcsFile" />
+        <button type="button" class="btn btn-sm btn-pulse-outline" :disabled="isImporting" @click="pickIcsFile">
+          <span v-if="isImporting" class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>
+          {{ myBaseline.fileName ? 'Replace Timetable (.ics)' : 'Import Timetable (.ics)' }}
         </button>
-
-        <!-- 1-Click iCal Export -->
-        <button
-          type="button"
-          class="btn btn-sm btn-pulse-primary d-flex align-items-center gap-2"
-          @click="exportToCalendar()"
-        >
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
-            <line x1="16" y1="2" x2="16" y2="6"></line>
-            <line x1="8" y1="2" x2="8" y2="6"></line>
-            <line x1="3" y1="10" x2="21" y2="10"></line>
-          </svg>
-          <span>Sync to Calendar (.ics)</span>
+        <button v-if="myBaseline.fileName" type="button" class="btn btn-sm btn-outline-secondary" @click="removeTimetable">
+          Remove
         </button>
       </div>
     </div>
 
-    <!-- Alert Banner -->
-    <div v-if="toastMsg" class="alert alert-success border-0 shadow-sm mb-4 d-flex align-items-center gap-2" role="alert">
-      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path>
-        <path d="M13.73 21a2 2 0 0 1-3.46 0"></path>
-      </svg>
-      <span>{{ toastMsg }}</span>
+    <div v-if="toastMsg" class="alert border-0 shadow-sm mb-4 small" :class="`alert-${toastType}`" role="alert">
+      {{ toastMsg }}
     </div>
 
-    <!-- Colour legend -->
-    <div class="card border-0 shadow-sm p-3 mb-4" style="border-radius: 1rem;">
-      <div class="d-flex flex-wrap align-items-center gap-3 small fw-bold">
-        <span class="d-flex align-items-center gap-1">
-          <span class="legend-swatch" style="background: #f6dcdc;"></span>
-          Below 50% free
-        </span>
-        <span class="d-flex align-items-center gap-1">
-          <span class="legend-swatch" style="background: #fbf1cc;"></span>
-          50–75% free
-        </span>
-        <span class="d-flex align-items-center gap-1">
-          <span class="legend-swatch" style="background: #d9efe0;"></span>
-          Above 75% free
-        </span>
-        <span class="d-flex align-items-center gap-1">
-          <span class="legend-swatch" style="background: #16a34a; outline: 2px solid #6b7280; outline-offset: -2px;"></span>
-          Brighter = you're available
-        </span>
-      </div>
-    </div>
-
-    <!-- Main Content: Grid + Sidebar -->
     <div class="row g-4">
 
-      <!-- Left: Heatmap Grid -->
+      <!-- Left: the week -->
       <div class="col-lg-8">
         <div class="pulse-card p-3 shadow-sm">
 
-          <!-- Week navigation -->
-          <div class="d-flex flex-wrap align-items-center gap-2 mb-3 px-1">
-            <button type="button" class="btn btn-sm btn-outline-secondary px-2 py-0" aria-label="Previous week" @click="shiftWeek(-1)">‹</button>
-            <div class="fw-bold small text-center" style="min-width: 170px;">{{ weekRangeLabel }}</div>
-            <button type="button" class="btn btn-sm btn-outline-secondary px-2 py-0" aria-label="Next week" @click="shiftWeek(1)">›</button>
-            <button
-              v-if="weekStart.getTime() !== EXAMPLE_WEEK_START.getTime()"
-              type="button"
-              class="btn btn-sm btn-link text-decoration-none py-0"
-              style="font-size: 0.7rem;"
-              @click="goToExampleWeek"
-            >
-              Back to example week
-            </button>
-          </div>
+          <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3 px-1">
+            <div class="d-flex align-items-center gap-2">
+              <button type="button" class="btn btn-sm btn-outline-secondary px-2 py-0" aria-label="Previous week" @click="shiftWeek(-1)">‹</button>
+              <div class="fw-bold small text-center" style="min-width: 170px;">{{ weekLabel(weekStart) }}</div>
+              <button type="button" class="btn btn-sm btn-outline-secondary px-2 py-0" aria-label="Next week" @click="shiftWeek(1)">›</button>
+              <button
+                v-if="weekStart.getTime() !== THIS_WEEK.getTime()"
+                type="button"
+                class="btn btn-sm btn-link text-decoration-none py-0"
+                style="font-size: 0.7rem;"
+                @click="weekStart = THIS_WEEK"
+              >
+                This week
+              </button>
+              <span v-if="isLoading" class="spinner-border spinner-border-sm text-muted" role="status" aria-label="Loading"></span>
+            </div>
 
-          <!-- When2Meet helper -->
-          <div class="d-flex align-items-center gap-2 mb-2 px-1">
-            <span class="badge bg-primary bg-opacity-10 text-primary border border-primary-subtle fw-bold" style="font-size: 0.675rem;">
-              When2Meet Mode Active
-            </span>
-            <span class="text-muted small" style="font-size: 0.725rem;">
-              Click any slot to add/remove your personal availability. Total available ExCos update live.
-            </span>
+            <!-- Legend -->
+            <div class="d-flex flex-wrap align-items-center gap-3 legend">
+              <span><span class="legend-swatch swatch-class"></span>Class</span>
+              <template v-if="isOpenRequest">
+                <span><span class="legend-swatch swatch-empty"></span>No one free</span>
+                <span><span class="legend-swatch heat-2"></span><span class="legend-swatch heat-4"></span>More free</span>
+                <span><span class="legend-swatch swatch-mine"></span>You</span>
+              </template>
+              <span v-if="isConfirmed"><span class="legend-swatch swatch-meeting"></span>Meeting</span>
+            </div>
           </div>
 
           <div class="table-responsive">
-            <table class="table table-borderless align-middle mb-0 text-center" style="min-width: 650px;">
+            <table class="table table-borderless align-middle mb-0 text-center scheduler-grid">
               <thead>
                 <tr class="border-bottom">
-                  <th style="width: 70px; font-size: 0.75rem;" class="text-muted text-uppercase">Time</th>
-                  <th v-for="d in days" :key="d" style="font-size: 0.775rem;" class="fw-bold">
-                    {{ d }}
+                  <th class="text-muted text-uppercase time-col">Time</th>
+                  <th v-for="day in weekDates" :key="toISO(day)" class="fw-bold day-col">
+                    {{ WEEKDAYS_SHORT[day.getDay()] }}<br /><span class="fw-normal text-muted">{{ day.getDate() }} {{ MONTHS_SHORT[day.getMonth()] }}</span>
                   </th>
                 </tr>
               </thead>
               <tbody>
-                <tr v-for="(h, hIdx) in hours" :key="h">
-                  <td class="text-muted small fw-semibold py-1" style="font-size: 0.7rem;">{{ h }}</td>
+                <tr v-for="(row, hIdx) in grid" :key="HOURS[hIdx]">
+                  <td class="text-muted fw-semibold time-col py-1">{{ hourLabel(HOURS[hIdx]) }}</td>
 
-                  <td v-for="(d, dIdx) in days" :key="d" class="p-1" style="height: 3.25rem;">
-
-                    <!-- Class block -->
-                    <div
-                      v-if="isClassSlot(dIdx, hIdx)"
-                      class="pulse-class-pill rounded-2"
-                      :title="`Recurring Academic Timetable: ${getClassName(dIdx)}`"
-                      @click="showToast(`${getClassName(dIdx)} Class Timetable: Fixed commitment for ${d} @ ${h}.`)"
-                    >
-                      <span class="pulse-class-name">{{ getClassName(dIdx) }}</span>
-                      <span class="pulse-class-sub">SMU Core</span>
+                  <td v-for="cell in row" :key="cell.key" class="p-1">
+                    <!-- Confirmed meeting -->
+                    <div v-if="cell.confirmed" class="slot slot-meeting rounded-2" :title="meeting.title">
+                      <span class="slot-name">{{ meeting.title }}</span>
                     </div>
 
-                    <!-- Normal heatmap cell: colour depends on how many are free -->
+                    <!-- Your own class (from your timetable) -->
+                    <div v-else-if="cell.myClass" class="pulse-class-pill rounded-2" :title="cellTitle(cell)">
+                      <span class="pulse-class-name">{{ cell.myClass }}</span>
+                      <!-- Others in class at the same time would otherwise be hidden under your own class -->
+                      <span v-if="cell.othersInClass.length" class="slot-class slot-class-extra">+{{ cell.othersInClass.length }} in class</span>
+                    </div>
+
+                    <!-- Everyone else: white unless someone marked it free -->
                     <div
                       v-else
-                      class="pulse-heat-cell rounded-2 position-relative"
-                      :class="[
-                        heatClass(getCount(weekKey, dIdx, hIdx)),
-                        isMine(weekKey, dIdx, hIdx) ? 'pulse-heat-my-active' : ''
-                      ]"
-                      :title="`${d} @ ${h}: ${getCount(weekKey, dIdx, hIdx)}/12 available. Click to toggle your personal availability (When2Meet style)`"
-                      @click="handleCellClick(d, h, dIdx, hIdx)"
+                      class="slot rounded-2 position-relative"
+                      :class="[`heat-${heatLevel(cell)}`, { 'slot-mine': cell.mine, 'slot-clickable': canVote }]"
+                      :title="cellTitle(cell)"
+                      :role="canVote ? 'button' : null"
+                      :aria-pressed="canVote ? cell.mine : null"
+                      @click="toggleCell(cell)"
                     >
-                      <span v-if="getCount(weekKey, dIdx, hIdx) > 0" class="pulse-heat-count">
-                        {{ getCount(weekKey, dIdx, hIdx) }}/12
-                      </span>
-                      <span v-else class="pulse-heat-empty">-</span>
-
-                      <span
-                        v-if="isMine(weekKey, dIdx, hIdx)"
-                        class="position-absolute top-0 end-0 translate-middle-y me-1 badge rounded-pill bg-primary shadow-sm"
-                        style="font-size: 0.5rem; padding: 0.15rem 0.35rem;"
-                      >
-                        You
-                      </span>
+                      <span v-if="isOpenRequest && cell.free.length" class="slot-count">{{ cell.free.length }}/{{ totalParticipants }}</span>
+                      <span v-if="cell.othersInClass.length" class="slot-class">Class{{ cell.othersInClass.length > 1 ? ` ×${cell.othersInClass.length}` : '' }}</span>
+                      <span v-if="cell.mine" class="slot-you">You</span>
                     </div>
-
                   </td>
                 </tr>
               </tbody>
             </table>
           </div>
-
         </div>
       </div>
 
-      <!-- Right: Sidebar -->
+      <!-- Right: sidebar -->
       <div class="col-lg-4">
 
-        <!-- Card 1: AI Scheduling Engine (all best matches) -->
-        <div class="pulse-card p-4 shadow-sm mb-4 border-start border-success border-4">
-          <div class="d-flex justify-content-between align-items-start gap-2 mb-1">
-            <div>
-              <div class="text-uppercase fw-bold text-success small" style="font-size: 0.7rem; letter-spacing: 0.08em;">
-                AI Scheduling Engine
-              </div>
-              <h5 class="fw-bold mb-0">
-                {{ bestCount === 0 ? 'No Match This Week' : bestMatches.length === 1 ? 'Best Match Found' : 'Best Matches Found' }}
-              </h5>
-            </div>
-            <button
-              type="button"
-              class="btn btn-sm btn-outline-success d-flex align-items-center gap-1"
-              :disabled="isRefreshing"
-              @click="refreshMatches"
-            >
-              <span v-if="isRefreshing" class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
-              <span style="font-size: 0.75rem;">{{ isRefreshing ? 'Refreshing' : 'Refresh' }}</span>
+        <!-- Not signed in as an ExCo -->
+        <div v-if="!canUse" class="pulse-card p-4 shadow-sm">
+          <h6 class="fw-bold mb-1">Schedule Meeting</h6>
+          <p class="text-muted small mb-0">Sign in as a CCA ExCo to schedule meetings.</p>
+        </div>
+
+        <!-- ============ No meeting this week ============ -->
+        <div v-else-if="!meeting" class="pulse-card p-4 shadow-sm">
+          <template v-if="!showCreateForm">
+            <h6 class="fw-bold mb-3">Schedule Meeting</h6>
+            <button type="button" class="btn btn-pulse-primary w-100 py-2 fw-bold" @click="openCreateForm">
+              Schedule Meeting
             </button>
-          </div>
-          <div class="text-muted mb-3" style="font-size: 0.7rem;">
-            Week of {{ weekRangeLabel }} • Updated {{ lastRefreshedLabel }}
-          </div>
-
-          <!-- Shown when nobody has all 12 free, so the best is a lower number -->
-          <p v-if="bestCount > 0 && bestCount < TOTAL_MEMBERS" class="small fw-semibold text-warning-emphasis mb-2">
-            No slot has all 12 free. Showing the slots where the most people ({{ bestCount }}/12) can make it.
-          </p>
-
-          <!-- One card per best window. Scrolls if there are many. -->
-          <div v-if="bestMatches.length" class="match-list d-flex flex-column gap-2 mb-2">
-            <div
-              v-for="m in bestMatches"
-              :key="m.iso + m.start"
-              class="match-card"
-              :class="{ selected: isMatchSelected(m) }"
-              role="button"
-              @click="selectMatch(m)"
-            >
-              <div class="fw-bold small">{{ m.label }}</div>
-              <div class="small">{{ m.start }} – {{ m.end }} ({{ m.duration }} hour{{ m.duration > 1 ? 's' : '' }})</div>
-              <div class="small fw-semibold mt-1" :class="bestCount === TOTAL_MEMBERS ? 'text-success' : 'text-warning-emphasis'">
-                {{ bestCount === TOTAL_MEMBERS ? '✓ All 12 ExCo members available' : `${bestCount}/12 ExCo members available` }}
-              </div>
-            </div>
-          </div>
-          <p v-else class="text-muted small mb-2">
-            Nobody is free on any slot this week. Try another week with the arrows above the grid.
-          </p>
-
-          <p class="text-muted small mb-0">
-            Click a match to select it, or pick your own date below. Class blocks are excluded. Scroll the list if there are more matches.
-          </p>
-        </div>
-
-        <!-- Card 2: Pick any date and see who is unavailable -->
-        <div class="pulse-card p-4 shadow-sm mb-4">
-          <div class="text-uppercase fw-bold text-muted small" style="font-size: 0.65rem; letter-spacing: 0.08em;">Meeting Slot</div>
-          <h6 class="fw-bold mb-3">Pick Any Date &amp; Time</h6>
-
-          <div class="row g-2 mb-3">
-            <div class="col-12">
-              <label class="form-label small fw-bold text-muted mb-1">Date</label>
-              <input v-model="selectedSlot.date" type="date" class="form-control form-control-sm fw-bold" />
-            </div>
-            <div class="col-6">
-              <label class="form-label small fw-bold text-muted mb-1">From</label>
-              <select v-model="selectedSlot.start" class="form-select form-select-sm">
-                <option v-for="t in startOptions" :key="t" :value="t">{{ t }}</option>
-              </select>
-            </div>
-            <div class="col-6">
-              <label class="form-label small fw-bold text-muted mb-1">To</label>
-              <select v-model="selectedSlot.end" class="form-select form-select-sm">
-                <option v-for="t in endOptions" :key="t" :value="t">{{ t }}</option>
-              </select>
-            </div>
-          </div>
-
-          <template v-if="slotReport">
-            <!-- Everyone is free -->
-            <div
-              v-if="slotReport.unavailable.length === 0"
-              class="p-3 rounded-3 bg-success bg-opacity-10 text-success border border-success-subtle mb-3"
-            >
-              <div class="fw-bold small">{{ slotReport.dateLabel }}</div>
-              <div class="small">{{ selectedSlot.start }} – {{ selectedSlot.end }}</div>
-              <div class="small fw-semibold mt-1">✓ All 12 ExCo members available</div>
-            </div>
-
-            <!-- Some people are unavailable: list them -->
-            <div v-else class="p-3 rounded-3 bg-danger bg-opacity-10 border border-danger-subtle mb-3">
-              <div class="fw-bold small text-danger-emphasis">{{ slotReport.dateLabel }}</div>
-              <div class="small text-danger-emphasis">{{ selectedSlot.start }} – {{ selectedSlot.end }}</div>
-              <div class="small fw-semibold mt-1 text-danger-emphasis">
-                {{ slotReport.freeCount }}/12 free for the whole window • {{ slotReport.unavailable.length }} unavailable
-              </div>
-              <div class="d-flex flex-column gap-1 mt-2">
-                <div
-                  v-for="u in slotReport.unavailable"
-                  :key="u.id"
-                  class="d-flex justify-content-between align-items-center gap-2 bg-light rounded-2 border px-2 py-1"
-                >
-                  <div>
-                    <strong class="small d-block">{{ u.name }}</strong>
-                    <span class="text-muted" style="font-size: 0.675rem;">{{ u.role }}</span>
-                  </div>
-                  <span class="text-muted text-end" style="font-size: 0.675rem;">Unavailable: {{ u.busyAt }}</span>
-                </div>
-              </div>
-            </div>
-
-            <div
-              v-if="slotReport.classClash"
-              class="small text-warning-emphasis bg-warning bg-opacity-10 border border-warning-subtle rounded-3 p-2 mb-3"
-            >
-              ⚠ This window overlaps the recurring {{ slotReport.classClash }} class block.
-            </div>
           </template>
-          <p v-else class="text-muted small mb-3">Select a date to see who is free.</p>
 
-          <!-- Shown after a meeting has been confirmed -->
-          <div v-if="meetingConfirmed" class="p-3 rounded-3 bg-success bg-opacity-10 border border-success mb-3 text-success small">
-            <div class="fw-bold">Meeting Confirmed & Broadcasted!</div>
-            <div class="mt-1 text-muted" style="font-size: 0.725rem;">
-              {{ meetingForm.title }} • {{ meetingForm.date }} ({{ meetingForm.time }}) at {{ meetingForm.venue }}.
+          <form v-else @submit.prevent="submitCreate">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+              <h6 class="fw-bold mb-0">Schedule Meeting</h6>
+              <button type="button" class="btn-close btn-sm" aria-label="Close" @click="showCreateForm = false"></button>
             </div>
-          </div>
 
-          <button
-            type="button"
-            class="btn btn-pulse-primary w-100 py-2 fw-bold mb-2"
-            :disabled="!slotReport"
-            @click="openMeetingModal()"
-          >
-            {{ meetingConfirmed ? 'Edit / Reschedule Meeting' : 'Create Meeting & Broadcast Agenda' }}
-          </button>
+            <label class="form-label small fw-bold text-muted mb-1" for="meetingTitle">Title</label>
+            <input id="meetingTitle" v-model="form.title" type="text" maxlength="120" class="form-control form-control-sm mb-3" />
 
-          <button
-            type="button"
-            class="btn btn-outline-secondary w-100 btn-sm py-1 fw-semibold"
-            :disabled="!slotReport"
-            @click="exportToCalendar(meetingForm)"
-          >
-            Export to Calendar (.ics)
-          </button>
+            <label class="form-label small fw-bold text-muted mb-1" for="meetingWeek">Meeting week</label>
+            <select id="meetingWeek" v-model="form.week" class="form-select form-select-sm mb-3">
+              <option v-for="w in weekOptions" :key="w.value" :value="w.value">{{ w.label }}</option>
+            </select>
+
+            <div class="d-flex justify-content-between align-items-center mb-1">
+              <span class="form-label small fw-bold text-muted mb-0">Participants</span>
+              <span class="small text-muted">{{ selectedCount }} selected</span>
+            </div>
+            <div class="d-flex flex-wrap gap-1 mb-2">
+              <button type="button" class="pulse-chip pulse-chip-sm border-0" @click="selectEveryone">Everyone</button>
+              <button
+                v-for="s in subcommittees"
+                :key="s"
+                type="button"
+                class="pulse-chip pulse-chip-sm border-0"
+                @click="selectSubcommittee(s)"
+              >
+                {{ s }}
+              </button>
+            </div>
+            <div class="member-list border rounded-3 mb-3">
+              <label
+                v-for="m in roster"
+                :key="m.member_id"
+                class="d-flex align-items-center gap-2 px-2 py-1 member-row"
+                :class="{ 'text-muted': m.is_me }"
+              >
+                <input
+                  type="checkbox"
+                  class="form-check-input mt-0"
+                  :checked="m.is_me || isSelected(m.member_id)"
+                  :disabled="m.is_me"
+                  @change="toggleMember(m.member_id)"
+                />
+                <span class="small flex-grow-1">
+                  <strong>{{ m.full_name }}</strong>{{ m.is_me ? ' (you)' : '' }}
+                  <span class="d-block text-muted member-meta">{{ m.role_name }}{{ m.subcommittee ? ` · ${m.subcommittee}` : '' }}</span>
+                </span>
+              </label>
+            </div>
+
+            <label class="form-label small fw-bold text-muted mb-1" for="meetingDeadline">Voting deadline</label>
+            <input
+              id="meetingDeadline"
+              v-model="form.deadline"
+              type="datetime-local"
+              class="form-control form-control-sm mb-3"
+              :min="deadlineMin"
+              :max="deadlineMax"
+              required
+            />
+
+            <button type="submit" class="btn btn-pulse-primary w-100 py-2 fw-bold" :disabled="isSubmitting">
+              <span v-if="isSubmitting" class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>
+              Send Meeting Request
+            </button>
+          </form>
         </div>
 
-        <!-- Card 3: Telegram reminders for unconfirmed members -->
-        <div class="pulse-card p-4 shadow-sm">
-          <div class="d-flex justify-content-between align-items-center mb-2">
-            <div>
-              <div class="text-uppercase fw-bold text-muted small" style="font-size: 0.65rem;">Prof K Recommendation</div>
-              <h6 class="fw-bold mb-0">Unconfirmed Timetables</h6>
+        <!-- ============ Collecting availability / expired ============ -->
+        <template v-else-if="isOpenRequest">
+          <div class="pulse-card p-4 shadow-sm mb-4">
+            <div class="d-flex justify-content-between align-items-start gap-2 mb-1">
+              <h6 class="fw-bold mb-0">{{ meeting.title }}</h6>
+              <span class="pulse-badge" :class="votingOpen ? 'pulse-badge-pending' : 'pulse-badge-rejected'">
+                {{ votingOpen ? 'Collecting' : meeting.status === 'EXPIRED' ? 'Expired' : 'Voting closed' }}
+              </span>
             </div>
-            <span class="badge bg-warning bg-opacity-25 text-dark border border-warning" style="font-size: 0.65rem;">
-              {{ unconfirmedMembers.length }} Pending
-            </span>
-          </div>
-          <p class="text-muted small mb-3">
-            These members haven't updated their weekly availability. Nudge them directly on Telegram with one tap.
-          </p>
+            <div class="text-muted small mb-3">Organised by {{ meeting.organiser_name }}</div>
 
-          <div class="d-flex flex-column gap-2 mb-3">
-            <div
-              v-for="m in unconfirmedMembers"
-              :key="m.name"
-              class="d-flex justify-content-between align-items-center p-2 rounded-3 bg-light border"
-            >
-              <div>
-                <strong class="small d-block">{{ m.name }}</strong>
-                <span class="text-muted" style="font-size: 0.7rem;">{{ m.role }} ({{ m.handle }})</span>
+            <div class="deadline-box rounded-3 p-3 mb-3" :class="{ urgent: votingOpen && secondsLeft < 3600 }">
+              <div class="small fw-bold text-muted text-uppercase">{{ votingOpen ? 'Voting closes in' : 'Voting closed' }}</div>
+              <div v-if="votingOpen" class="countdown">{{ countdownText }}</div>
+              <div class="small text-muted">{{ deadlineLabel(meeting.vote_deadline) }}</div>
+            </div>
+
+            <template v-if="amParticipant">
+              <div class="d-flex justify-content-between align-items-center small mb-2">
+                <span class="text-muted">Your response</span>
+                <strong :class="myResponse?.responded_at ? 'text-success' : 'text-warning-emphasis'">
+                  {{ myResponse?.responded_at ? (mySlotCount ? `${mySlotCount} hour${mySlotCount === 1 ? '' : 's'} free` : 'None work') : 'Not yet' }}
+                </strong>
               </div>
               <button
+                v-if="votingOpen && !readOnly && (!myResponse?.responded_at || mySlotCount > 0)"
                 type="button"
-                class="btn btn-sm btn-outline-primary py-1 px-2 fw-bold"
-                style="font-size: 0.7rem;"
-                @click="pingMemberOnTelegram(m)"
+                class="btn btn-sm btn-outline-secondary w-100"
+                @click="answerNoneWork"
               >
-                Ping via Telegram
+                None of these times work
+              </button>
+            </template>
+          </div>
+
+          <!-- Unconfirmed participants -->
+          <div class="pulse-card p-4 shadow-sm mb-4">
+            <div class="d-flex justify-content-between align-items-center mb-2">
+              <h6 class="fw-bold mb-0">Unconfirmed</h6>
+              <span class="pulse-badge" :class="pending.length ? 'pulse-badge-pending' : 'pulse-badge-confirmed'">
+                {{ pending.length }} of {{ totalParticipants }} pending
+              </span>
+            </div>
+
+            <p v-if="!pending.length" class="small text-success fw-semibold mb-0">Everyone has responded.</p>
+
+            <div v-else class="d-flex flex-column gap-2">
+              <div
+                v-for="p in pending"
+                :key="p.member_id"
+                class="d-flex justify-content-between align-items-center gap-2 p-2 rounded-3 bg-light border"
+              >
+                <div class="small">
+                  <strong class="d-block">{{ p.full_name }}{{ p.member_id === myId ? ' (you)' : '' }}</strong>
+                  <span v-if="!p.telegram_linked" class="text-muted member-meta">Telegram not linked</span>
+                  <span v-else-if="recentlyNudged(p)" class="text-muted member-meta">Nudged recently</span>
+                </div>
+                <button
+                  v-if="isOrganiser && votingOpen && p.member_id !== myId"
+                  type="button"
+                  class="btn btn-sm btn-pulse-outline py-1 px-2 fw-bold nudge-btn"
+                  :disabled="nudging !== null || recentlyNudged(p)"
+                  @click="nudge(p.member_id)"
+                >
+                  Nudge via Telegram
+                </button>
+              </div>
+
+              <button
+                v-if="isOrganiser && votingOpen"
+                type="button"
+                class="btn btn-outline-secondary btn-sm w-100 py-2 fw-bold mt-1"
+                :disabled="nudging !== null"
+                @click="nudge(null)"
+              >
+                Nudge Pending Participants
               </button>
             </div>
           </div>
 
-          <button
-            type="button"
-            class="btn btn-outline-secondary w-100 btn-sm py-2 fw-bold"
-            @click="pingAllOnTelegram"
-          >
-            Broadcast Reminder to All Pending (Telegram Bot)
+          <!-- Choose the day & confirm -->
+          <div class="pulse-card p-4 shadow-sm">
+            <template v-if="isOrganiser">
+              <template v-if="!showConfirmForm">
+                <button
+                  type="button"
+                  class="btn btn-pulse-primary w-100 py-2 fw-bold"
+                  :disabled="!meeting.can_confirm || readOnly"
+                  @click="openConfirmForm"
+                >
+                  Choose Meeting Day &amp; Confirm
+                </button>
+                <p v-if="confirmBlockedReason" class="small text-muted text-center mt-2 mb-0">{{ confirmBlockedReason }}</p>
+              </template>
+
+              <form v-else @submit.prevent="submitConfirm">
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                  <h6 class="fw-bold mb-0">Choose Meeting Day</h6>
+                  <button type="button" class="btn-close btn-sm" aria-label="Close" @click="showConfirmForm = false"></button>
+                </div>
+
+                <div v-if="bestTimes.length" class="mb-3">
+                  <div class="small fw-bold text-muted mb-1">Best times</div>
+                  <div class="d-flex flex-column gap-2">
+                    <button
+                      v-for="w in bestTimes"
+                      :key="w.date + w.start"
+                      type="button"
+                      class="match-card text-start"
+                      :class="{ selected: isPicked(w) }"
+                      @click="usePick(w)"
+                    >
+                      <div class="fw-bold small">{{ w.label }}</div>
+                      <div class="small">{{ hourLabel(w.start) }} – {{ hourLabel(w.end) }} · {{ w.free }}/{{ totalParticipants }} free</div>
+                    </button>
+                  </div>
+                </div>
+                <p v-else class="small text-muted">Nobody marked any free hours. Pick a time below.</p>
+
+                <div class="row g-2 mb-2">
+                  <div class="col-12">
+                    <label class="form-label small fw-bold text-muted mb-1" for="pickDate">Day</label>
+                    <select id="pickDate" v-model="pick.date" class="form-select form-select-sm">
+                      <option v-for="day in weekDates" :key="toISO(day)" :value="toISO(day)">{{ longLabel(day) }}</option>
+                    </select>
+                  </div>
+                  <div class="col-6">
+                    <label class="form-label small fw-bold text-muted mb-1" for="pickStart">From</label>
+                    <select id="pickStart" v-model.number="pick.start" class="form-select form-select-sm">
+                      <option v-for="h in HOURS" :key="h" :value="h">{{ hourLabel(h) }}</option>
+                    </select>
+                  </div>
+                  <div class="col-6">
+                    <label class="form-label small fw-bold text-muted mb-1" for="pickEnd">To</label>
+                    <select id="pickEnd" v-model.number="pick.end" class="form-select form-select-sm">
+                      <option v-for="h in endHourOptions" :key="h" :value="h">{{ hourLabel(h) }}</option>
+                    </select>
+                  </div>
+                  <div class="col-12">
+                    <label class="form-label small fw-bold text-muted mb-1" for="pickVenue">Venue (optional)</label>
+                    <input id="pickVenue" v-model="pick.venue" type="text" maxlength="120" class="form-control form-control-sm" placeholder="e.g. SMU Connexion Meeting Room 3" />
+                  </div>
+                </div>
+                <p class="small mb-3" :class="pickFreeCount === totalParticipants ? 'text-success' : 'text-warning-emphasis'">
+                  {{ pickFreeCount }}/{{ totalParticipants }} free for the whole window
+                </p>
+
+                <button type="submit" class="btn btn-pulse-primary w-100 py-2 fw-bold" :disabled="isSubmitting">
+                  <span v-if="isSubmitting" class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>
+                  Confirm &amp; Notify Participants
+                </button>
+              </form>
+
+              <button type="button" class="btn btn-link btn-sm text-danger w-100 mt-2 text-decoration-none" @click="cancelRequest">
+                Cancel meeting request
+              </button>
+            </template>
+
+            <p v-else class="small text-muted mb-0">
+              {{ meeting.organiser_name }} will confirm the meeting time once everyone has responded.
+            </p>
+          </div>
+        </template>
+
+        <!-- ============ Confirmed ============ -->
+        <div v-else-if="isConfirmed" class="pulse-card p-4 shadow-sm">
+          <div class="d-flex justify-content-between align-items-start gap-2 mb-2">
+            <h6 class="fw-bold mb-0">{{ meeting.title }}</h6>
+            <span class="pulse-badge pulse-badge-confirmed">Confirmed</span>
+          </div>
+          <div class="confirmed-box rounded-3 p-3 mb-3">
+            <div class="fw-bold">{{ longLabel(parseISO(meeting.confirmed_date)) }}</div>
+            <div>{{ hourLabel(meeting.confirmed_start_hour) }} – {{ hourLabel(meeting.confirmed_end_hour) }}</div>
+            <div v-if="meeting.venue" class="small text-muted mt-1">{{ meeting.venue }}</div>
+          </div>
+          <div class="small text-muted mb-3">
+            Organised by {{ meeting.organiser_name }} · {{ totalParticipants }} participants
+          </div>
+          <button type="button" class="btn btn-sm btn-pulse-outline w-100" @click="exportConfirmed">
+            Add to Calendar (.ics)
           </button>
         </div>
 
       </div>
-
     </div>
-
-    <!-- Create Meeting & Broadcast Agenda Modal -->
-    <div v-if="showMeetingModal" class="modal-backdrop fade show" style="background: rgba(15, 23, 42, 0.65); backdrop-filter: blur(4px); z-index: 1055;"></div>
-    <div v-if="showMeetingModal" class="modal fade show d-block" tabindex="-1" style="z-index: 1060;">
-      <div class="modal-dialog modal-dialog-centered modal-lg">
-        <div class="modal-content border-0 shadow-lg rounded-4 overflow-hidden" style="background-color: var(--pulse-card-bg);">
-          <div class="modal-header border-bottom px-4 py-3 bg-light">
-            <div class="d-flex align-items-center gap-2">
-              <div class="pulse-logo-badge" style="width: 1.85rem; height: 1.85rem; font-size: 0.9rem;">
-                <span>P</span>
-              </div>
-              <div>
-                <h5 class="modal-title fw-bold mb-0">Schedule ExCo Meeting & Broadcast Agenda</h5>
-                <small class="text-muted" style="font-size: 0.75rem;">Dispatches automated invitation and agenda to all 12 ExCo members on Telegram.</small>
-              </div>
-            </div>
-            <button type="button" class="btn-close" @click="showMeetingModal = false"></button>
-          </div>
-
-          <div class="modal-body p-4">
-            <div class="row g-3">
-              <!-- Selected Time Window -->
-              <div class="col-md-6">
-                <label class="form-label small fw-bold text-muted">Confirmed Date & Time Window</label>
-                <div class="p-2 rounded-3 bg-light border fw-bold small text-dark d-flex align-items-center gap-2">
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
-                    <line x1="16" y1="2" x2="16" y2="6"></line>
-                    <line x1="8" y1="2" x2="8" y2="6"></line>
-                    <line x1="3" y1="10" x2="21" y2="10"></line>
-                  </svg>
-                  <span>{{ meetingForm.date }} • {{ meetingForm.time }}</span>
-                </div>
-              </div>
-
-              <!-- Venue Selection -->
-              <div class="col-md-6">
-                <label class="form-label small fw-bold text-muted">Venue / Facility Location</label>
-                <input
-                  v-model="meetingForm.venue"
-                  type="text"
-                  class="form-control form-control-sm fw-bold"
-                  placeholder="e.g. SMU Connexion Meeting Room 3"
-                />
-              </div>
-
-              <!-- Meeting Subject -->
-              <div class="col-12">
-                <label class="form-label small fw-bold text-muted">Meeting Title / Subject</label>
-                <input v-model="meetingForm.title" type="text" class="form-control form-control-sm fw-bold" placeholder="e.g. SMU Arts Festival Opening Night - Run of Show Alignment" />
-              </div>
-
-              <!-- Meeting Agenda -->
-              <div class="col-12">
-                <label class="form-label small fw-bold text-muted d-flex justify-content-between align-items-center">
-                  <span>Meeting Agenda & Objectives</span>
-                  <span class="badge bg-purple text-white" style="font-size: 0.6rem; background-color: var(--pulse-purple-transit);">Auto-Broadcasts to Telegram</span>
-                </label>
-                <textarea v-model="meetingForm.agenda" class="form-control" rows="4" style="font-size: 0.8rem; font-family: inherit;" placeholder="List key agenda items..."></textarea>
-              </div>
-
-              <!-- Target Recipients with Multi-Select & Search -->
-              <div class="col-12">
-                <div class="p-3 rounded-3 bg-light border">
-                  <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
-                    <div>
-                      <div class="small fw-bold text-dark">Telegram Broadcast Target ({{ selectedRecipientIds.length }} Selected)</div>
-                      <div class="text-muted small" style="font-size: 0.725rem;">Select individual members or filter by committee.</div>
-                    </div>
-                    <div class="d-flex flex-wrap gap-1">
-                      <button type="button" class="btn btn-sm btn-outline-secondary py-0 px-2 rounded-pill" style="font-size: 0.65rem;" @click="selectAllRecipients">
-                        All (12)
-                      </button>
-                      <button type="button" class="btn btn-sm btn-outline-secondary py-0 px-2 rounded-pill" style="font-size: 0.65rem;" @click="selectDancersOnly">
-                        Dancers (3)
-                      </button>
-                      <button type="button" class="btn btn-sm btn-outline-secondary py-0 px-2 rounded-pill" style="font-size: 0.65rem;" @click="selectLogisticsOnly">
-                        Logistics/Tech (4)
-                      </button>
-                      <button type="button" class="btn btn-sm btn-outline-secondary py-0 px-2 rounded-pill" style="font-size: 0.65rem;" @click="selectExecutiveOnly">
-                        Executive (3)
-                      </button>
-                    </div>
-                  </div>
-
-                  <div class="mb-2">
-                    <input
-                      v-model="recipientSearch"
-                      type="text"
-                      class="form-control form-control-sm"
-                      placeholder="Search member by name, handle (e.g. @angellow), or role..."
-                      style="font-size: 0.75rem;"
-                    />
-                  </div>
-
-                  <div class="d-flex flex-wrap gap-1" style="max-height: 120px; overflow-y: auto;">
-                    <button
-                      v-for="member in filteredRecipients"
-                      :key="member.id"
-                      type="button"
-                      class="btn btn-sm py-1 px-2 rounded-pill border d-inline-flex align-items-center gap-1 transition-all"
-                      :class="selectedRecipientIds.includes(member.id) ? 'btn-danger text-white' : 'btn-white text-muted'"
-                      style="font-size: 0.685rem;"
-                      @click="toggleRecipient(member.id)"
-                    >
-                      <span>{{ selectedRecipientIds.includes(member.id) ? '✓' : '+' }}</span>
-                      <span>{{ member.name }}</span>
-                      <span class="opacity-75" style="font-size: 0.6rem;">({{ member.handle }})</span>
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div class="modal-footer border-top px-4 py-3 bg-light d-flex justify-content-between">
-            <button type="button" class="btn btn-outline-secondary btn-sm rounded-pill px-3" @click="showMeetingModal = false">
-              Cancel
-            </button>
-            <button type="button" class="btn btn-pulse-primary btn-sm rounded-pill px-4 fw-bold" @click="confirmAndBroadcastMeeting">
-              Confirm Meeting & Dispatch Telegram Broadcast
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
-
   </div>
 </template>
 
 <style scoped>
-/* Heatmap colours: muted by default, vivid once you mark yourself available */
-.pulse-heat-cell {
-  cursor: pointer;
-  transition: background-color 0.2s ease, color 0.2s ease;
+.scheduler-grid { min-width: 640px; table-layout: fixed; }
+.pulse-class-pill { overflow: hidden; padding: 0 0.25rem; }
+.slot-class.slot-class-extra { background: #e2e8f0; margin-top: 1px; white-space: nowrap; }
+/* Make room for the "+N in class" tag: one line of class name */
+.pulse-class-pill:has(.slot-class-extra) .pulse-class-name { -webkit-line-clamp: 1; line-clamp: 1; }
+.pulse-class-name { overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical; }
+.scheduler-grid .time-col { width: 64px; font-size: 0.7rem; }
+.scheduler-grid .day-col { font-size: 0.75rem; line-height: 1.2; }
+.scheduler-grid td { height: 3.1rem; }
+
+/* One hour slot. White by default; greener as more participants are free. */
+.slot {
+  height: 2.75rem;
+  width: 100%;
+  border: 1px solid var(--pulse-border, #e2e8f0);
+  background: #fff;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1px;
+  transition: background-color 0.15s ease, border-color 0.15s ease;
 }
-.pulse-heat-cell.avail-red    { background: #f6dcdc; color: #a35555; }
-.pulse-heat-cell.avail-yellow { background: #fbf1cc; color: #8a6a14; }
-.pulse-heat-cell.avail-green  { background: #d9efe0; color: #3d7a52; }
+.slot-clickable { cursor: pointer; }
+.slot-clickable:hover { border-color: #16a34a; }
 
-.pulse-heat-cell.avail-red.pulse-heat-my-active    { background: #ef4444; color: #fff; }
-.pulse-heat-cell.avail-yellow.pulse-heat-my-active { background: #facc15; color: #3b2a00; }
-.pulse-heat-cell.avail-green.pulse-heat-my-active  { background: #16a34a; color: #fff; }
+.heat-1 { background: #f0fdf4; }
+.heat-2 { background: #bbf7d0; }
+.heat-3 { background: #4ade80; }
+.heat-4 { background: #16a34a; color: #fff; }
 
-/* Grey border on your own slots */
-.pulse-heat-cell.pulse-heat-my-active {
-  outline: 2px solid #6b7280;
+.slot-mine {
+  outline: 2px solid var(--pulse-primary, #e11d48);
   outline-offset: -2px;
-  border-color: #6b7280;
-  box-shadow: none;
+}
+.slot-count { font-size: 0.72rem; font-weight: 800; color: inherit; }
+.slot-class {
+  font-size: 0.58rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  color: #64748b;
+  background: #f1f5f9;
+  border-radius: 999px;
+  padding: 0 0.35rem;
+}
+.slot-you {
+  position: absolute;
+  top: 2px;
+  right: 3px;
+  font-size: 0.5rem;
+  font-weight: 800;
+  color: var(--pulse-primary, #e11d48);
+}
+.heat-4 .slot-you { color: #fff; }
+
+.slot-meeting {
+  background: var(--pulse-primary, #e11d48);
+  border-color: var(--pulse-primary, #e11d48);
+  color: #fff;
+  padding: 0 0.25rem;
+}
+.slot-name {
+  font-size: 0.65rem;
+  font-weight: 800;
+  line-height: 1.1;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
 }
 
-.pulse-heat-count,
-.pulse-heat-empty {
-  color: inherit;
-}
-
+.legend { font-size: 0.7rem; font-weight: 700; color: #475569; }
+.legend > span { display: inline-flex; align-items: center; gap: 0.25rem; }
 .legend-swatch {
   display: inline-block;
   width: 12px;
   height: 12px;
-  border-radius: 2px;
+  border-radius: 3px;
+  border: 1px solid #e2e8f0;
 }
+.swatch-class { background: #f1f5f9; border-color: #cbd5e1; }
+.swatch-empty { background: #fff; }
+.swatch-mine { background: #fff; outline: 2px solid var(--pulse-primary, #e11d48); outline-offset: -2px; }
+.swatch-meeting { background: var(--pulse-primary, #e11d48); border-color: var(--pulse-primary, #e11d48); }
 
-/* Best-match list: scrolls inside its own box so the card doesn't get too long */
-.match-list {
-  max-height: 240px;
-  overflow-y: auto;
-  padding-right: 0.25rem;
+.member-list { max-height: 220px; overflow-y: auto; }
+.member-row { cursor: pointer; border-bottom: 1px solid #f1f5f9; }
+.member-row:last-child { border-bottom: 0; }
+.member-meta { font-size: 0.68rem; }
+.nudge-btn { font-size: 0.7rem; white-space: nowrap; }
+
+.deadline-box { background: var(--pulse-amber-bg, #fffbeb); border: 1px solid var(--pulse-amber-border, #fde68a); }
+.deadline-box.urgent { background: var(--pulse-primary-light, #fff1f2); border-color: var(--pulse-primary-border, #fecdd3); }
+.countdown {
+  font-size: 1.6rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.2;
 }
+.deadline-box.urgent .countdown { color: var(--pulse-primary, #e11d48); }
 
-/* Best-match cards */
+.confirmed-box { background: var(--pulse-green-bg, #f0fdf4); border: 1px solid var(--pulse-green-border, #bbf7d0); }
+
 .match-card {
   border: 1px solid #e2e8f0;
   border-radius: 0.75rem;
-  padding: 0.65rem 0.75rem;
-  cursor: pointer;
+  padding: 0.6rem 0.75rem;
   background: var(--pulse-card-bg, #fff);
   transition: border-color 0.15s ease, background-color 0.15s ease;
 }
-.match-card:hover {
-  border-color: #86efac;
-}
-.match-card.selected {
-  border-color: #16a34a;
-  background: rgba(22, 163, 74, 0.08);
-}
+.match-card:hover { border-color: #86efac; }
+.match-card.selected { border-color: #16a34a; background: rgba(22, 163, 74, 0.08); }
 </style>
