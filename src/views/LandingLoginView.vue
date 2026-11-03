@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, onMounted, onUnmounted } from 'vue';
+import { ref, computed, watch, onMounted, onUnmounted } from 'vue';
 import { DEMO_PERSONAS, DEMO_PASSWORD } from '../services/authProfiles';
 import { signIn, isSmuEmail as checkSmuEmail, findPersonaByEmail } from '../services/authService';
 import PasswordVisibilityToggle from '../components/PasswordVisibilityToggle.vue';
@@ -115,14 +115,14 @@ const matchedPersona = computed(() => findPersonaByEmail(email.value))
 // Dynamic Typewriter Animated Placeholder for Login Email
 const sampleQueries = Object.values(DEMO_PERSONAS).map((p) => p.email)
 
-const currentPlaceholder = ref(sampleQueries[0])
+const currentPlaceholder = ref('')
 let placeholderTimer = null
 let queryIndex = 0
 let charIndex = 0
 let isDeleting = false
 
 function tickPlaceholder() {
-  if (email.value.length > 0 || isSwitchingAccount.value) return
+  if (email.value.length > 0) return
 
   const target = sampleQueries[queryIndex]
   if (!isDeleting) {
@@ -147,6 +147,15 @@ function tickPlaceholder() {
   }
 }
 
+watch(email, (newVal) => {
+  if (!newVal) {
+    if (placeholderTimer) clearTimeout(placeholderTimer)
+    charIndex = 0
+    isDeleting = false
+    placeholderTimer = setTimeout(tickPlaceholder, 250)
+  }
+})
+
 onMounted(() => {
   // Read remembered account from session cache (do not set email.value directly to prevent Safari keychain highlight lock)
   try {
@@ -163,7 +172,7 @@ onMounted(() => {
     console.error('Session cache load error', err)
   }
 
-  placeholderTimer = setTimeout(tickPlaceholder, 1000)
+  placeholderTimer = setTimeout(tickPlaceholder, 500)
 })
 
 onUnmounted(() => {
@@ -177,6 +186,10 @@ function switchAccount() {
   password.value = ''
   rememberedPassword.value = ''
   errorMsg.value = ''
+  if (placeholderTimer) clearTimeout(placeholderTimer)
+  charIndex = 0
+  isDeleting = false
+  placeholderTimer = setTimeout(tickPlaceholder, 200)
 }
 
 function forgetRememberedAccount() {
@@ -232,33 +245,33 @@ async function completeLogin(loginEmail, loginPassword) {
   try {
     const authPromise = signIn(loginEmail, loginPassword)
     
-    // Trigger fun loading screen (Sims 4 style: 3 rounds over ~3.5s)
+    // Trigger fun loading screen (Sims 4 style: 3 rounds over snappy 3.0s)
     isAuthenticating.value = true
     authProgress.value = 10
 
-    // Smooth progress bar update over 3.5s
+    // Smooth progress bar update over 3.0s
     progressInterval = setInterval(() => {
-      if (authProgress.value < 94) {
+      if (authProgress.value < 95) {
         authProgress.value += 1
       }
-    }, 38)
+    }, 31)
 
-    // Round 2 rotation at ~1.15s
+    // Round 2 rotation at 1.0s
     roundTimer1 = setTimeout(() => {
       currentRound.value = 2
       loadingStageText.value = 'Syncing Studio Schedules & OneMap Transit SLA...'
-    }, 1150)
+    }, 1000)
 
-    // Round 3 rotation at ~2.30s
+    // Round 3 rotation at 2.0s
     roundTimer2 = setTimeout(() => {
       currentRound.value = 3
       loadingStageText.value = 'Preparing Real-Time CCA Operations Dashboard...'
-    }, 2300)
+    }, 2000)
 
-    // Wait for auth promise + snappy ~3.5s reading time (3 rounds of facts)
+    // Wait for auth promise + snappy 3.0s reading time (3 rounds of facts)
     const [persona] = await Promise.all([
       authPromise,
-      new Promise(resolve => setTimeout(resolve, 3500))
+      new Promise(resolve => setTimeout(resolve, 3000))
     ])
 
     clearInterval(progressInterval)
@@ -342,7 +355,7 @@ async function handleManualLogin() {
       <div class="row align-items-center g-4 g-xl-5">
         
         <!-- Left Column: Unified Value Proposition & Interactive Live Operations Telemetry -->
-        <div class="col-12 col-lg-6 col-xl-6">
+        <div class="col-12 col-lg-6 col-xl-6 order-2 order-lg-1">
           <div class="pe-lg-4">
             
             <!-- Brand lockup: Pulse wordmark | SMU campus portal -->
@@ -378,8 +391,8 @@ async function handleManualLogin() {
           </div>
         </div>
 
-        <!-- Right Column: Liquid Glass Sign-In Portal -->
-        <div class="col-12 col-lg-6 col-xl-6 d-flex justify-content-center justify-content-lg-end">
+        <!-- Right Column: Liquid Glass Sign-In Portal (Order-1 on Mobile so no scrolling required) -->
+        <div class="col-12 col-lg-6 col-xl-6 order-1 order-lg-2 d-flex justify-content-center justify-content-lg-end mb-4 mb-lg-0">
           <div class="pulse-card liquid-glass-card p-4 p-xl-4 shadow-lg border w-100 position-relative reveal" style="--d: 2; max-width: 560px;">
             
             <!-- Sleek Enterprise Header (Clean Dimensions, No Overlapping Pulsing Dots) -->
@@ -789,7 +802,23 @@ async function handleManualLogin() {
                       </button>
                     </div>
 
-                    <!-- Persona 3: Chloe Ang -->
+                    <!-- Persona 3: Marcus Lim -->
+                    <div class="col-12 col-sm-6">
+                      <button 
+                        type="button" 
+                        class="btn btn-sm btn-outline-secondary w-100 text-start p-2 rounded-3 d-flex justify-content-between align-items-center bg-white persona-tile h-100"
+                        :disabled="isSubmitting"
+                        @click="handleQuickLogin('marcus')"
+                      >
+                        <div class="me-1 text-truncate">
+                          <strong class="d-block text-dark text-truncate" style="font-size: 0.76rem;">Marcus Lim</strong>
+                          <small class="text-muted d-block text-truncate" style="font-size: 0.66rem;">Eurhythmix Marketing</small>
+                        </div>
+                        <span class="badge bg-danger bg-opacity-10 text-danger border flex-shrink-0" style="font-size: 0.65rem;">Mktg</span>
+                      </button>
+                    </div>
+
+                    <!-- Persona 4: Chloe Ang -->
                     <div class="col-12 col-sm-6">
                       <button 
                         type="button" 
@@ -805,7 +834,7 @@ async function handleManualLogin() {
                       </button>
                     </div>
 
-                    <!-- Persona 4: Dev Administrator -->
+                    <!-- Persona 5: Dev Administrator -->
                     <div class="col-12 col-sm-6">
                       <button 
                         type="button" 

@@ -14,12 +14,16 @@ begin;
 -- Everyone starts as EXCO_MEMBER (no permissions) and picks their real role when signing up.
 create temp table pulse_new_excos (full_name text, email text, club text) on commit drop;
 insert into pulse_new_excos values
-  ('Jerica Koh',  'kohjiaxuan.jerica@gmail.com',           'Eurhythmix'),
-  ('Giselle Goh', 'giselle.goh.2025@computing.smu.edu.sg', 'Funk Movement'),
-  ('Alicia Goh',  'aliciagohjb@gmail.com',                 'Chamber Choir'),
-  ('Chloe Ang',   'chloe.a.2025@computing.smu.edu.sg',     'Guitarissimo'),
-  ('Angel Low',   'angellow365@gmail.com',                 'Caderas Latinas'),
-  ('Sa Thang',    'sa.thang.2023@scis.smu.edu.sg',         'StageIT');
+  ('Jerica Koh',        'kohjiaxuan.jerica@gmail.com',           'Eurhythmix'),
+  ('Giselle Goh',       'giselle.goh.2025@computing.smu.edu.sg', 'Funk Movement'),
+  ('Alicia Goh',        'aliciagohjb@gmail.com',                 'Chamber Choir'),
+  ('Chloe Ang',         'chloe.a.2025@computing.smu.edu.sg',     'Guitarissimo'),
+  ('Angel Low',         'angellow365@gmail.com',                 'Caderas Latinas'),
+  ('Sa Thang',          'sa.thang.2023@scis.smu.edu.sg',         'StageIT'),
+  ('Marcus Lim',        'marcus.lim.2024@socsc.smu.edu.sg',      'Eurhythmix'),
+  ('Dev Administrator', 'dev.admin@smu.edu.sg',                  'Eurhythmix'),
+  ('Rachel Tan',        'rachel.tan.2024@scis.smu.edu.sg',       'Eurhythmix'),
+  ('Darren Koh',        'darren.koh.2024@business.smu.edu.sg',   'Samba Masala');
 
 -- Stop with a clear message if a CCA is misspelt or the EXCO_MEMBER role is missing
 do $$
