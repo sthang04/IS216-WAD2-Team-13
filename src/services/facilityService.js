@@ -30,6 +30,9 @@ export const STATUSES = {
   CONFIRMED: 'Officially Confirmed Booking'
 }
  
+// Calendar filter value (not a status): bookings our CCA is not part of
+export const OTHER_CCA_FILTER = 'Other CCA Bookings'
+ 
 // Order used when sorting: released slots first, confirmed last
 const STATUS_ORDER = {
   'Proposed Peer Transfer': 0,
@@ -345,11 +348,11 @@ export function bookingActions(booking, options) {
   // Released by another CCA
   if (booking.status === STATUSES.PROPOSED) {
     if (booking.offered_club_id === options.clubId) {
-      actions.push({ type: 'claim', label: 'Accept offer', variant: 'primary' })
+      actions.push({ type: 'claim', label: 'Accept offer', variant: 'claim' })
       return actions
     }
     if (!booking.offered_club_id) {
-      actions.push({ type: 'claim', label: 'Claim', variant: 'primary' })
+      actions.push({ type: 'claim', label: 'Claim', variant: 'claim' })
       return actions
     }
   }

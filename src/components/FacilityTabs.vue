@@ -17,6 +17,11 @@ const showClubTabs = computed(() => {
   return !session.value.isOslAdmin || session.value.memberships.length > 0
 })
 
+// OSL staff without a CCA get these two tabs in the main header instead
+const showTabs = computed(() => {
+  return !(session.value.isOslAdmin && session.value.memberships.length === 0)
+})
+
 // Highlight the Waitlist tab whenever our CCA is holding an offer
 const hasOffer = computed(() => {
   return notificationStore.value.offers.length > 0
@@ -24,7 +29,7 @@ const hasOffer = computed(() => {
 </script>
 
 <template>
-  <nav class="pulse-tabs mb-4" aria-label="Facility calendar sections">
+  <nav v-if="showTabs" class="pulse-tabs mb-4" aria-label="Facility calendar sections">
     <RouterLink to="/facilities" class="pulse-tab" exact-active-class="active">
       <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="17" rx="3"/><path d="M3 9h18M8 2v4M16 2v4"/></svg>
       All Facilities

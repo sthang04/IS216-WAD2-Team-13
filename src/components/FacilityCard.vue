@@ -7,6 +7,7 @@ defineProps({
   facility: { type: Object, required: true },
   bookings: { type: Array, default: () => [] },
   actionsByBooking: { type: Object, default: () => ({}) },
+  waitlistByBooking: { type: Object, default: () => ({}) },   // booking_id -> our CCA's queue entry (Logistics Directors only)
   busyBookingId: { type: Number, default: null },
   highlightClubId: { type: Number, default: null },
   index: { type: Number, default: 0 }
@@ -29,7 +30,7 @@ const TYPE_CLASS = {
           <h3 class="h5 fw-bold mb-0">{{ facility.name }}</h3>
           <span class="pulse-type-chip">{{ facility.facility_type }}</span>
           <span v-if="bookings.some(b => b.status === 'Proposed Peer Transfer')" class="pulse-chip pulse-chip-hot">
-            {{ bookings.filter(b => b.status === 'Proposed Peer Transfer').length }} released
+            {{ bookings.filter(b => b.status === 'Proposed Peer Transfer').length }} available to claim
           </span>
         </div>
         <div class="text-muted small">{{ facility.location }}</div>
@@ -57,6 +58,8 @@ const TYPE_CLASS = {
         :actions="actionsByBooking[booking.booking_id] || []"
         :busy="busyBookingId === booking.booking_id"
         :highlight-club-id="highlightClubId"
+        :waitlist-entry="waitlistByBooking[booking.booking_id] || null"
+        :show-reference="false"
         @action="(type, b) => emit('action', type, b)"
       />
     </div>
