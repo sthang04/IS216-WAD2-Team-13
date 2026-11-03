@@ -116,3 +116,36 @@ test('Day-of Operations view loads, triggers 1-Click Delay (+15m) cascade and Ge
     page.getByText(/Mobile Geolocation Verified/i)
   ).toBeVisible({ timeout: 10000 });
 });
+
+test('Dev Administrator logs in with Super-Admin privileges and loads Master Calendar', async ({ page }) => {
+  await page.goto('/');
+
+  // Ensure clean session state
+  await page.evaluate(() => {
+    localStorage.clear();
+    sessionStorage.clear();
+  });
+  await page.reload();
+
+  // Open 1-Click Persona drawer and sign in as Dev Administrator
+  const drawerBtn = page.getByRole('button', { name: /Click here for 1-Click Login/i });
+  await expect(drawerBtn).toBeVisible({ timeout: 10000 });
+  await drawerBtn.click();
+
+  const devBtn = page.getByRole('button', { name: /Dev Administrator/i });
+  await expect(devBtn).toBeVisible({ timeout: 10000 });
+  await devBtn.click();
+
+  // Verify the facility page loads
+  await expect(
+    page.getByRole('heading', {
+      name: 'Pulse - Master Facility Calendar'
+    })
+  ).toBeVisible({ timeout: 15000 });
+
+  // Verify campus rehearsal facilities are displayed (7 facilities)
+  await expect(
+    page.locator('.pulse-facility')
+  ).toHaveCount(7, { timeout: 15000 });
+});
+
