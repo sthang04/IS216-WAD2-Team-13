@@ -213,7 +213,7 @@ export async function signIn(email, password) {
 }
  
 // Sign-up step 1: does this email have a members row with an active CCA, and no login yet?
-// OSL adds the club_memberships row; sign-up never gives anyone a CCA or role.
+// OSL adds the club_memberships row (role EXCO_MEMBER); roles = what the person may pick next.
 export async function checkSignupEligibility(email) {
   const normalized = (email || '').trim().toLowerCase()
   if (!isSmuEmail(normalized)) {
@@ -236,13 +236,12 @@ export async function checkSignupEligibility(email) {
   if (result.status === 'already_registered') {
     throw new Error('This email already has an account. Sign in instead.')
   }
-  return { email: normalized, ccas: result.ccas }
+  return { email: normalized, ccas: result.ccas, roles: result.roles || [] }
 }
- 
-// Sign-up step 2: create the account, then save their own name and Telegram handle.
+
+// Sign-up step 2: create the account, then save their own name, Telegram handle and role.
 // The database links the new login to their members row automatically.
-// positions is kept so the Sign Up page doesn't change, but titles are set by OSL
-// in club_memberships, so it isn't saved.
+// positions = { [cca]: role_code }; the database only accepts it while the role is still EXCO_MEMBER.
 export async function signUpExco({ email, fullName, positions, telegramHandle, password }) {
   const response = await supabase.auth.signUp({
     email: email,
@@ -264,7 +263,12 @@ export async function signUpExco({ email, fullName, positions, telegramHandle, p
   if (profileResponse.error) {
     throw new Error(profileResponse.error.message)
   }
- 
+
+  const rolesResponse = await supabase.rpc('rpc_set_my_roles', { p_roles: positions })
+  if (rolesResponse.error) {
+    throw new Error(rolesResponse.error.message)
+  }
+
   const persona = await personaForSignedInEmail(email)
   if (!persona) {
     throw new Error("Your email isn't on the ExCo list. Ask OSL to add you.")

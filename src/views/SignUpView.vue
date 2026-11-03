@@ -5,22 +5,13 @@ import PasswordVisibilityToggle from '../components/PasswordVisibilityToggle.vue
 
 const emit = defineEmits(['done', 'cancel']);
 
-// Common ExCo titles; any other title can be typed in
-const POSITION_SUGGESTIONS = [
-  'President',
-  'Vice President',
-  'Honorary Finance Secretary',
-  'Honorary General Secretary',
-  'Logistics Director',
-  'Marketing Director',
-];
-
-// Step 1: check the email is on OSL's ExCo list. Step 2: set up the profile and password.
+// Step 1: check the email is on OSL's ExCo list. Step 2: set up the profile, role and password.
 const step = ref(1)
 const email = ref('')
 const ccas = ref([]) // set by OSL; one per CCA they lead
+const roles = ref([]) // [{ code, name }] from exco_roles
 const fullName = ref('')
-const positions = reactive({}) // { [cca]: title }
+const positions = reactive({}) // { [cca]: role_code }
 const telegramHandle = ref('')
 const password = ref('')
 const confirmPassword = ref('')
@@ -35,6 +26,7 @@ async function handleCheckEmail() {
     const result = await checkSignupEligibility(email.value)
     email.value = result.email
     ccas.value = result.ccas
+    roles.value = result.roles
     for (const cca of result.ccas) positions[cca] = positions[cca] || ''
     step.value = 2
   } catch (err) {
@@ -48,7 +40,7 @@ async function handleCreateAccount() {
   errorMsg.value = ''
   const handle = telegramHandle.value.trim().replace(/^@/, '')
 
-  if (!fullName.value.trim() || ccas.value.some((cca) => !positions[cca]?.trim())) {
+  if (!fullName.value.trim() || ccas.value.some((cca) => !positions[cca])) {
     errorMsg.value = ccas.value.length > 1
       ? 'Please fill in your name and your ExCo position in each CCA.'
       : 'Please fill in your name and ExCo position.'
@@ -72,7 +64,7 @@ async function handleCreateAccount() {
     const persona = await signUpExco({
       email: email.value,
       fullName: fullName.value.trim(),
-      positions: Object.fromEntries(ccas.value.map((cca) => [cca, positions[cca].trim()])),
+      positions: Object.fromEntries(ccas.value.map((cca) => [cca, positions[cca]])),
       telegramHandle: handle,
       password: password.value,
     })
@@ -137,16 +129,16 @@ function backToEmail() {
           <input id="signupName" v-model="fullName" type="text" class="form-control" placeholder="e.g. Rachel Tan" autocomplete="name" />
         </div>
 
-        <!-- One position per CCA (titles can differ between CCAs) -->
+        <!-- One role per CCA (roles can differ between CCAs); it sets what they can do in Pulse -->
         <div v-for="(cca, index) in ccas" :key="cca" class="mb-3">
           <label :for="`signupPosition${index}`" class="form-label small fw-bold text-muted mb-1">
             {{ ccas.length > 1 ? `ExCo position in ${cca}` : 'ExCo position' }}
           </label>
-          <input :id="`signupPosition${index}`" v-model="positions[cca]" type="text" class="form-control" list="positionSuggestions" placeholder="Pick or type your title" />
+          <select :id="`signupPosition${index}`" v-model="positions[cca]" class="form-select">
+            <option value="" disabled>Choose your role</option>
+            <option v-for="r in roles" :key="r.code" :value="r.code">{{ r.name }}</option>
+          </select>
         </div>
-        <datalist id="positionSuggestions">
-          <option v-for="title in POSITION_SUGGESTIONS" :key="title" :value="title" />
-        </datalist>
 
         <div class="mb-3">
           <label for="signupTelegram" class="form-label small fw-bold text-muted mb-1">Telegram handle</label>
