@@ -1,121 +1,322 @@
 <script setup>
-import { ref, computed } from 'vue';
+import { ref, computed, watch } from 'vue';
 
 const props = defineProps({
   apiMode: { type: Boolean, default: false },
   readOnly: { type: Boolean, default: false }
 });
 
-const emit = defineEmits(['back']);
+const emit = defineEmits(['back', 'meeting-scheduled']);
 
-const selectedSubcommittee = ref('All ExCo')
+/* ================================================================== */
+/* 1. BASICS: toast message + guest check                              */
+/* ================================================================== */
 const showClassBaseline = ref(true)
 const toastMsg = ref('')
+
+// Show a message at the top for a few seconds
+function showToast(msg, ms = 4000) {
+  toastMsg.value = msg
+  setTimeout(() => { toastMsg.value = '' }, ms)
+}
 
 // Guests can look around but not make changes
 function blockedForGuest() {
   if (!props.readOnly) return false
-  toastMsg.value = 'Guest view is read-only. Sign in as a CCA ExCo to make changes.'
+  showToast('Guest view is read-only. Sign in as a CCA ExCo to make changes.')
   return true
 }
 
-const days = ['Mon 12 Oct', 'Tue 13 Oct', 'Wed 14 Oct', 'Thu 15 Oct', 'Fri 16 Oct', 'Sat 17 Oct', 'Sun 18 Oct']
-const hours = [
-  '08:00', '09:00', '10:00', '11:00', '12:00', '13:00', 
-  '14:00', '15:00', '16:00', '17:00', '18:00', '19:00', '20:00', '21:00'
+/* ================================================================== */
+/* 2. DATE HELPERS (turn dates into text and back)                     */
+/* ================================================================== */
+const WEEKDAYS_SHORT = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+const WEEKDAYS_LONG = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
+const MONTHS_SHORT = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+const MONTHS_LONG = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
+
+function pad(n) { return String(n).padStart(2, '0') }
+
+// Date -> "2026-10-16"
+function toISO(dt) { return `${dt.getFullYear()}-${pad(dt.getMonth() + 1)}-${pad(dt.getDate())}` }
+
+// "2026-10-16" -> Date (or null if empty)
+function parseISO(s) {
+  if (!s) return null
+  const [y, m, d] = s.split('-').map(Number)
+  return new Date(y, m - 1, d)
+}
+
+function addDays(dt, n) { return new Date(dt.getFullYear(), dt.getMonth(), dt.getDate() + n) }
+
+// Mon = 0, Tue = 1, ... Sun = 6 (JS normally starts the week on Sunday)
+function dayIndex(dt) { return (dt.getDay() + 6) % 7 }
+function mondayOf(dt) { return addDays(dt, -dayIndex(dt)) }
+
+function shortLabel(dt) { return `${WEEKDAYS_SHORT[dt.getDay()]} ${dt.getDate()} ${MONTHS_SHORT[dt.getMonth()]}` }               // Fri 16 Oct
+function longLabel(dt) { return `${WEEKDAYS_LONG[dt.getDay()]}, ${dt.getDate()} ${MONTHS_LONG[dt.getMonth()]} ${dt.getFullYear()}` } // Friday, 16 October 2026
+
+function hourLabel(h) { return `${pad(h)}:00` }          // 8 -> "08:00"
+function hourNum(label) { return parseInt(label, 10) }   // "08:00" -> 8
+
+/* ================================================================== */
+/* 3. WEEK NAVIGATION                                                  */
+/* ================================================================== */
+const EXAMPLE_WEEK_START = new Date(2026, 9, 12) // Mon 12 Oct 2026
+const weekStart = ref(EXAMPLE_WEEK_START)        // the Monday of the week being shown
+
+const weekKey = computed(() => toISO(weekStart.value))
+const weekDates = computed(() => Array.from({ length: 7 }, (_, i) => addDays(weekStart.value, i)))
+const days = computed(() => weekDates.value.map(shortLabel)) // column headings
+
+const weekRangeLabel = computed(() => {
+  const first = weekDates.value[0]
+  const last = weekDates.value[6]
+  return `${first.getDate()} ${MONTHS_SHORT[first.getMonth()]} – ${last.getDate()} ${MONTHS_SHORT[last.getMonth()]} ${last.getFullYear()}`
+})
+
+function shiftWeek(n) { weekStart.value = addDays(weekStart.value, n * 7) }
+function goToExampleWeek() { weekStart.value = EXAMPLE_WEEK_START }
+
+/* ================================================================== */
+/* 4. AVAILABILITY DATA                                                */
+/* ================================================================== */
+const hours = ['08:00', '09:00', '10:00', '11:00', '12:00', '13:00', '14:00', '15:00', '16:00', '17:00', '18:00', '19:00', '20:00', '21:00']
+const TOTAL_MEMBERS = 12
+const CURRENT_USER_ID = 1 // Rachel Tan
+
+// Example data: how many of the 12 members are free. Rows = Mon..Sun, columns = the hours above.
+// TODO (apiMode): replace with a Supabase query for the week being shown.
+// For now EVERY week shows this same example data.
+const EXAMPLE_MATRIX = [
+  [0, 8, 0, 4, 8, 0, 4, 0, 0, 0, 0, 8, 4, 0], // Mon
+  [0, 0, 4, 8, 4, 0, 0, 8, 0, 4, 8, 8, 4, 0], // Tue
+  [0, 0, 8, 0, 0, 0, 0, 0, 4, 8, 4, 0, 0, 8], // Wed
+  [4, 8, 0, 4, 0, 8, 4, 0, 8, 12, 12, 4, 8, 0], // Thu
+  [8, 4, 0, 0, 8, 0, 0, 4, 12, 12, 12, 8, 4, 0], // Fri
+  [0, 0, 4, 8, 0, 4, 0, 8, 4, 0, 0, 4, 0, 4], // Sat
+  [4, 0, 8, 4, 0, 0, 8, 0, 4, 8, 8, 4, 0, 8]  // Sun
 ]
 
-// Heatmap data: availability count out of 12 members
-// 0, 4, 8, 12
-const heatmapMatrix = ref([
-  // Mon
-  [0, 8, 0, 4, 8, 0, 4, 0, 0, 0, 0, 8, 4, 0],
-  // Tue
-  [0, 0, 4, 8, 4, 0, 0, 8, 0, 4, 8, 8, 4, 0],
-  // Wed
-  [0, 0, 8, 0, 0, 0, 0, 0, 4, 8, 4, 0, 0, 8],
-  // Thu
-  [4, 8, 0, 4, 0, 8, 4, 0, 8, 12, 12, 4, 8, 0],
-  // Fri (Best match Friday 16:00-19:00)
-  [8, 4, 0, 0, 8, 0, 0, 4, 12, 12, 12, 8, 4, 0],
-  // Sat
-  [0, 0, 4, 8, 0, 4, 0, 8, 4, 0, 0, 4, 0, 4],
-  // Sun
-  [4, 0, 8, 4, 0, 0, 8, 0, 4, 8, 8, 4, 0, 8]
-])
+// Slots where YOU start off as available (already included in the numbers above). Format: "dayIndex_hourIndex"
+const INITIAL_MINE = new Set(['4_8', '4_9', '4_10', '3_9', '3_10'])
 
+// Slots you have clicked. Key = "weekKey|dayIndex|hourIndex", value = true (available) or false (not available)
+const myClicks = ref({})
+
+// Are YOU available in this slot? (your click if you made one, otherwise the starting value)
+function isMine(wk, d, h) {
+  const clicked = myClicks.value[`${wk}|${d}|${h}`]
+  return clicked === undefined ? INITIAL_MINE.has(`${d}_${h}`) : clicked
+}
+
+// How many members are free in this slot? Start from the example number, then adjust if you changed your own slot.
+function getCount(wk, d, h) {
+  const startedAsMine = INITIAL_MINE.has(`${d}_${h}`)
+  const count = EXAMPLE_MATRIX[d][h] + (isMine(wk, d, h) ? 1 : 0) - (startedAsMine ? 1 : 0)
+  return Math.max(0, Math.min(TOTAL_MEMBERS, count))
+}
+
+// Colour rule: below 50% = red, 50-75% = yellow, above 75% = green
+function heatClass(count) {
+  const percent = count / TOTAL_MEMBERS
+  if (percent < 0.5) return 'avail-red'
+  if (percent <= 0.75) return 'avail-yellow'
+  return 'avail-green'
+}
+
+// Which members are free in this slot? (Example names only, there is no per-person data yet.)
+// We keep the order of the other 11 members, rotate it differently each day, and say the first N are free.
+function freeMemberIds(wk, d, h) {
+  const mine = isMine(wk, d, h)
+  const othersFreeCount = getCount(wk, d, h) - (mine ? 1 : 0)
+
+  const others = allMembers.filter(m => m.id !== CURRENT_USER_ID)
+  const shift = (d * 4) % others.length
+  const rotated = [...others.slice(shift), ...others.slice(0, shift)]
+
+  const freeIds = rotated.slice(0, othersFreeCount).map(m => m.id)
+  if (mine) freeIds.push(CURRENT_USER_ID)
+  return freeIds
+}
+
+// Click on a heatmap cell = toggle your own availability
+function handleCellClick(d, h, dIdx, hIdx) {
+  if (blockedForGuest()) return
+  const nowAvailable = !isMine(weekKey.value, dIdx, hIdx)
+  myClicks.value[`${weekKey.value}|${dIdx}|${hIdx}`] = nowAvailable
+
+  const total = getCount(weekKey.value, dIdx, hIdx)
+  showToast(`When2Meet: Marked Rachel Tan as ${nowAvailable ? 'Available' : 'Unavailable'} on ${d} @ ${h} (${nowAvailable ? '+1' : '-1'} member). Total: ${total}/12 members.`)
+}
+
+/* ================================================================== */
+/* 5. CLASS BLOCKS (same every week)                                   */
+/* ================================================================== */
+function isClassBlock(dIdx, hIdx) {
+  if (dIdx === 0 && hIdx >= 7 && hIdx <= 9) return true   // Mon: CS101
+  if (dIdx === 2 && hIdx >= 7 && hIdx <= 10) return true  // Wed: IS216
+  return false
+}
+// Only drawn on the grid when the toggle button is on
+function isClassSlot(dIdx, hIdx) { return showClassBaseline.value && isClassBlock(dIdx, hIdx) }
+function getClassName(dIdx) { return dIdx === 0 ? 'CS101' : dIdx === 2 ? 'IS216' : '' }
+
+/* ================================================================== */
+/* 6. TELEGRAM REMINDERS                                               */
+/* ================================================================== */
 const unconfirmedMembers = ref([
   { name: 'Darren Koh', role: 'Performance Lead', handle: '@darrenk' },
   { name: 'Marcus Tan', role: 'Stage Manager', handle: '@marcustan' },
   { name: 'Sarah Lim', role: 'Audio Tech', handle: '@sarahlim' }
 ])
 
-// When2Meet personal user availability toggle map: key is `${dIdx}_${hIdx}`
-const myAvailability = ref({
-  '4_8': true, '4_9': true, '4_10': true, // Fri 16:00, 17:00, 18:00
-  '3_9': true, '3_10': true, // Thu 17:00, 18:00
-})
-
-function isMySlotAvailable(dIdx, hIdx) {
-  return !!myAvailability.value[`${dIdx}_${hIdx}`]
-}
-
-function handleCellClick(d, h, dIdx, hIdx) {
-  if (blockedForGuest()) return
-  const key = `${dIdx}_${hIdx}`
-  const wasAvailable = !!myAvailability.value[key]
-  myAvailability.value[key] = !wasAvailable
-
-  if (!wasAvailable) {
-    heatmapMatrix.value[dIdx][hIdx] = Math.min(12, heatmapMatrix.value[dIdx][hIdx] + 1)
-    toastMsg.value = `When2Meet: Marked Rachel Tan as Available on ${d} @ ${h} (+1 member). Total: ${heatmapMatrix.value[dIdx][hIdx]}/12 members.`
-  } else {
-    heatmapMatrix.value[dIdx][hIdx] = Math.max(0, heatmapMatrix.value[dIdx][hIdx] - 1)
-    toastMsg.value = `When2Meet: Marked Rachel Tan as Unavailable on ${d} @ ${h} (-1 member). Total: ${heatmapMatrix.value[dIdx][hIdx]}/12 members.`
-  }
-
-  // Pre-fill meeting form with this slot if clicked
-  meetingForm.value.date = d
-  meetingForm.value.time = `${h} – ${shiftHour(h, 2)}`
-  setTimeout(() => { toastMsg.value = '' }, 4000)
-}
-
-function shiftHour(hourStr, deltaHours) {
-  const [h] = hourStr.split(':').map(Number)
-  const nextH = Math.min(23, h + deltaHours)
-  return `${String(nextH).padStart(2, '0')}:00`
-}
-
-function isClassSlot(dIdx, hIdx) {
-  if (!showClassBaseline.value) return false
-  if (dIdx === 0 && (hIdx === 7 || hIdx === 8 || hIdx === 9)) return true
-  if (dIdx === 2 && (hIdx === 7 || hIdx === 8 || hIdx === 9 || hIdx === 10)) return true
-  return false
-}
-
-function getClassName(dIdx, hIdx) {
-  if (dIdx === 0) return 'CS101'
-  if (dIdx === 2) return 'IS216'
-  return ''
-}
-
 function pingMemberOnTelegram(member) {
   if (blockedForGuest()) return
-  toastMsg.value = `Telegram reminder dispatched to ${member.name} (${member.handle}): "Please confirm your availability for SMU Arts Festival rehearsals."`
-  setTimeout(() => {
-    toastMsg.value = ''
-  }, 4000)
+  showToast(`Telegram reminder dispatched to ${member.name} (${member.handle}): "Please confirm your availability for SMU Arts Festival rehearsals."`)
 }
 
 function pingAllOnTelegram() {
   if (blockedForGuest()) return
-  toastMsg.value = 'Automated Telegram broadcast dispatched to all 3 unconfirmed ExCo members!'
-  setTimeout(() => {
-    toastMsg.value = ''
-  }, 4000)
+  showToast('Automated Telegram broadcast dispatched to all 3 unconfirmed ExCo members!')
 }
 
-// Meeting Form & Modal State (Requested by Chloe & Sarah)
+/* ================================================================== */
+/* 7. AI SCHEDULING ENGINE: find every slot where all 12 are free      */
+/* ================================================================== */
+const refreshCount = ref(0)       // goes up by 1 on every refresh, which makes bestMatches recalculate
+const isRefreshing = ref(false)
+const lastRefreshed = ref(new Date())
+const lastRefreshedLabel = computed(() => `${pad(lastRefreshed.value.getHours())}:${pad(lastRefreshed.value.getMinutes())}`)
+
+function refreshMatches() {
+  if (isRefreshing.value) return
+  isRefreshing.value = true
+  // TODO (apiMode): re-query Supabase here before recalculating
+  setTimeout(() => {
+    refreshCount.value++
+    lastRefreshed.value = new Date()
+    isRefreshing.value = false
+    showToast('Scheduling engine refreshed with the latest ExCo availability.', 3000)
+  }, 700)
+}
+
+// The most members free in any single slot this week (class blocks are skipped).
+// This is 12 if there is a slot where everyone is free, otherwise 11, 10, and so on.
+const bestCount = computed(() => {
+  refreshCount.value // read it so this recalculates when Refresh is pressed
+  let best = 0
+  for (let d = 0; d < 7; d++) {
+    for (let h = 0; h < hours.length; h++) {
+      if (!isClassBlock(d, h)) best = Math.max(best, getCount(weekKey.value, d, h))
+    }
+  }
+  return best
+})
+
+// Is this slot one of the best ones this week?
+function isBestSlot(d, h) {
+  return !isClassBlock(d, h) && getCount(weekKey.value, d, h) === bestCount.value
+}
+
+// Go through each day and join consecutive best slots into one window (e.g. 16:00 - 19:00)
+const bestMatches = computed(() => {
+  if (bestCount.value === 0) return [] // nobody is free at all
+  const matches = []
+
+  for (let d = 0; d < 7; d++) {
+    let h = 0
+    while (h < hours.length) {
+      if (isBestSlot(d, h)) {
+        const startHour = h
+        while (h < hours.length && isBestSlot(d, h)) h++
+        matches.push({
+          iso: toISO(weekDates.value[d]),
+          label: longLabel(weekDates.value[d]),
+          start: hours[startHour],
+          end: hourLabel(8 + h), // the hours list starts at 08:00
+          duration: h - startHour
+        })
+      } else {
+        h++
+      }
+    }
+  }
+  return matches
+})
+
+/* ================================================================== */
+/* 8. PICK ANY DATE + SEE WHO IS UNAVAILABLE                           */
+/* ================================================================== */
+const selectedSlot = ref({ date: '2026-10-16', start: '16:00', end: '19:00' })
+
+const startOptions = hours
+// "To" can only be later than "From"
+const endOptions = computed(() =>
+  [...hours, '22:00'].filter(t => hourNum(t) > hourNum(selectedSlot.value.start))
+)
+
+function isMatchSelected(m) {
+  return selectedSlot.value.date === m.iso && selectedSlot.value.start === m.start && selectedSlot.value.end === m.end
+}
+function selectMatch(m) {
+  selectedSlot.value = { date: m.iso, start: m.start, end: m.end }
+}
+
+// If "From" moves past "To", push "To" forward
+watch(() => selectedSlot.value.start, () => {
+  if (!endOptions.value.includes(selectedSlot.value.end)) {
+    selectedSlot.value.end = endOptions.value[0]
+  }
+})
+
+// When you pick a new date, show that date's week in the grid
+watch(() => selectedSlot.value.date, (newDate) => {
+  const dt = parseISO(newDate)
+  if (dt) weekStart.value = mondayOf(dt)
+})
+
+// Works out who is free / unavailable for the selected date and time window
+const slotReport = computed(() => {
+  const dt = parseISO(selectedSlot.value.date)
+  if (!dt) return null
+
+  const wk = toISO(mondayOf(dt))
+  const d = dayIndex(dt)
+  const firstHour = hourNum(selectedSlot.value.start)
+  const lastHour = hourNum(selectedSlot.value.end) // not included
+
+  const busyHoursByMember = {} // memberId -> list of hours they are unavailable
+  let classClash = ''
+
+  for (let hour = firstHour; hour < lastHour; hour++) {
+    const h = hour - 8 // position in the hours list
+    if (isClassBlock(d, h)) classClash = getClassName(d)
+
+    const freeIds = freeMemberIds(wk, d, h)
+    allMembers.forEach(m => {
+      if (!freeIds.includes(m.id)) {
+        if (!busyHoursByMember[m.id]) busyHoursByMember[m.id] = []
+        busyHoursByMember[m.id].push(hourLabel(hour))
+      }
+    })
+  }
+
+  const unavailable = allMembers
+    .filter(m => busyHoursByMember[m.id])
+    .map(m => ({ id: m.id, name: m.name, role: m.role, busyAt: busyHoursByMember[m.id].join(', ') }))
+
+  return {
+    dateLabel: longLabel(dt),
+    unavailable,
+    freeCount: allMembers.length - unavailable.length,
+    classClash
+  }
+})
+
+/* ================================================================== */
+/* 9. MEETING FORM + MODAL                                             */
+/* ================================================================== */
 const showMeetingModal = ref(false)
 const meetingConfirmed = ref(false)
 const meetingForm = ref({
@@ -127,7 +328,6 @@ const meetingForm = ref({
   attendees: 12
 })
 
-// Recipient Multi-Select & Search (Requested by Chloe: customize who receives meeting broadcast)
 const allMembers = [
   { id: 1, name: 'Rachel Tan', handle: '@racheltan', role: 'President', subcommittee: 'Executive' },
   { id: 2, name: 'Angel Low', handle: '@angellow', role: 'Vice President & Lead Dancer', subcommittee: 'Dancers' },
@@ -143,15 +343,16 @@ const allMembers = [
   { id: 12, name: 'Valerie Chee', handle: '@valeriec', role: 'Front-of-House Manager', subcommittee: 'Marketing' },
 ]
 
+// Who receives the Telegram broadcast (starts with everyone)
 const selectedRecipientIds = ref([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12])
 const recipientSearch = ref('')
 
 const filteredRecipients = computed(() => {
   const query = recipientSearch.value.trim().toLowerCase()
   if (!query) return allMembers
-  return allMembers.filter(m => 
-    m.name.toLowerCase().includes(query) || 
-    m.handle.toLowerCase().includes(query) || 
+  return allMembers.filter(m =>
+    m.name.toLowerCase().includes(query) ||
+    m.handle.toLowerCase().includes(query) ||
     m.role.toLowerCase().includes(query) ||
     m.subcommittee.toLowerCase().includes(query)
   )
@@ -178,21 +379,20 @@ function toggleRecipient(id) {
   }
 }
 
-function openMeetingModal(slotInfo = null) {
+// Open the modal, filled in with the date and time chosen in the "Meeting Slot" card
+function openMeetingModal() {
   if (blockedForGuest()) return
-  if (slotInfo) {
-    if (slotInfo.date) meetingForm.value.date = slotInfo.date
-    if (slotInfo.time) meetingForm.value.time = slotInfo.time
-  }
+  const dt = parseISO(selectedSlot.value.date)
+  if (dt) meetingForm.value.date = longLabel(dt)
+  meetingForm.value.time = `${selectedSlot.value.start} – ${selectedSlot.value.end}`
   showMeetingModal.value = true
 }
 
 function confirmAndBroadcastMeeting() {
   meetingConfirmed.value = true
   showMeetingModal.value = false
-  
-  // Trigger iCalendar file download with custom agenda
-  exportToCalendar(meetingForm.value)
+
+  exportToCalendar(meetingForm.value) // downloads the .ics file
 
   const count = selectedRecipientIds.value.length
   const sampleHandles = allMembers
@@ -202,10 +402,9 @@ function confirmAndBroadcastMeeting() {
     .join(', ')
   const handlesText = count > 3 ? `${sampleHandles} +${count - 3} more` : sampleHandles
 
-  toastMsg.value = `Meeting scheduled! Telegram broadcast dispatched to ${count} members (${handlesText}) with agenda and calendar invite.`
-  setTimeout(() => { toastMsg.value = '' }, 6000)
+  showToast(`Meeting scheduled! Telegram broadcast dispatched to ${count} members (${handlesText}) with agenda and calendar invite.`, 6000)
 
-  // Emit event to App.vue to push into centralized notifications bell!
+  // Tell App.vue so it can add this to the notifications bell
   emit('meeting-scheduled', {
     title: meetingForm.value.title,
     day: meetingForm.value.date,
@@ -216,12 +415,28 @@ function confirmAndBroadcastMeeting() {
   })
 }
 
-// Client-side iCalendar RFC 5545 export
-function exportToCalendar(customDetails = null) {
-  const title = customDetails?.title || 'SMU Eurhythmix ExCo Weekly Logistics Sync'
-  const location = customDetails?.venue || 'SMU Connexion Meeting Room 3'
-  const description = customDetails?.agenda || 'Weekly logistics review for SMU Arts Festival Opening Night run-of-show. Exported via Pulse Availability Finder.'
-  
+/* ================================================================== */
+/* 10. CALENDAR (.ics) EXPORT                                          */
+/* ================================================================== */
+// "2026-10-16" + "16:00" -> "20261016T080000Z" (Singapore is 8 hours ahead of UTC)
+function toUtcStamp(iso, time) {
+  const [y, m, d] = iso.split('-').map(Number)
+  const utc = new Date(Date.UTC(y, m - 1, d, hourNum(time) - 8))
+  return utc.toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '')
+}
+
+// Uses the date and time currently chosen in the "Meeting Slot" card
+function exportToCalendar(details = null) {
+  const slot = selectedSlot.value
+  if (!parseISO(slot.date)) {
+    showToast('Pick a valid date before exporting to calendar.', 3000)
+    return
+  }
+
+  const title = details?.title || 'SMU Eurhythmix ExCo Weekly Logistics Sync'
+  const location = details?.venue || 'SMU Connexion Meeting Room 3'
+  const description = details?.agenda || 'Weekly logistics review for SMU Arts Festival Opening Night run-of-show. Exported via Pulse Availability Finder.'
+
   const icsContent = [
     'BEGIN:VCALENDAR',
     'VERSION:2.0',
@@ -229,10 +444,10 @@ function exportToCalendar(customDetails = null) {
     'CALSCALE:GREGORIAN',
     'METHOD:PUBLISH',
     'BEGIN:VEVENT',
-    'UID:pulse-meeting-friday-20261016@smu.edu.sg',
-    'DTSTAMP:20261016T080000Z',
-    'DTSTART:20261016T080000Z', // 16:00 SGT
-    'DTEND:20261016T110000Z',   // 19:00 SGT
+    `UID:pulse-meeting-${slot.date}-${slot.start.replace(':', '')}@smu.edu.sg`,
+    `DTSTAMP:${new Date().toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '')}`,
+    `DTSTART:${toUtcStamp(slot.date, slot.start)}`,
+    `DTEND:${toUtcStamp(slot.date, slot.end)}`,
     `SUMMARY:${title}`,
     `DESCRIPTION:${description.replace(/\n/g, '\\n')}`,
     `LOCATION:${location}`,
@@ -241,6 +456,7 @@ function exportToCalendar(customDetails = null) {
     'END:VCALENDAR'
   ].join('\r\n')
 
+  // Make a temporary download link and click it
   const blob = new Blob([icsContent], { type: 'text/calendar;charset=utf-8' })
   const link = document.createElement('a')
   link.href = window.URL.createObjectURL(blob)
@@ -249,18 +465,15 @@ function exportToCalendar(customDetails = null) {
   link.click()
   document.body.removeChild(link)
 
-  if (!customDetails) {
-    toastMsg.value = 'Downloaded smu-eurhythmix-meeting.ics! Open file to add to Google, Outlook, or Apple Calendar.'
-    setTimeout(() => {
-      toastMsg.value = ''
-    }, 4500)
+  if (!details) {
+    showToast('Downloaded smu-eurhythmix-meeting.ics! Open file to add to Google, Outlook, or Apple Calendar.', 4500)
   }
 }
 </script>
 
 <template>
   <div class="py-2">
-    
+
     <!-- Top Bar with Navigation & Actions -->
     <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-4">
       <div>
@@ -277,8 +490,8 @@ function exportToCalendar(customDetails = null) {
 
       <div class="d-flex flex-wrap gap-2">
         <!-- Toggle Recurring Class Blocks -->
-        <button 
-          type="button" 
+        <button
+          type="button"
           class="btn btn-sm btn-pulse-outline d-flex align-items-center gap-2"
           @click="showClassBaseline = !showClassBaseline"
         >
@@ -287,10 +500,10 @@ function exportToCalendar(customDetails = null) {
         </button>
 
         <!-- 1-Click iCal Export -->
-        <button 
-          type="button" 
+        <button
+          type="button"
           class="btn btn-sm btn-pulse-primary d-flex align-items-center gap-2"
-          @click="exportToCalendar"
+          @click="exportToCalendar()"
         >
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
@@ -312,73 +525,59 @@ function exportToCalendar(customDetails = null) {
       <span>{{ toastMsg }}</span>
     </div>
 
-    <!-- Controls Row: Subcommittee Filter & Availability Gradient Legend -->
+    <!-- Colour legend -->
     <div class="card border-0 shadow-sm p-3 mb-4" style="border-radius: 1rem;">
-      <div class="row g-3 align-items-center justify-content-between">
-        
-        <!-- Filter Pills -->
-        <div class="col-12 col-md-auto d-flex flex-wrap align-items-center gap-2">
-          <span class="small fw-bold text-muted">Filter by Subcommittee:</span>
-          <button 
-            v-for="sub in ['All ExCo', 'Logistics', 'Marketing', 'Performance Leads']"
-            :key="sub"
-            type="button"
-            class="pulse-filter-pill"
-            :class="{ active: selectedSubcommittee === sub }"
-            @click="selectedSubcommittee = sub"
-          >
-            {{ sub }}
-          </button>
-        </div>
-
-        <!-- Heatmap Legend -->
-        <div class="col-12 col-md-auto d-flex align-items-center gap-3 small fw-bold">
-          <span class="d-flex align-items-center gap-1">
-            <span style="width: 12px; height: 12px; background: #fff; border: 1px solid #cbd5e1; border-radius: 2px;"></span>
-            0 Free
-          </span>
-          <span class="d-flex align-items-center gap-1">
-            <span style="width: 12px; height: 12px; background: #dcfce7; border-radius: 2px;"></span>
-            4/12 Free
-          </span>
-          <span class="d-flex align-items-center gap-1">
-            <span style="width: 12px; height: 12px; background: #86efac; border-radius: 2px;"></span>
-            8/12 Free
-          </span>
-          <span class="d-flex align-items-center gap-1">
-            <span style="width: 12px; height: 12px; background: #15803d; border-radius: 2px;"></span>
-            All 12 Free (Optimal)
-          </span>
-        </div>
-
+      <div class="d-flex flex-wrap align-items-center gap-3 small fw-bold">
+        <span class="d-flex align-items-center gap-1">
+          <span class="legend-swatch" style="background: #f6dcdc;"></span>
+          Below 50% free
+        </span>
+        <span class="d-flex align-items-center gap-1">
+          <span class="legend-swatch" style="background: #fbf1cc;"></span>
+          50–75% free
+        </span>
+        <span class="d-flex align-items-center gap-1">
+          <span class="legend-swatch" style="background: #d9efe0;"></span>
+          Above 75% free
+        </span>
+        <span class="d-flex align-items-center gap-1">
+          <span class="legend-swatch" style="background: #16a34a; outline: 2px solid #6b7280; outline-offset: -2px;"></span>
+          Brighter = you're available
+        </span>
       </div>
     </div>
 
-    <!-- Main Content: Grid + Recommendation Sidebar -->
+    <!-- Main Content: Grid + Sidebar -->
     <div class="row g-4">
-      
-      <!-- Left: Heatmap 2D Grid -->
+
+      <!-- Left: Heatmap Grid -->
       <div class="col-lg-8">
         <div class="pulse-card p-3 shadow-sm">
-          
-          <!-- When2Meet Interactive Helper Header -->
-          <div class="d-flex flex-wrap justify-content-between align-items-center mb-2 px-1">
-            <div class="d-flex align-items-center gap-2">
-              <span class="badge bg-primary bg-opacity-10 text-primary border border-primary-subtle fw-bold" style="font-size: 0.675rem;">
-                When2Meet Mode Active
-              </span>
-              <span class="text-muted small" style="font-size: 0.725rem;">
-                Click any slot to add/remove your personal availability. Total available ExCos update live.
-              </span>
-            </div>
-            <button 
-              type="button" 
-              class="btn btn-sm btn-link text-decoration-none text-muted py-0"
+
+          <!-- Week navigation -->
+          <div class="d-flex flex-wrap align-items-center gap-2 mb-3 px-1">
+            <button type="button" class="btn btn-sm btn-outline-secondary px-2 py-0" aria-label="Previous week" @click="shiftWeek(-1)">‹</button>
+            <div class="fw-bold small text-center" style="min-width: 170px;">{{ weekRangeLabel }}</div>
+            <button type="button" class="btn btn-sm btn-outline-secondary px-2 py-0" aria-label="Next week" @click="shiftWeek(1)">›</button>
+            <button
+              v-if="weekStart.getTime() !== EXAMPLE_WEEK_START.getTime()"
+              type="button"
+              class="btn btn-sm btn-link text-decoration-none py-0"
               style="font-size: 0.7rem;"
-              @click="openMeetingModal()"
+              @click="goToExampleWeek"
             >
-              + Quick Schedule
+              Back to example week
             </button>
+          </div>
+
+          <!-- When2Meet helper -->
+          <div class="d-flex align-items-center gap-2 mb-2 px-1">
+            <span class="badge bg-primary bg-opacity-10 text-primary border border-primary-subtle fw-bold" style="font-size: 0.675rem;">
+              When2Meet Mode Active
+            </span>
+            <span class="text-muted small" style="font-size: 0.725rem;">
+              Click any slot to add/remove your personal availability. Total available ExCos update live.
+            </span>
           </div>
 
           <div class="table-responsive">
@@ -394,40 +593,38 @@ function exportToCalendar(customDetails = null) {
               <tbody>
                 <tr v-for="(h, hIdx) in hours" :key="h">
                   <td class="text-muted small fw-semibold py-1" style="font-size: 0.7rem;">{{ h }}</td>
-                  
+
                   <td v-for="(d, dIdx) in days" :key="d" class="p-1" style="height: 3.25rem;">
-                    
-                    <!-- Class Baseline Block (Polished SMU Academic Slot) -->
-                    <div 
-                      v-if="isClassSlot(dIdx, hIdx)" 
+
+                    <!-- Class block -->
+                    <div
+                      v-if="isClassSlot(dIdx, hIdx)"
                       class="pulse-class-pill rounded-2"
-                      :title="`Recurring Academic Timetable: ${getClassName(dIdx, hIdx)}`"
-                      @click="toastMsg = `${getClassName(dIdx, hIdx)} Class Timetable: Fixed commitment for ${d} @ ${h}.`"
+                      :title="`Recurring Academic Timetable: ${getClassName(dIdx)}`"
+                      @click="showToast(`${getClassName(dIdx)} Class Timetable: Fixed commitment for ${d} @ ${h}.`)"
                     >
-                      <span class="pulse-class-name">{{ getClassName(dIdx, hIdx) }}</span>
+                      <span class="pulse-class-name">{{ getClassName(dIdx) }}</span>
                       <span class="pulse-class-sub">SMU Core</span>
                     </div>
 
-                    <!-- Regular Heatmap Cell (Interactive When2Meet Toggle) -->
-                    <div 
+                    <!-- Normal heatmap cell: colour depends on how many are free -->
+                    <div
                       v-else
                       class="pulse-heat-cell rounded-2 position-relative"
                       :class="[
-                        `pulse-heat-${heatmapMatrix[dIdx][hIdx]}`,
-                        isMySlotAvailable(dIdx, hIdx) ? 'pulse-heat-my-active' : ''
+                        heatClass(getCount(weekKey, dIdx, hIdx)),
+                        isMine(weekKey, dIdx, hIdx) ? 'pulse-heat-my-active' : ''
                       ]"
-                      :title="`${d} @ ${h}: ${heatmapMatrix[dIdx][hIdx]}/12 available. Click to toggle your personal availability (When2Meet style)`"
+                      :title="`${d} @ ${h}: ${getCount(weekKey, dIdx, hIdx)}/12 available. Click to toggle your personal availability (When2Meet style)`"
                       @click="handleCellClick(d, h, dIdx, hIdx)"
                     >
-                      <span v-if="heatmapMatrix[dIdx][hIdx] > 0" class="pulse-heat-count">
-                        {{ heatmapMatrix[dIdx][hIdx] }}/12
+                      <span v-if="getCount(weekKey, dIdx, hIdx) > 0" class="pulse-heat-count">
+                        {{ getCount(weekKey, dIdx, hIdx) }}/12
                       </span>
-                      <span v-else class="pulse-heat-empty">
-                        -
-                      </span>
-                      <!-- Personal Available Indicator Badge -->
-                      <span 
-                        v-if="isMySlotAvailable(dIdx, hIdx)" 
+                      <span v-else class="pulse-heat-empty">-</span>
+
+                      <span
+                        v-if="isMine(weekKey, dIdx, hIdx)"
                         class="position-absolute top-0 end-0 translate-middle-y me-1 badge rounded-pill bg-primary shadow-sm"
                         style="font-size: 0.5rem; padding: 0.15rem 0.35rem;"
                       >
@@ -444,63 +641,159 @@ function exportToCalendar(customDetails = null) {
         </div>
       </div>
 
-      <!-- Right: Optimal Recommendation & Telegram Contact Panel -->
+      <!-- Right: Sidebar -->
       <div class="col-lg-4">
-        
-        <!-- Optimal Match Card -->
+
+        <!-- Card 1: AI Scheduling Engine (all best matches) -->
         <div class="pulse-card p-4 shadow-sm mb-4 border-start border-success border-4">
-          <div class="text-uppercase fw-bold text-success small mb-1" style="font-size: 0.7rem; letter-spacing: 0.08em;">
-            AI Scheduling Engine
+          <div class="d-flex justify-content-between align-items-start gap-2 mb-1">
+            <div>
+              <div class="text-uppercase fw-bold text-success small" style="font-size: 0.7rem; letter-spacing: 0.08em;">
+                AI Scheduling Engine
+              </div>
+              <h5 class="fw-bold mb-0">
+                {{ bestCount === 0 ? 'No Match This Week' : bestMatches.length === 1 ? 'Best Match Found' : 'Best Matches Found' }}
+              </h5>
+            </div>
+            <button
+              type="button"
+              class="btn btn-sm btn-outline-success d-flex align-items-center gap-1"
+              :disabled="isRefreshing"
+              @click="refreshMatches"
+            >
+              <span v-if="isRefreshing" class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
+              <span style="font-size: 0.75rem;">{{ isRefreshing ? 'Refreshing' : 'Refresh' }}</span>
+            </button>
           </div>
-          <h5 class="fw-bold mb-2">Best Match Found</h5>
-          <div class="p-3 rounded-3 bg-success bg-opacity-10 text-success border border-success-subtle mb-3">
-            <div class="fw-bold fs-6">Friday, 16 October 2026</div>
-            <div class="small">16:00 – 19:00 (3 hours window)</div>
-            <div class="small fw-semibold mt-1">✓ All 12 ExCo members confirmed available</div>
+          <div class="text-muted mb-3" style="font-size: 0.7rem;">
+            Week of {{ weekRangeLabel }} • Updated {{ lastRefreshedLabel }}
           </div>
-          <p class="text-muted small mb-3">
-            Zero clashes with class schedules or existing facility bookings. Ready to lock schedule and broadcast to all 12 ExCos.
+
+          <!-- Shown when nobody has all 12 free, so the best is a lower number -->
+          <p v-if="bestCount > 0 && bestCount < TOTAL_MEMBERS" class="small fw-semibold text-warning-emphasis mb-2">
+            No slot has all 12 free. Showing the slots where the most people ({{ bestCount }}/12) can make it.
           </p>
 
-          <!-- Meeting Confirmed Alert (If already scheduled) -->
-          <div v-if="meetingConfirmed" class="p-3 rounded-3 bg-success bg-opacity-10 border border-success mb-3 text-success small">
-            <div class="fw-bold d-flex align-items-center gap-1">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-                <path d="M20 6L9 17l-5-5"></path>
-              </svg>
-              <span>Meeting Confirmed & Broadcasted!</span>
+          <!-- One card per best window. Scrolls if there are many. -->
+          <div v-if="bestMatches.length" class="match-list d-flex flex-column gap-2 mb-2">
+            <div
+              v-for="m in bestMatches"
+              :key="m.iso + m.start"
+              class="match-card"
+              :class="{ selected: isMatchSelected(m) }"
+              role="button"
+              @click="selectMatch(m)"
+            >
+              <div class="fw-bold small">{{ m.label }}</div>
+              <div class="small">{{ m.start }} – {{ m.end }} ({{ m.duration }} hour{{ m.duration > 1 ? 's' : '' }})</div>
+              <div class="small fw-semibold mt-1" :class="bestCount === TOTAL_MEMBERS ? 'text-success' : 'text-warning-emphasis'">
+                {{ bestCount === TOTAL_MEMBERS ? '✓ All 12 ExCo members available' : `${bestCount}/12 ExCo members available` }}
+              </div>
             </div>
+          </div>
+          <p v-else class="text-muted small mb-2">
+            Nobody is free on any slot this week. Try another week with the arrows above the grid.
+          </p>
+
+          <p class="text-muted small mb-0">
+            Click a match to select it, or pick your own date below. Class blocks are excluded. Scroll the list if there are more matches.
+          </p>
+        </div>
+
+        <!-- Card 2: Pick any date and see who is unavailable -->
+        <div class="pulse-card p-4 shadow-sm mb-4">
+          <div class="text-uppercase fw-bold text-muted small" style="font-size: 0.65rem; letter-spacing: 0.08em;">Meeting Slot</div>
+          <h6 class="fw-bold mb-3">Pick Any Date &amp; Time</h6>
+
+          <div class="row g-2 mb-3">
+            <div class="col-12">
+              <label class="form-label small fw-bold text-muted mb-1">Date</label>
+              <input v-model="selectedSlot.date" type="date" class="form-control form-control-sm fw-bold" />
+            </div>
+            <div class="col-6">
+              <label class="form-label small fw-bold text-muted mb-1">From</label>
+              <select v-model="selectedSlot.start" class="form-select form-select-sm">
+                <option v-for="t in startOptions" :key="t" :value="t">{{ t }}</option>
+              </select>
+            </div>
+            <div class="col-6">
+              <label class="form-label small fw-bold text-muted mb-1">To</label>
+              <select v-model="selectedSlot.end" class="form-select form-select-sm">
+                <option v-for="t in endOptions" :key="t" :value="t">{{ t }}</option>
+              </select>
+            </div>
+          </div>
+
+          <template v-if="slotReport">
+            <!-- Everyone is free -->
+            <div
+              v-if="slotReport.unavailable.length === 0"
+              class="p-3 rounded-3 bg-success bg-opacity-10 text-success border border-success-subtle mb-3"
+            >
+              <div class="fw-bold small">{{ slotReport.dateLabel }}</div>
+              <div class="small">{{ selectedSlot.start }} – {{ selectedSlot.end }}</div>
+              <div class="small fw-semibold mt-1">✓ All 12 ExCo members available</div>
+            </div>
+
+            <!-- Some people are unavailable: list them -->
+            <div v-else class="p-3 rounded-3 bg-danger bg-opacity-10 border border-danger-subtle mb-3">
+              <div class="fw-bold small text-danger-emphasis">{{ slotReport.dateLabel }}</div>
+              <div class="small text-danger-emphasis">{{ selectedSlot.start }} – {{ selectedSlot.end }}</div>
+              <div class="small fw-semibold mt-1 text-danger-emphasis">
+                {{ slotReport.freeCount }}/12 free for the whole window • {{ slotReport.unavailable.length }} unavailable
+              </div>
+              <div class="d-flex flex-column gap-1 mt-2">
+                <div
+                  v-for="u in slotReport.unavailable"
+                  :key="u.id"
+                  class="d-flex justify-content-between align-items-center gap-2 bg-light rounded-2 border px-2 py-1"
+                >
+                  <div>
+                    <strong class="small d-block">{{ u.name }}</strong>
+                    <span class="text-muted" style="font-size: 0.675rem;">{{ u.role }}</span>
+                  </div>
+                  <span class="text-muted text-end" style="font-size: 0.675rem;">Unavailable: {{ u.busyAt }}</span>
+                </div>
+              </div>
+            </div>
+
+            <div
+              v-if="slotReport.classClash"
+              class="small text-warning-emphasis bg-warning bg-opacity-10 border border-warning-subtle rounded-3 p-2 mb-3"
+            >
+              ⚠ This window overlaps the recurring {{ slotReport.classClash }} class block.
+            </div>
+          </template>
+          <p v-else class="text-muted small mb-3">Select a date to see who is free.</p>
+
+          <!-- Shown after a meeting has been confirmed -->
+          <div v-if="meetingConfirmed" class="p-3 rounded-3 bg-success bg-opacity-10 border border-success mb-3 text-success small">
+            <div class="fw-bold">Meeting Confirmed & Broadcasted!</div>
             <div class="mt-1 text-muted" style="font-size: 0.725rem;">
               {{ meetingForm.title }} • {{ meetingForm.date }} ({{ meetingForm.time }}) at {{ meetingForm.venue }}.
             </div>
           </div>
 
-          <!-- Create Meeting & Broadcast Agenda Button (Requested by Chloe & Sarah) -->
-          <button 
-            type="button" 
-            class="btn btn-pulse-primary w-100 py-2 fw-bold mb-2 d-flex align-items-center justify-content-center gap-2" 
+          <button
+            type="button"
+            class="btn btn-pulse-primary w-100 py-2 fw-bold mb-2"
+            :disabled="!slotReport"
             @click="openMeetingModal()"
           >
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
-              <line x1="16" y1="2" x2="16" y2="6"></line>
-              <line x1="8" y1="2" x2="8" y2="6"></line>
-              <line x1="3" y1="10" x2="21" y2="10"></line>
-            </svg>
-            <span>{{ meetingConfirmed ? 'Edit / Reschedule Meeting' : 'Create Meeting & Broadcast Agenda' }}</span>
+            {{ meetingConfirmed ? 'Edit / Reschedule Meeting' : 'Create Meeting & Broadcast Agenda' }}
           </button>
 
-          <!-- Secondary Calendar Sync Button -->
-          <button 
-            type="button" 
-            class="btn btn-outline-secondary w-100 btn-sm py-1 fw-semibold" 
+          <button
+            type="button"
+            class="btn btn-outline-secondary w-100 btn-sm py-1 fw-semibold"
+            :disabled="!slotReport"
             @click="exportToCalendar(meetingForm)"
           >
             Export to Calendar (.ics)
           </button>
         </div>
 
-        <!-- Prof K Feedback Feature: Telegram Prompt for Unresponsive Members -->
+        <!-- Card 3: Telegram reminders for unconfirmed members -->
         <div class="pulse-card p-4 shadow-sm">
           <div class="d-flex justify-content-between align-items-center mb-2">
             <div>
@@ -516,8 +809,8 @@ function exportToCalendar(customDetails = null) {
           </p>
 
           <div class="d-flex flex-column gap-2 mb-3">
-            <div 
-              v-for="m in unconfirmedMembers" 
+            <div
+              v-for="m in unconfirmedMembers"
               :key="m.name"
               class="d-flex justify-content-between align-items-center p-2 rounded-3 bg-light border"
             >
@@ -525,8 +818,8 @@ function exportToCalendar(customDetails = null) {
                 <strong class="small d-block">{{ m.name }}</strong>
                 <span class="text-muted" style="font-size: 0.7rem;">{{ m.role }} ({{ m.handle }})</span>
               </div>
-              <button 
-                type="button" 
+              <button
+                type="button"
                 class="btn btn-sm btn-outline-primary py-1 px-2 fw-bold"
                 style="font-size: 0.7rem;"
                 @click="pingMemberOnTelegram(m)"
@@ -536,8 +829,8 @@ function exportToCalendar(customDetails = null) {
             </div>
           </div>
 
-          <button 
-            type="button" 
+          <button
+            type="button"
             class="btn btn-outline-secondary w-100 btn-sm py-2 fw-bold"
             @click="pingAllOnTelegram"
           >
@@ -549,7 +842,7 @@ function exportToCalendar(customDetails = null) {
 
     </div>
 
-    <!-- Create Meeting & Broadcast Agenda Modal (Requested by Chloe & Sarah) -->
+    <!-- Create Meeting & Broadcast Agenda Modal -->
     <div v-if="showMeetingModal" class="modal-backdrop fade show" style="background: rgba(15, 23, 42, 0.65); backdrop-filter: blur(4px); z-index: 1055;"></div>
     <div v-if="showMeetingModal" class="modal fade show d-block" tabindex="-1" style="z-index: 1060;">
       <div class="modal-dialog modal-dialog-centered modal-lg">
@@ -566,7 +859,7 @@ function exportToCalendar(customDetails = null) {
             </div>
             <button type="button" class="btn-close" @click="showMeetingModal = false"></button>
           </div>
-          
+
           <div class="modal-body p-4">
             <div class="row g-3">
               <!-- Selected Time Window -->
@@ -586,13 +879,12 @@ function exportToCalendar(customDetails = null) {
               <!-- Venue Selection -->
               <div class="col-md-6">
                 <label class="form-label small fw-bold text-muted">Venue / Facility Location</label>
-                <select v-model="meetingForm.venue" class="form-select form-select-sm fw-bold">
-                  <option value="SMU Connexion Meeting Room 3">SMU Connexion Meeting Room 3</option>
-                  <option value="Studio L7.2 (Dance)">Studio L7.2 (Dance)</option>
-                  <option value="Music Drama Lab (MDL)">Music Drama Lab (MDL)</option>
-                  <option value="Basement Studio">Basement Studio</option>
-                  <option value="Li Ka Shing B1 Rehearsal Space">Li Ka Shing B1 Rehearsal Space</option>
-                </select>
+                <input
+                  v-model="meetingForm.venue"
+                  type="text"
+                  class="form-control form-control-sm fw-bold"
+                  placeholder="e.g. SMU Connexion Meeting Room 3"
+                />
               </div>
 
               <!-- Meeting Subject -->
@@ -610,7 +902,7 @@ function exportToCalendar(customDetails = null) {
                 <textarea v-model="meetingForm.agenda" class="form-control" rows="4" style="font-size: 0.8rem; font-family: inherit;" placeholder="List key agenda items..."></textarea>
               </div>
 
-              <!-- Target Recipients with Multi-Select & Search (Requested by Chloe) -->
+              <!-- Target Recipients with Multi-Select & Search -->
               <div class="col-12">
                 <div class="p-3 rounded-3 bg-light border">
                   <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
@@ -634,18 +926,16 @@ function exportToCalendar(customDetails = null) {
                     </div>
                   </div>
 
-                  <!-- Recipient Search Filter Input -->
                   <div class="mb-2">
-                    <input 
-                      v-model="recipientSearch" 
-                      type="text" 
-                      class="form-control form-control-sm" 
+                    <input
+                      v-model="recipientSearch"
+                      type="text"
+                      class="form-control form-control-sm"
                       placeholder="Search member by name, handle (e.g. @angellow), or role..."
                       style="font-size: 0.75rem;"
                     />
                   </div>
 
-                  <!-- Recipient Chips List -->
                   <div class="d-flex flex-wrap gap-1" style="max-height: 120px; overflow-y: auto;">
                     <button
                       v-for="member in filteredRecipients"
@@ -670,12 +960,8 @@ function exportToCalendar(customDetails = null) {
             <button type="button" class="btn btn-outline-secondary btn-sm rounded-pill px-3" @click="showMeetingModal = false">
               Cancel
             </button>
-            <button type="button" class="btn btn-pulse-primary btn-sm rounded-pill px-4 fw-bold d-flex align-items-center gap-2" @click="confirmAndBroadcastMeeting">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <line x1="22" y1="2" x2="11" y2="13"></line>
-                <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
-              </svg>
-              <span>Confirm Meeting & Dispatch Telegram Broadcast</span>
+            <button type="button" class="btn btn-pulse-primary btn-sm rounded-pill px-4 fw-bold" @click="confirmAndBroadcastMeeting">
+              Confirm Meeting & Dispatch Telegram Broadcast
             </button>
           </div>
         </div>
@@ -684,3 +970,62 @@ function exportToCalendar(customDetails = null) {
 
   </div>
 </template>
+
+<style scoped>
+/* Heatmap colours: muted by default, vivid once you mark yourself available */
+.pulse-heat-cell {
+  cursor: pointer;
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
+.pulse-heat-cell.avail-red    { background: #f6dcdc; color: #a35555; }
+.pulse-heat-cell.avail-yellow { background: #fbf1cc; color: #8a6a14; }
+.pulse-heat-cell.avail-green  { background: #d9efe0; color: #3d7a52; }
+
+.pulse-heat-cell.avail-red.pulse-heat-my-active    { background: #ef4444; color: #fff; }
+.pulse-heat-cell.avail-yellow.pulse-heat-my-active { background: #facc15; color: #3b2a00; }
+.pulse-heat-cell.avail-green.pulse-heat-my-active  { background: #16a34a; color: #fff; }
+
+/* Grey border on your own slots */
+.pulse-heat-cell.pulse-heat-my-active {
+  outline: 2px solid #6b7280;
+  outline-offset: -2px;
+  border-color: #6b7280;
+  box-shadow: none;
+}
+
+.pulse-heat-count,
+.pulse-heat-empty {
+  color: inherit;
+}
+
+.legend-swatch {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border-radius: 2px;
+}
+
+/* Best-match list: scrolls inside its own box so the card doesn't get too long */
+.match-list {
+  max-height: 240px;
+  overflow-y: auto;
+  padding-right: 0.25rem;
+}
+
+/* Best-match cards */
+.match-card {
+  border: 1px solid #e2e8f0;
+  border-radius: 0.75rem;
+  padding: 0.65rem 0.75rem;
+  cursor: pointer;
+  background: var(--pulse-card-bg, #fff);
+  transition: border-color 0.15s ease, background-color 0.15s ease;
+}
+.match-card:hover {
+  border-color: #86efac;
+}
+.match-card.selected {
+  border-color: #16a34a;
+  background: rgba(22, 163, 74, 0.08);
+}
+</style>

@@ -1,5 +1,6 @@
 <script setup>
-import { ref, computed } from 'vue';
+import { ref, computed, watch } from 'vue';
+import { getWalkTime } from '../services/onemap';
 
 const props = defineProps({
   apiMode: { type: Boolean, default: false },
@@ -15,9 +16,6 @@ const props = defineProps({
   }
 });
 
-const isCheckedIn = ref(false);
-const isLocating = ref(false);
-const checkInMsg = ref('');
 const toastMsg = ref('');
 
 // Guests can look around but not make changes
@@ -26,24 +24,24 @@ function blockedForGuest() {
   toastMsg.value = 'Guest view is read-only. Sign in as a CCA ExCo to make changes.'
   return true
 }
+
 const selectedCategory = ref('All'); // 'All', 'CCA', 'Academic', 'Personal', 'Duty'
 const showModal = ref(false);
 const isEditing = ref(false);
 const editingId = ref(null);
 
-// Manual Attendance Fallback State (Basement / Weak GPS)
-const showManualCheckInModal = ref(false);
-const manualVerificationType = ref('passcode'); // 'passcode' | 'witness'
-const manualPasscodeInput = ref('LKS-742');
-const manualWitnessName = ref('Amanda Tang (Honorary General Secretary)');
-const manualReasonInput = ref('Basement Li Ka Shing B1 studio (Concrete shielded GPS)');
-const verificationMethodUsed = ref('');
+// Official SMU Buildings for OneMap API Geocoding
+const SMU_BUILDINGS = [
+  'SMU School of Computing and Information Systems 1',
+  'SMU Li Ka Shing Library',
+  'SMU Connexion',
+  'SMU School of Economics & School of Social Sciences',
+  'SMU Yong Pung How School of Law',
+  'SMU Lee Kong Chian School of Business',
+  'SMU Administration Building'
+];
 
-// Calibrated SMU Venue Coordinates (Li Ka Shing B1 Main Hall Stage)
-const VENUE_LAT = 1.2966;
-const VENUE_LNG = 103.8502;
-
-// Initial Schedule Events with academic courses and CCA obligations
+// Initial Schedule Events with structured building names & room details
 const scheduleEvents = ref([
   {
     id: 1,
@@ -52,7 +50,10 @@ const scheduleEvents = ref([
     date: '2026-10-23',
     startTime: '15:30',
     endTime: '17:00',
-    venue: 'SCIS1 Seminar Room 2.1',
+    // Exact official OneMap building search string
+    building: 'SMU SCHOOL OF COMPUTING AND INFORMATION SYSTEMS 1',
+    room: 'Seminar Room 2.1',
+    venue: 'Seminar Room 2.1, SCIS1',
     role: 'Undergraduate Student',
     status: 'Completed',
     transitNote: 'Central Campus • SCIS1 Level 2',
@@ -66,10 +67,12 @@ const scheduleEvents = ref([
     date: '2026-10-23',
     startTime: '18:30',
     endTime: '19:15',
-    venue: 'Main Hall Stage, Li Ka Shing B1',
+    building: 'LI KA SHING LIBRARY',
+    room: 'Main Hall Stage B1',
+    venue: 'Main Hall Stage B1, Li Ka Shing Library',
     role: 'Floor Positioning Lead',
     status: 'In Progress',
-    transitNote: '650m from SCIS1, approx 8 mins walk via Campus Concourse',
+    transitNote: 'Via Campus Concourse',
     notes: 'Verify wireless stage monitor feeds and tape marks for hip-hop ensemble.',
     isCustom: false
   },
@@ -80,7 +83,9 @@ const scheduleEvents = ref([
     date: '2026-10-23',
     startTime: '19:30',
     endTime: '20:10',
-    venue: 'Audio & Lighting Booth, LKS B1',
+    building: 'LI KA SHING LIBRARY',
+    room: 'Audio & Lighting Booth B1',
+    venue: 'Audio & Lighting Booth B1, Li Ka Shing Library',
     role: 'Stage Crew Coordinator',
     status: 'Not Started',
     transitNote: 'Adjacent to Main Hall Stage',
@@ -94,7 +99,9 @@ const scheduleEvents = ref([
     date: '2026-10-23',
     startTime: '20:15',
     endTime: '21:45',
-    venue: 'Main Hall Stage, Li Ka Shing B1',
+    building: 'LI KA SHING LIBRARY',
+    room: 'Main Hall Stage B1',
+    venue: 'Main Hall Stage B1, Li Ka Shing Library',
     role: 'Full Cast Floor Runner',
     status: 'Not Started',
     transitNote: 'Backstage Holding Room B1.2',
@@ -108,14 +115,81 @@ const scheduleEvents = ref([
     date: '2026-10-23',
     startTime: '22:00',
     endTime: '22:30',
+    building: 'SMU CONNEXION',
+    room: 'Studio L7.2 (Dance)',
     venue: 'Studio L7.2 (Dance), Connexion',
     role: 'Honorary General Secretary',
     status: 'Not Started',
-    transitNote: 'Take Linkbridge from LKS to Connexion L7 (6 mins walk)',
+    transitNote: 'Via Linkbridge from LKS to Connexion L7',
     notes: 'Verify studio equipment inventory and lock up keys per SSU Clause 9.2(c).',
     isCustom: false
   }
 ]);
+
+// ---- OneMap walking time calculation using official building names ----
+const sortedEvents = computed(() =>
+  [...scheduleEvents.value].sort((a, b) =>
+    (a.date + a.startTime).localeCompare(b.date + b.startTime))
+)
+
+function minutesBetween(end, start) {
+  const toMin = t => parseInt(t.slice(0, 2)) * 60 + parseInt(t.slice(3))
+  return toMin(start) - toMin(end)
+}
+
+const walkInfo = ref({})            // eventId -> { minutes, metres, gapMinutes, prevVenue, sameVenue?, unavailable? }
+const isLoadingWalk = ref(false)
+let loadCounter = 0                 
+
+async function loadWalkTimes() {
+  const thisLoad = ++loadCounter
+  isLoadingWalk.value = true
+  const list = sortedEvents.value
+
+  const entries = await Promise.all(list.slice(1).map(async (cur, i) => {
+    const prev = list[i]
+    if (prev.date !== cur.date) return null
+    const gapMinutes = minutesBetween(prev.endTime, cur.startTime)
+    
+    // Crucial: Use .building for OneMap API resolution, fallback to .venue
+    const prevBuilding = prev.building || prev.venue
+    const curBuilding = cur.building || cur.venue
+
+    const base = { gapMinutes, prevVenue: prev.venue }
+
+    // If both events are in the same building, distance is 0
+    if (prevBuilding === curBuilding) {
+      return [cur.id, { ...base, sameVenue: true, minutes: 0, metres: 0 }]
+    }
+
+    const walk = await getWalkTime(prevBuilding, curBuilding)
+    if (!walk) return [cur.id, { ...base, unavailable: true }]
+    if (walk.metres === 0) return [cur.id, { ...base, sameVenue: true, minutes: 0, metres: 0 }]
+    return [cur.id, { ...base, ...walk }]
+  }))
+
+  if (thisLoad !== loadCounter) return
+  walkInfo.value = Object.fromEntries(entries.filter(Boolean))
+  isLoadingWalk.value = false
+}
+
+const routeKey = computed(() =>
+  sortedEvents.value.map(e => `${e.id}|${e.date}|${e.startTime}|${e.endTime}|${e.building || e.venue}`).join(';')
+)
+watch(routeKey, loadWalkTimes, { immediate: true })
+
+function transitText(event) {
+  const i = walkInfo.value[event.id]
+  if (!i) return ''
+  if (i.sameVenue) return 'Same building as your previous event, no walking needed'
+  if (i.unavailable) return `Walk time unavailable from ${i.prevVenue}`
+  return `~${i.minutes} min walk (${i.metres}m) from ${i.prevVenue}`
+}
+
+function transitTight(event) {
+  const i = walkInfo.value[event.id]
+  return !!i && !i.sameVenue && !i.unavailable && i.minutes > i.gapMinutes
+}
 
 // Modal Form State
 const eventForm = ref({
@@ -124,9 +198,10 @@ const eventForm = ref({
   date: '2026-10-23',
   startTime: '17:15',
   endTime: '18:15',
-  venue: 'Studio L7.2 (Dance)',
+  building: 'SMU Connexion',
+  room: 'Studio L7.2 (Dance)',
   role: 'Participant',
-  transitNote: '5 min walk via Concourse',
+  transitNote: '',
   notes: ''
 });
 
@@ -136,7 +211,7 @@ const filteredEvents = computed(() => {
   return scheduleEvents.value.filter(e => e.category === selectedCategory.value);
 });
 
-// Conflict Detection: checks if academic classes clash with CCA rehearsal slots
+// Conflict Detection
 const conflictingEventIds = computed(() => {
   const conflicts = new Set();
   const academics = scheduleEvents.value.filter(e => e.category === 'Academic');
@@ -164,98 +239,6 @@ const activeAssignment = computed(() => {
   return scheduleEvents.value.find(e => e.status === 'In Progress') || scheduleEvents.value.find(e => e.status === 'Not Started') || scheduleEvents.value[0];
 });
 
-function calculateDistance(lat1, lon1, lat2, lon2) {
-  const R = 6371e3; // metres
-  const phi1 = lat1 * Math.PI / 180;
-  const phi2 = lat2 * Math.PI / 180;
-  const deltaPhi = (lat2 - lat1) * Math.PI / 180;
-  const deltaLambda = (lon2 - lon1) * Math.PI / 180;
-
-  const a = Math.sin(deltaPhi/2) * Math.sin(deltaPhi/2) +
-            Math.cos(phi1) * Math.cos(phi2) *
-            Math.sin(deltaLambda/2) * Math.sin(deltaLambda/2);
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-  return R * c;
-}
-
-function handleGeolocationCheckIn() {
-  if (blockedForGuest()) return
-  if (!navigator.geolocation) {
-    verificationMethodUsed.value = 'Simulated GPS Sensor (within 25m)';
-    simulateSuccessCheckIn('HTML5 Geolocation sensor active: Checked in within 30m of Main Hall Stage!');
-    return;
-  }
-
-  isLocating.value = true;
-  checkInMsg.value = 'Querying hardware GPS sensor...';
-
-  navigator.geolocation.getCurrentPosition(
-    (position) => {
-      isLocating.value = false;
-      const userLat = position.coords.latitude;
-      const userLng = position.coords.longitude;
-      const dist = calculateDistance(userLat, userLng, VENUE_LAT, VENUE_LNG);
-
-      isCheckedIn.value = true;
-      verificationMethodUsed.value = `HTML5 GPS Sensor (${Math.round(dist)}m from Stage)`;
-      checkInMsg.value = `Verified On-Site via GPS! (${Math.round(dist)}m from Li Ka Shing Stage)`;
-      toastMsg.value = 'Presence confirmed! Attendance status broadcasted to ExCo command center.';
-      setTimeout(() => { toastMsg.value = ''; }, 4500);
-    },
-    (error) => {
-      isLocating.value = false;
-      // When GPS fails or is shielded indoors, proactively offer manual fallback!
-      showManualCheckInModal.value = true;
-      toastMsg.value = 'GPS signal unavailable in basement area. Switched to manual session verification.';
-      setTimeout(() => { toastMsg.value = ''; }, 4500);
-    },
-    { enableHighAccuracy: true, timeout: 6000 }
-  );
-}
-
-function simulateSuccessCheckIn(msg) {
-  isCheckedIn.value = true;
-  checkInMsg.value = msg;
-  toastMsg.value = 'Presence confirmed! Attendance status broadcasted to ExCo command center.';
-  setTimeout(() => { toastMsg.value = ''; }, 4500);
-}
-
-// Manual Check-In Handlers
-function openManualCheckIn() {
-  if (blockedForGuest()) return
-  showManualCheckInModal.value = true;
-}
-
-function closeManualCheckIn() {
-  showManualCheckInModal.value = false;
-}
-
-function submitManualCheckIn() {
-  isCheckedIn.value = true;
-  if (manualVerificationType.value === 'passcode') {
-    const code = manualPasscodeInput.value.trim() || 'LKS-742';
-    checkInMsg.value = `Verified via Session Passcode (${code})`;
-    verificationMethodUsed.value = `Manual Venue Passcode [${code}] • GPS Fallback`;
-    toastMsg.value = `Manual attendance verified via Passcode ${code}! Logged for SLiMS endorsement.`;
-  } else {
-    const officer = manualWitnessName.value;
-    checkInMsg.value = `Verified via Officer Sign-off (${officer.split(' ')[0]})`;
-    verificationMethodUsed.value = `EXCO Officer Witness (${officer}) • GPS Fallback`;
-    toastMsg.value = `Manual attendance verified via ${officer}! Recorded on club attendance ledger.`;
-  }
-  closeManualCheckIn();
-  setTimeout(() => { toastMsg.value = ''; }, 4500);
-}
-
-function resetCheckIn() {
-  if (blockedForGuest()) return
-  isCheckedIn.value = false;
-  checkInMsg.value = '';
-  verificationMethodUsed.value = '';
-  toastMsg.value = 'Attendance verification reset.';
-  setTimeout(() => { toastMsg.value = ''; }, 3000);
-}
-
 function toggleEventStatus(event) {
   if (blockedForGuest()) return
   if (event.status === 'Not Started') {
@@ -282,9 +265,10 @@ function openAddModal() {
     date: '2026-10-23',
     startTime: '17:15',
     endTime: '18:15',
-    venue: 'Studio L7.2 (Dance)',
+    building: 'SMU Connexion',
+    room: 'Studio L7.2 (Dance)',
     role: `${props.activePersona.cca || 'Eurhythmix'} Member`,
-    transitNote: '5 min walk via Campus Concourse',
+    transitNote: '',
     notes: ''
   };
   showModal.value = true;
@@ -300,9 +284,10 @@ function openEditModal(event) {
     date: event.date,
     startTime: event.startTime,
     endTime: event.endTime,
-    venue: event.venue,
+    building: event.building || 'SMU Connexion',
+    room: event.room || event.venue,
     role: event.role,
-    transitNote: event.transitNote || 'Campus Concourse transit',
+    transitNote: event.transitNote || '',
     notes: event.notes || ''
   };
   showModal.value = true;
@@ -315,11 +300,16 @@ function closeModal() {
 function saveEvent() {
   if (!eventForm.value.title.trim()) return;
 
+  const combinedVenue = eventForm.value.room.trim()
+    ? `${eventForm.value.room}, ${eventForm.value.building.replace('SMU ', '')}`
+    : eventForm.value.building;
+
   if (isEditing.value && editingId.value) {
     const idx = scheduleEvents.value.findIndex(e => e.id === editingId.value);
     if (idx !== -1) {
       Object.assign(scheduleEvents.value[idx], {
-        ...eventForm.value
+        ...eventForm.value,
+        venue: combinedVenue
       });
       toastMsg.value = `Updated: "${eventForm.value.title}" successfully modified.`;
     }
@@ -328,10 +318,10 @@ function saveEvent() {
     scheduleEvents.value.push({
       id: newId,
       ...eventForm.value,
+      venue: combinedVenue,
       status: 'Not Started',
       isCustom: true
     });
-    // Re-sort schedule by start time
     scheduleEvents.value.sort((a, b) => a.startTime.localeCompare(b.startTime));
     toastMsg.value = `Added: "${eventForm.value.title}" scheduled on your calendar.`;
   }
@@ -408,7 +398,7 @@ function exportCalendarICS() {
 
 <template>
   <div class="py-2">
-    
+
     <!-- Top Header & Actions -->
     <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-4">
       <div>
@@ -416,8 +406,6 @@ function exportCalendarICS() {
           <span class="badge bg-danger rounded-pill px-2 py-1" style="font-size: 0.65rem; font-weight: 800;">
             PERSONAL SCHEDULE
           </span>
-          <span v-if="apiMode" class="pulse-api-tag">HTML5 Geolocation API</span>
-          <span v-if="apiMode" class="pulse-api-tag">Manual Roster Fallback</span>
           <span v-if="apiMode" class="pulse-api-tag">OneMap Transit Guide</span>
           <span v-if="apiMode" class="pulse-api-tag">iCal OASIS Sync</span>
         </div>
@@ -428,8 +416,8 @@ function exportCalendarICS() {
       </div>
 
       <div class="d-flex flex-wrap gap-2">
-        <button 
-          type="button" 
+        <button
+          type="button"
           class="btn btn-sm btn-outline-secondary d-flex align-items-center gap-1"
           @click="exportCalendarICS"
           title="Download .ics file compatible with OASIS, Apple Calendar, and Google Calendar"
@@ -442,8 +430,8 @@ function exportCalendarICS() {
           <span>Sync / Export .ics</span>
         </button>
 
-        <button 
-          type="button" 
+        <button
+          type="button"
           class="btn btn-sm btn-danger fw-bold d-flex align-items-center gap-1"
           @click="openAddModal"
         >
@@ -457,9 +445,9 @@ function exportCalendarICS() {
     </div>
 
     <!-- Alert / Toast Banner -->
-    <div 
-      v-if="toastMsg" 
-      class="alert alert-success border-0 shadow-sm mb-4 d-flex align-items-center justify-content-between" 
+    <div
+      v-if="toastMsg"
+      class="alert alert-success border-0 shadow-sm mb-4 d-flex align-items-center justify-content-between"
       role="alert"
       style="border-radius: 0.75rem; background-color: #ecfdf5; color: #065f46;"
     >
@@ -473,13 +461,12 @@ function exportCalendarICS() {
     </div>
 
     <div class="row g-4">
-      
-      <!-- Left: Active Assignment & Live Geolocation Verification -->
+
+      <!-- Left: Active Assignment Card -->
       <div class="col-lg-5">
-        
-        <!-- Active Assignment Hero Card -->
+
         <div v-if="activeAssignment" class="pulse-hero-banner p-4 text-white shadow-lg mb-4">
-          
+
           <div class="d-flex justify-content-between align-items-center mb-3">
             <span class="badge bg-danger rounded-pill px-3 py-1 fw-bold" style="font-size: 0.7rem;">
               {{ activeAssignment.status === 'In Progress' ? 'ACTIVE NOW' : 'PRIORITY ASSIGNMENT' }}
@@ -490,7 +477,7 @@ function exportCalendarICS() {
           </div>
 
           <h4 class="fw-bold mb-2">{{ activeAssignment.title }}</h4>
-          
+
           <div class="d-flex flex-column gap-2 text-white-50 small mb-4">
             <div class="d-flex align-items-center gap-2 text-white">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -527,62 +514,29 @@ function exportCalendarICS() {
               <span v-if="apiMode" class="badge bg-white text-dark small" style="font-size: 0.6rem;">OneMap API</span>
             </div>
             <div class="text-white-50 small">
-              Transit Route: <span class="text-white fw-bold">{{ activeAssignment.transitNote || 'Campus Concourse transit' }}</span>
+              Walking time:
+              <span class="text-white fw-bold">
+                <template v-if="transitText(activeAssignment)">{{ transitText(activeAssignment) }}</template>
+                <template v-else-if="isLoadingWalk">Calculating…</template>
+                <template v-else>No earlier event today to walk from</template>
+              </span>
+              <span v-if="transitTight(activeAssignment)" class="badge bg-warning text-dark ms-1">⚠ Tight</span>
+            </div>
+            <div v-if="activeAssignment.transitNote" class="text-white-50 small mt-1">
+              Directions: <span class="text-white">{{ activeAssignment.transitNote }}</span>
             </div>
           </div>
 
-          <!-- Actions: Geolocation Check-in & Manual Fallback & Status Toggle -->
+          <!-- Action: Status Toggle -->
           <div class="d-flex flex-wrap gap-2 mb-2">
-            <button 
-              type="button" 
-              class="btn py-2 px-3 fw-bold d-flex align-items-center gap-2 flex-grow-1"
-              :class="isCheckedIn ? 'btn-success' : 'btn-pulse-primary'"
-              :disabled="isLocating"
-              @click="handleGeolocationCheckIn"
-            >
-              <span v-if="isLocating" class="spinner-border spinner-border-sm" role="status"></span>
-              <svg v-else width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path>
-                <circle cx="12" cy="10" r="3"></circle>
-              </svg>
-              <span>{{ isCheckedIn ? checkInMsg : 'Verify Attendance (GPS)' }}</span>
-            </button>
-
-            <!-- Manual Fallback Button (Bad GPS / Basement) -->
-            <button 
-              type="button" 
-              class="btn btn-outline-light py-2 px-3 fw-bold d-flex align-items-center gap-1"
-              @click="openManualCheckIn"
-              title="Manual attendance verification if GPS signal is weak in basement"
-            >
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
-                <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
-              </svg>
-              <span>{{ isCheckedIn ? 'Change / Manual' : 'Manual Fallback' }}</span>
-            </button>
-
-            <button 
-              type="button" 
-              class="btn btn-outline-light py-2 px-3 fw-bold"
+            <button
+              type="button"
+              class="btn btn-outline-light py-2 px-3 fw-bold w-100"
               @click="toggleEventStatus(activeAssignment)"
             >
               <span v-if="activeAssignment.status === 'Not Started'">Start Task</span>
               <span v-else-if="activeAssignment.status === 'In Progress'">Mark Done ✓</span>
               <span v-else>Reset Status</span>
-            </button>
-          </div>
-
-          <!-- Verified Attendance Status Bar -->
-          <div v-if="isCheckedIn" class="mt-3 p-2 rounded bg-white bg-opacity-15 border border-white border-opacity-20 d-flex justify-content-between align-items-center small">
-            <span class="d-flex align-items-center gap-1 text-white fw-semibold" style="font-size: 0.72rem;">
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <polyline points="20 6 9 17 4 12"></polyline>
-              </svg>
-              <span>{{ verificationMethodUsed || checkInMsg }}</span>
-            </span>
-            <button type="button" class="btn btn-link text-white text-opacity-75 p-0 text-decoration-none small" style="font-size: 0.675rem;" @click="resetCheckIn">
-              Reset
             </button>
           </div>
 
@@ -620,38 +574,38 @@ function exportCalendarICS() {
 
       <!-- Right: Interactive Personal Schedule Manager -->
       <div class="col-lg-7">
-        
+
         <!-- Filter Tabs & Stats -->
         <div class="card border-0 shadow-sm p-2 mb-3" style="border-radius: 0.75rem; background-color: var(--pulse-card-bg);">
           <div class="d-flex flex-wrap justify-content-between align-items-center gap-2">
-            
+
             <div class="d-flex flex-wrap gap-1">
-              <button 
-                type="button" 
+              <button
+                type="button"
                 class="btn btn-sm py-1 px-3 rounded-pill"
                 :class="selectedCategory === 'All' ? 'btn-danger text-white fw-bold' : 'btn-light text-muted'"
                 @click="selectedCategory = 'All'"
               >
                 All Events ({{ scheduleEvents.length }})
               </button>
-              <button 
-                type="button" 
+              <button
+                type="button"
                 class="btn btn-sm py-1 px-3 rounded-pill"
                 :class="selectedCategory === 'CCA' ? 'btn-danger text-white fw-bold' : 'btn-light text-muted'"
                 @click="selectedCategory = 'CCA'"
               >
                 CCA Rehearsals
               </button>
-              <button 
-                type="button" 
+              <button
+                type="button"
                 class="btn btn-sm py-1 px-3 rounded-pill"
                 :class="selectedCategory === 'Academic' ? 'btn-danger text-white fw-bold' : 'btn-light text-muted'"
                 @click="selectedCategory = 'Academic'"
               >
                 Academic Classes
               </button>
-              <button 
-                type="button" 
+              <button
+                type="button"
                 class="btn btn-sm py-1 px-3 rounded-pill"
                 :class="selectedCategory === 'Duty' ? 'btn-danger text-white fw-bold' : 'btn-light text-muted'"
                 @click="selectedCategory = 'Duty'"
@@ -669,16 +623,16 @@ function exportCalendarICS() {
 
         <!-- Schedule Items List -->
         <div class="d-flex flex-column gap-3">
-          
-          <div 
-            v-for="event in filteredEvents" 
+
+          <div
+            v-for="event in filteredEvents"
             :key="event.id"
             class="pulse-card p-3 shadow-sm border position-relative"
             :style="{
-              borderLeft: event.category === 'Academic' 
-                ? '4px solid #3b82f6 !important' 
-                : event.category === 'CCA' 
-                  ? '4px solid #ef4444 !important' 
+              borderLeft: event.category === 'Academic'
+                ? '4px solid #3b82f6 !important'
+                : event.category === 'CCA'
+                  ? '4px solid #ef4444 !important'
                   : '4px solid #10b981 !important'
             }"
           >
@@ -711,8 +665,8 @@ function exportCalendarICS() {
               </div>
 
               <!-- Status Badge / Toggle Button -->
-              <button 
-                type="button" 
+              <button
+                type="button"
                 class="btn btn-sm py-1 px-2 rounded-pill fw-bold border"
                 :class="{
                   'btn-success text-white': event.status === 'Completed',
@@ -727,10 +681,16 @@ function exportCalendarICS() {
               </button>
             </div>
 
-            <!-- Notes & Transit Info -->
-            <div v-if="event.notes || event.transitNote" class="p-2 rounded bg-light border small text-muted mb-2" style="font-size: 0.725rem;">
+            <!-- Transit & Notes -->
+            <div v-if="walkInfo[event.id] || event.transitNote || event.notes" class="p-2 rounded bg-light border small text-muted mb-2" style="font-size: 0.725rem;">
+              <div v-if="walkInfo[event.id]" class="mb-1" :class="{ 'text-danger fw-bold': transitTight(event) }">
+                <strong class="text-secondary">Transit:</strong>
+                {{ transitText(event) }}
+                <span v-if="!walkInfo[event.id].sameVenue"> • {{ walkInfo[event.id].gapMinutes }} min gap</span>
+                <span v-if="transitTight(event)"> ⚠ Not enough time</span>
+              </div>
               <div v-if="event.transitNote" class="mb-1">
-                <strong class="text-secondary">Transit:</strong> {{ event.transitNote }}
+                <strong class="text-secondary">Directions:</strong> {{ event.transitNote }}
               </div>
               <div v-if="event.notes">
                 <strong class="text-secondary">Notes:</strong> {{ event.notes }}
@@ -739,16 +699,16 @@ function exportCalendarICS() {
 
             <!-- Action Buttons: Edit & Delete -->
             <div class="d-flex justify-content-end gap-2 border-top pt-2">
-              <button 
-                type="button" 
+              <button
+                type="button"
                 class="btn btn-sm btn-outline-secondary py-0 px-2"
                 style="font-size: 0.7rem;"
                 @click="openEditModal(event)"
               >
                 Edit
               </button>
-              <button 
-                type="button" 
+              <button
+                type="button"
                 class="btn btn-sm btn-outline-danger py-0 px-2"
                 style="font-size: 0.7rem;"
                 @click="deleteEvent(event.id)"
@@ -765,16 +725,16 @@ function exportCalendarICS() {
 
     </div>
 
-    <!-- MODAL 1: Add / Edit Event -->
-    <div 
-      v-if="showModal" 
-      class="modal fade show d-block" 
-      tabindex="-1" 
+    <!-- MODAL: Add / Edit Event with SMU Building Selector -->
+    <div
+      v-if="showModal"
+      class="modal fade show d-block"
+      tabindex="-1"
       style="background-color: rgba(15, 23, 42, 0.65); z-index: 1055;"
     >
       <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content border-0 shadow-lg" style="border-radius: 1rem;">
-          
+
           <div class="modal-header border-bottom py-3 px-4 bg-light">
             <h6 class="modal-title fw-bold text-dark mb-0">
               {{ isEditing ? 'Edit Schedule Event' : 'Add Custom Event / Class' }}
@@ -784,15 +744,15 @@ function exportCalendarICS() {
 
           <form @submit.prevent="saveEvent">
             <div class="modal-body p-4">
-              
+
               <div class="mb-3">
                 <label class="form-label small fw-bold text-dark">Event or Class Title:</label>
-                <input 
-                  v-model="eventForm.title" 
-                  type="text" 
-                  class="form-control form-control-sm" 
-                  placeholder="e.g. IS216 Lab, Rehearsal Warmup, Team Debrief" 
-                  required 
+                <input
+                  v-model="eventForm.title"
+                  type="text"
+                  class="form-control form-control-sm"
+                  placeholder="e.g. IS216 Lab, Rehearsal Warmup, Team Debrief"
+                  required
                 />
               </div>
 
@@ -823,44 +783,57 @@ function exportCalendarICS() {
                 </div>
               </div>
 
+              <!-- SMU Building Search & Selection for OneMap Route Calculation -->
+              <div class="mb-3">
+                <label class="form-label small fw-bold text-dark">SMU Building (OneMap Searchable):</label>
+                <select v-model="eventForm.building" class="form-select form-select-sm fw-bold text-primary" required>
+                  <option v-for="b in SMU_BUILDINGS" :key="b" :value="b">
+                    {{ b }}
+                  </option>
+                </select>
+                <small class="text-muted" style="font-size: 0.675rem;">
+                  OneMap API uses this building location to calculate precise walking times between classes.
+                </small>
+              </div>
+
               <div class="row g-2 mb-3">
                 <div class="col-6">
-                  <label class="form-label small fw-bold text-dark">Venue / Location:</label>
-                  <input 
-                    v-model="eventForm.venue" 
-                    type="text" 
-                    class="form-control form-control-sm" 
-                    placeholder="e.g. Studio L7.2, SCIS SR 2.1" 
-                    required 
+                  <label class="form-label small fw-bold text-dark">Room / Floor Details:</label>
+                  <input
+                    v-model="eventForm.room"
+                    type="text"
+                    class="form-control form-control-sm"
+                    placeholder="e.g. SR 2.1, Studio L7.2, B1 Stage"
+                    required
                   />
                 </div>
                 <div class="col-6">
                   <label class="form-label small fw-bold text-dark">Role / Responsibility:</label>
-                  <input 
-                    v-model="eventForm.role" 
-                    type="text" 
-                    class="form-control form-control-sm" 
-                    placeholder="e.g. Lead Dancer, Student" 
+                  <input
+                    v-model="eventForm.role"
+                    type="text"
+                    class="form-control form-control-sm"
+                    placeholder="e.g. Lead Dancer, Student"
                   />
                 </div>
               </div>
 
               <div class="mb-3">
-                <label class="form-label small fw-bold text-dark">OneMap Transit Buffer Note:</label>
-                <input 
-                  v-model="eventForm.transitNote" 
-                  type="text" 
-                  class="form-control form-control-sm" 
-                  placeholder="e.g. 8 mins walk via Concourse" 
+                <label class="form-label small fw-bold text-dark">Directions (optional):</label>
+                <input
+                  v-model="eventForm.transitNote"
+                  type="text"
+                  class="form-control form-control-sm"
+                  placeholder="e.g. Via Campus Concourse"
                 />
               </div>
 
               <div class="mb-2">
                 <label class="form-label small fw-bold text-dark">Preparation Notes:</label>
-                <textarea 
-                  v-model="eventForm.notes" 
-                  class="form-control form-control-sm" 
-                  rows="2" 
+                <textarea
+                  v-model="eventForm.notes"
+                  class="form-control form-control-sm"
+                  rows="2"
                   placeholder="e.g. Bring dance sneakers, project slide deck ready."
                 ></textarea>
               </div>
@@ -871,125 +844,6 @@ function exportCalendarICS() {
               <button type="button" class="btn btn-outline-secondary btn-sm" @click="closeModal">Cancel</button>
               <button type="submit" class="btn btn-danger btn-sm fw-bold px-3">
                 {{ isEditing ? 'Save Changes' : 'Add to Schedule' }}
-              </button>
-            </div>
-          </form>
-
-        </div>
-      </div>
-    </div>
-
-    <!-- MODAL 2: Manual Attendance Fallback (Weak GPS / Basement Venue) -->
-    <div 
-      v-if="showManualCheckInModal" 
-      class="modal fade show d-block" 
-      tabindex="-1" 
-      style="background-color: rgba(15, 23, 42, 0.65); z-index: 1055;"
-    >
-      <div class="modal-dialog modal-dialog-centered">
-        <div class="modal-content border-0 shadow-lg" style="border-radius: 1rem;">
-          
-          <div class="modal-header border-bottom py-3 px-4 bg-light">
-            <div class="d-flex align-items-center gap-2">
-              <div class="p-2 rounded bg-warning bg-opacity-10 text-dark">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
-                  <line x1="12" y1="9" x2="12" y2="13"></line>
-                  <line x1="12" y1="17" x2="12.01" y2="17"></line>
-                </svg>
-              </div>
-              <div>
-                <h6 class="modal-title fw-bold text-dark mb-0">Manual Attendance Verification</h6>
-                <small class="text-muted" style="font-size: 0.7rem;">Basement Venue & Weak GPS Fallback Mode (SLiMS Clause 4.2)</small>
-              </div>
-            </div>
-            <button type="button" class="btn-close" @click="closeManualCheckIn"></button>
-          </div>
-
-          <form @submit.prevent="submitManualCheckIn">
-            <div class="modal-body p-4">
-              
-              <!-- Info Notice -->
-              <div class="card border-0 p-3 mb-3 bg-light" style="border-radius: 0.5rem; font-size: 0.75rem; line-height: 1.4;">
-                <strong class="text-dark">Basement / Shielded Signal Fallback:</strong>
-                <span class="text-muted">
-                  Campus rehearsal facilities located in basements (e.g. Li Ka Shing B1 Main Hall Stage, SOE Basement, Connexion underground) frequently experience GPS multipath loss. Per SMU SLiMS regulations, students may self-verify presence using the session passcode or verified officer witness sign-off.
-                </span>
-              </div>
-
-              <!-- Verification Method Selector -->
-              <div class="mb-3">
-                <label class="form-label small fw-bold text-dark">Verification Method:</label>
-                <div class="d-flex gap-2">
-                  <button 
-                    type="button" 
-                    class="btn btn-sm flex-grow-1"
-                    :class="manualVerificationType === 'passcode' ? 'btn-danger text-white fw-bold' : 'btn-outline-secondary'"
-                    @click="manualVerificationType = 'passcode'"
-                  >
-                    Venue Session Passcode
-                  </button>
-                  <button 
-                    type="button" 
-                    class="btn btn-sm flex-grow-1"
-                    :class="manualVerificationType === 'witness' ? 'btn-danger text-white fw-bold' : 'btn-outline-secondary'"
-                    @click="manualVerificationType = 'witness'"
-                  >
-                    EXCO Officer Sign-off
-                  </button>
-                </div>
-              </div>
-
-              <!-- Method 1: Passcode -->
-              <div v-if="manualVerificationType === 'passcode'" class="mb-3">
-                <label class="form-label small fw-bold text-dark">4-Digit Session Passcode:</label>
-                <input 
-                  v-model="manualPasscodeInput" 
-                  type="text" 
-                  class="form-control form-control-sm text-center font-monospace fw-bold fs-6" 
-                  placeholder="e.g. LKS-742" 
-                  required 
-                />
-                <small class="text-muted" style="font-size: 0.675rem;">
-                  Provided by the Stage Manager or projected on the studio AV display.
-                </small>
-              </div>
-
-              <!-- Method 2: Witness Sign-off -->
-              <div v-else class="mb-3">
-                <label class="form-label small fw-bold text-dark">Present Verifying Officer:</label>
-                <select v-model="manualWitnessName" class="form-select form-select-sm" required>
-                  <option value="Amanda Tang (Honorary General Secretary)">Amanda Tang (Honorary General Secretary, Taekwondo)</option>
-                  <option value="Darren Koh (Stage Production Manager)">Darren Koh (Stage Production Manager, Samba Masala)</option>
-                  <option value="Rachel Tan (Honorary General Secretary)">Rachel Tan (Honorary General Secretary, Eurhythmix)</option>
-                  <option value="Chloe Ang (OSL Staff Advisor)">Chloe Ang (OSL Staff Advisor)</option>
-                </select>
-                <div class="form-check mt-2">
-                  <input class="form-check-input" type="checkbox" id="witnessConfirm" required checked />
-                  <label class="form-check-label small text-muted" for="witnessConfirm" style="font-size: 0.725rem;">
-                    I attest under the SMU Honor Code that I am physically present at the venue and verifying with the officer above.
-                  </label>
-                </div>
-              </div>
-
-              <!-- Signal / Reason Note -->
-              <div class="mb-2">
-                <label class="form-label small fw-bold text-dark">Reason for Manual Fallback:</label>
-                <input 
-                  v-model="manualReasonInput" 
-                  type="text" 
-                  class="form-control form-control-sm" 
-                  placeholder="e.g. Weak GPS in basement / Wi-Fi drop" 
-                  required 
-                />
-              </div>
-
-            </div>
-
-            <div class="modal-footer border-top py-3 px-4 d-flex justify-content-between">
-              <button type="button" class="btn btn-outline-secondary btn-sm" @click="closeManualCheckIn">Cancel</button>
-              <button type="submit" class="btn btn-danger btn-sm fw-bold px-3">
-                Confirm Manual Attendance
               </button>
             </div>
           </form>
