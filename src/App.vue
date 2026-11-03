@@ -21,6 +21,7 @@ import SignUpView from './views/SignUpView.vue';
 import AvailabilityView from './views/AvailabilityView.vue';
 import OperationsView from './views/OperationsView.vue';
 import EventRiskView from './views/EventRiskView.vue';
+
 import PersonalScheduleView from './views/PersonalScheduleView.vue';
 import OslAdminView from './views/OslAdminView.vue';
  
@@ -33,8 +34,11 @@ const isOslReviewRoute = computed(() => route.path.startsWith('/facilities/admin
 // changes the URL, and opening or refreshing a URL opens that page.
 const router = useRouter()
 const route = useRoute()
-watch(currentView, (view) => {
-  if (route.meta.view !== view && VIEW_PATHS[view]) router.push(VIEW_PATHS[view])
+watch(currentView, async (view) => {
+  if (route.meta.view !== view && VIEW_PATHS[view]) {
+    const failure = await router.push(VIEW_PATHS[view])
+    if (failure && route.meta.view) currentView.value = route.meta.view
+  }
 })
 watch(() => route.meta.view, (view) => {
   if (view && isLoggedIn.value && view !== currentView.value) currentView.value = view
@@ -642,6 +646,12 @@ onMounted(async () => {
           </div>
  
         </div>
+      <nav v-if="!isAdmin" class="d-lg-none px-3 pb-2" aria-label="Mobile PULSE navigation">
+        <label for="pulse-mobile-page" class="visually-hidden">Navigate PULSE</label>
+        <select id="pulse-mobile-page" class="form-select form-select-sm" style="min-height:44px" :value="currentView" @change="currentView = $event.target.value">
+          <option v-for="item in [{view:'facilities',label:'Master Facility Calendar'},{view:'schedule',label:'Personal Schedule'},{view:'heatmap',label:'Availability Heatmap'},{view:'operations',label:'Day-of Operations'},{view:'risk',label:'Event Risk Planning'}].filter(item=>canOpenView(activePersona,item.view))" :key="item.view" :value="item.view">{{ item.label }}</option>
+        </select>
+      </nav>
       </header>
  
       <!-- Main Content Area -->
@@ -699,7 +709,7 @@ onMounted(async () => {
  
         <!-- VIEW 2: Personal Schedule & Attendance -->
         <div v-show="currentView === 'schedule'">
-          <PersonalScheduleView :api-mode="apiMode" :active-persona="activePersona" :read-only="isGuest" />
+          <PersonalScheduleView :active="currentView === 'schedule'" :api-mode="apiMode" :active-persona="activePersona" :read-only="isGuest" />
         </div>
  
         <!-- VIEW 3: Availability Heatmap -->
@@ -714,21 +724,22 @@ onMounted(async () => {
  
         <!-- VIEW 5: Event Risk Planning & What-If Simulator -->
         <div v-show="currentView === 'risk'">
-          <EventRiskView :api-mode="apiMode" :read-only="isGuest" />
+          <EventRiskView :active="route.meta.view === 'risk'" :api-mode="apiMode" :read-only="isGuest" />
+
         </div>
  
         </div>
       </main>
  
-      <!-- Pip watches notifications and waitlist offers on every page -->
+      <!-- Notifications Pip is shown outside risk planning; EventRiskView owns Simulation Pip. -->
       <PipMascot
-        v-if="pipVisible"
+        v-if="pipVisible && currentView !== 'risk'"
         mode="notifications"
         :unanswered-count="unreadCount"
         :offer-seconds-left="soonestOfferSeconds"
         :is-static="notificationStore.pipStatic"
         @update:is-static="setPipStatic"
-        :is-quiet="notificationStore.pipQuiet"
+        :is-quiet="notificationStore.pipQuiet || currentView === 'schedule'"
         @update:is-quiet="setPipQuiet"
         @open-notifications="openNotifications"
         @open-offer="openOffer"

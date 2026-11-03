@@ -1,8 +1,11 @@
 <script setup>
-import { ref, computed, watch } from 'vue';
+import { ref, computed, watch, nextTick } from 'vue';
+import { useRoute } from 'vue-router';
+import SimulatorInvitationInbox from '../components/SimulatorInvitationInbox.vue';
 import { getWalkTime } from '../services/onemap';
 
 const props = defineProps({
+  active: { type: Boolean, default: true },
   apiMode: { type: Boolean, default: false },
   readOnly: { type: Boolean, default: false },
   activePersona: {
@@ -16,6 +19,22 @@ const props = defineProps({
   }
 });
 
+// Simulator linked code
+// App.vue keeps panes mounted with v-show. Scroll only after this member page
+// becomes visible, including a deep link opened before session restoration.
+const route=useRoute()
+watch([()=>route.hash,()=>props.active],async([hash,active])=>{
+ if(active && !props.readOnly && hash==='#simulator-invitation-inbox'){
+  await nextTick()
+  const inbox=document.getElementById('simulator-invitation-inbox')
+  if(inbox)inbox.style.scrollMarginTop=((document.querySelector('header')?.getBoundingClientRect().height || 0)+16)+'px'
+  inbox?.scrollIntoView({block:'start'})
+  inbox?.focus({preventScroll:true})
+ }
+},{immediate:true,flush:'post'})
+const isCheckedIn = ref(false);
+const isLocating = ref(false);
+const checkInMsg = ref('');
 const toastMsg = ref('');
 
 // Guests can look around but not make changes
@@ -440,6 +459,8 @@ function exportCalendarICS() {
 
 <template>
   <div class="py-2">
+    <SimulatorInvitationInbox v-if="!readOnly" />
+    
 
     <!-- Top Header & Actions -->
     <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-4">

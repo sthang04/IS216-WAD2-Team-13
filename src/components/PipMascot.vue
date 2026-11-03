@@ -1,7 +1,15 @@
 <script setup>
 
-import { computed, ref, onMounted, onUnmounted } from 'vue'
+import { computed, ref, onMounted, onUnmounted, useId } from 'vue'
 import { formatCountdown } from '../services/waitlistService'
+
+// SVG IDs are shared across the document. 
+// Reusing pipBody across mounted Pip instances can make one instance use another's gradient and display the wrong colours.
+// v-show only hides a view: its Pip and SVG definitions remain mounted.
+// Give each instance a stable, unique ID so its fill always uses its own colours.
+const instanceId = useId()
+const bodyGradientId = 'pipBody-' + instanceId
+const summaryId = 'pip-summary-' + instanceId
 
 // 1. RECEIVE DATA FROM DIFFERENT FEATURES
 // Both features use the SAME PipMascot.vue component.
@@ -270,7 +278,7 @@ onUnmounted(() => {
 
     <!-- DANGER SUMMARY PANEL -->
     <Transition name="pip-fade">
-      <div v-if="panelOpen" id="pip-summary" class="pip-panel">
+      <div v-if="panelOpen" :id="summaryId" class="pip-panel">
         <div class="pip-panel-heading">
           <strong>🐱 Pip — Pulse Assistant</strong>
           <button
@@ -354,7 +362,7 @@ onUnmounted(() => {
       class="pip-button"
       :aria-label="'Pip assistant. ' + moodLabel + '. ' + message"
       :aria-expanded="panelOpen"
-      aria-controls="pip-summary"
+      :aria-controls="summaryId"
       @click="panelOpen = !panelOpen"
       @contextmenu.prevent.stop="openMenu"
     >
@@ -375,7 +383,7 @@ onUnmounted(() => {
 
         <defs>
           <linearGradient
-            id="pipBody"
+            :id="bodyGradientId"
             x1="0%"
             y1="0%"
             x2="80%"
@@ -409,7 +417,7 @@ onUnmounted(() => {
             Q18 105 18 78
             Z
           "
-          fill="url(#pipBody)"
+          :fill="'url(#' + bodyGradientId + ')'"
           stroke="white"
           stroke-width="4"
           stroke-linejoin="round"

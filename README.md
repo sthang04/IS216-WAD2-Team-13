@@ -108,3 +108,12 @@ pnpm test:e2e
 # Run tests in interactive UI mode
 pnpm test:e2e --ui
 ```
+
+## Simulator checks
+
+Use Node.js 24 (verified with 24.13.0); the contract checks use built-in TypeScript stripping.
+Run `pnpm test:e2e:simulator` after installing project dependencies and Playwright Chromium.
+The command runs isolated browser workflows at six desktop/mobile sizes and labeled
+Playwright contract checks once in the 1280x800 project. Contract checks preserve
+algorithm, security, concurrency and mocked backend assertions; they are not live
+Supabase or Telegram integration tests. No real invitations or messages are sent.

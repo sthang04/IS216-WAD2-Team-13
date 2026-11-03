@@ -1,0 +1,71 @@
+import {test,expect} from '@playwright/test'
+async function boot(page,mode='route'){
+ await page.route('https://**',r=>r.abort())
+ await page.route('**/src/services/simulationDataService.js*',r=>r.fulfill({contentType:'application/javascript',body:"import {campusConnectMultiEventFixture} from '/e2e-simulator/fixtures/campusConnect.js';export async function loadSimulationData(){window.__loads=(window.__loads||0)+1;return campusConnectMultiEventFixture()}"}))
+ await page.route('**/src/supabase.js*',r=>r.fulfill({contentType:'application/javascript',body:
+  "window.__calls=[];window.__saved={id:'saved-fixture',event_id:990001,title:'Persisted fixture recovery',application_status:'Draft',workflow_status:'In Progress',changes:[],disruptions:[],version:1};export const isSupabaseConfigured=()=>true;export const supabase={auth:{onAuthStateChange(){return {data:{subscription:{unsubscribe(){}}}}},async getUser(){return {data:{user:{id:'fixture-user'}}}}},async rpc(name,args){window.__calls.push(name);if(name==='rpc_simulator_plan_history')return {data:{plans:[window.__saved],invitations:[],audit:[]}};if(name==='rpc_simulator_workflow_capabilities')return {data:{contract_version:4,application_enabled:false,invitations_enabled:false}};if(name==='rpc_simulator_my_invitations')return {data:{invitations:[]}};throw new Error('Unexpected RPC '+name)}}"}))
+ await page.goto('/e2e-simulator/harness.html?lifecycle='+mode)
+ await expect(page.getByLabel('Event',{exact:true})).toHaveValue('990001')
+}
+async function clean(page){
+ await expect(page.getByRole('region',{name:'Start a simulation',exact:true})).toBeVisible()
+ await expect(page.getByRole('button',{name:'Run combined simulation (1)',exact:true})).toBeDisabled()
+ await expect(page.getByLabel('Unavailable from (Singapore)',{exact:true})).toHaveValue('')
+ await expect(page.locator('.sim-impact-workspace,.recovery-choice,#simulator-comparison')).toHaveCount(0)
+ await expect(page.getByRole('region',{name:'Saved Recoveries',exact:true})).toContainText('Persisted fixture recovery')
+}
+async function run(page){
+ await page.getByLabel('Unavailable from (Singapore)',{exact:true}).fill('2026-11-02T10:00')
+ await page.getByLabel('Unavailable until (Singapore)',{exact:true}).fill('2026-11-02T10:30')
+ await page.getByRole('button',{name:'Run combined simulation (1)',exact:true}).click()
+ await expect(page.getByText('Simulation complete',{exact:true})).toBeVisible()
+}
+async function onlyReads(page){
+ const calls=await page.evaluate(()=>window.__calls)
+ expect(calls.length).toBeGreaterThan(0)
+ expect(calls.every(n=>['rpc_simulator_plan_history','rpc_simulator_workflow_capabilities','rpc_simulator_my_invitations'].includes(n))).toBe(true)
+}
+test('clean entry, validation, local reset and saved history use only reads',async({page})=>{
+ await boot(page);await clean(page)
+ await page.getByLabel('Unavailable from (Singapore)',{exact:true}).fill('2026-11-02T10:00')
+ await page.getByLabel('Unavailable until (Singapore)',{exact:true}).fill('2026-11-02T09:00')
+ await expect(page.getByRole('button',{name:'Run combined simulation (1)',exact:true})).toBeDisabled()
+ await run(page)
+ await page.locator('.recovery-choice').first().getByRole('button',{name:'Select this plan',exact:true}).click()
+ const saved=await page.evaluate(()=>JSON.stringify(window.__saved))
+ await page.getByRole('button',{name:'Reset Simulation',exact:true}).click()
+ await clean(page)
+ expect(await page.evaluate(()=>window.__loads)).toBe(1)
+ expect(await page.evaluate(()=>JSON.stringify(window.__saved))).toBe(saved)
+ await onlyReads(page)
+})
+for(const mode of ['route','keepalive','pane'])test('confirmed navigation starts clean on return: '+mode,async({page})=>{
+ await boot(page,mode);await run(page)
+ page.once('dialog',d=>d.dismiss())
+ await page.evaluate(()=>window.__simRouter.push('/away'))
+ await expect(page.getByText('Simulation complete',{exact:true})).toBeVisible()
+ page.once('dialog',d=>d.accept())
+ await page.evaluate(()=>window.__simRouter.push('/away'))
+ await expect(page.getByText('Away from simulator',{exact:true})).toBeVisible()
+ await page.evaluate(()=>window.__simRouter.push('/'))
+ await clean(page);await onlyReads(page)
+})
+test('event switch and browser refresh clear hypothetical work; navigation event context is preserved',async({page})=>{
+ await boot(page);await run(page)
+ page.once('dialog',d=>d.dismiss())
+ await page.getByLabel('Event',{exact:true}).selectOption('990003')
+ await expect(page.getByLabel('Event',{exact:true})).toHaveValue('990001')
+ page.once('dialog',d=>d.accept())
+ await page.getByLabel('Event',{exact:true}).selectOption('990003')
+ await clean(page)
+ await page.evaluate(()=>window.__simRouter.push('/?eventId=990003'))
+ await expect(page.getByLabel('Event',{exact:true})).toHaveValue('990003')
+ await clean(page)
+ await page.getByLabel('Disruption type',{exact:true}).selectOption('SCHEDULE_DELAY')
+ await page.getByRole('button',{name:'Run combined simulation (1)',exact:true}).click()
+ page.once('dialog',d=>d.accept())
+ await page.reload();await clean(page);await onlyReads(page)
+ await page.goto('/e2e-simulator/harness.html?eventId=990003')
+ await expect(page.getByLabel('Event',{exact:true})).toHaveValue('990003')
+ await clean(page)
+})

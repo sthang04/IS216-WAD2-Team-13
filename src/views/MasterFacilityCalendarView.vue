@@ -4,6 +4,7 @@
 // release, claim and join waitlists here; everyone else can only look.
 
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
+import {readSimulatorCalendarFocus,bookingMatchesSimulatorFocus,clearSimulatorCalendarFocus} from '../services/simulatorCalendarNavigation.js'
 import { useRoute, useRouter } from 'vue-router'
 import FacilityTabs from '../components/FacilityTabs.vue'
 import PageHero from '../components/PageHero.vue'
@@ -33,6 +34,13 @@ const busyBookingId = ref(null)
 const filters = ref({ type: 'All', equipment: 'All', capacity: 'any', availability: 'All', search: '' })
 const selectedDay = ref(null)  // a date picked on the week calendar, or null for the whole week
 const pending = ref(null)      // the action waiting in the confirm pop-up
+
+// Optional simulator deep link. Without it the original calendar is unchanged.
+// These query values filter the view only; bookingActions/RPCs remain authoritative.
+const simulatorFocus=computed(()=>readSimulatorCalendarFocus(route.query,facilities.value))
+const simulatorRequestedPeriod=computed(()=>simulatorFocus.value&&!simulatorFocus.value.error
+ ? [simulatorFocus.value.start,simulatorFocus.value.end].map(t=>new Date(t).toLocaleString('en-SG',{timeZone:'Asia/Singapore'})).join(' to '):'')
+function clearSimulatorFocus(){router.replace({query:clearSimulatorCalendarFocus(route.query)})}
 
 // ---------------- Which week ----------------
 
@@ -205,12 +213,21 @@ function matchesAvailability(booking) {
 // Bookings that pass the status and day filters
 const visibleBookings = computed(() => {
   return bookings.value.filter((booking) => {
+    // Keep simulator filtering
+    if (!bookingMatchesSimulatorFocus(booking,simulatorFocus.value)) {
+      return false
+    }
+
+    // Use updated booking availability filtering from main
     if (!matchesAvailability(booking)) {
       return false
     }
+
+    // Keep existing selected day filtering
     if (selectedDay.value && booking.booking_date !== selectedDay.value) {
       return false
     }
+
     return true
   })
 })
@@ -238,6 +255,7 @@ const groups = computed(() => {
   const result = []
 
   facilities.value.forEach((facility) => {
+    if(simulatorFocus.value&&!simulatorFocus.value.error&&String(facility.id)!==String(simulatorFocus.value.facilityId))return
     if (!matchesFacility(facility)) {
       return
     }
@@ -430,6 +448,16 @@ async function runAction(booking, action) {
     ]"
   />
 
+  <section v-if="simulatorFocus" data-testid="simulator-calendar-focus" class="pulse-banner pulse-banner-view" aria-label="Simulator facility request">
+    <p v-if="simulatorFocus.error" role="status">{{ simulatorFocus.error }}</p>
+    <template v-else>
+      <strong>{{ simulatorFocus.facilityName }}</strong>
+      <p class="mb-2">Requested (Singapore): {{ simulatorRequestedPeriod }}</p>
+      <p class="mb-2">This focus does not reserve a room. Normal permissions and approval still apply.</p>
+    </template>
+    <button type="button" class="btn btn-outline-secondary btn-sm" @click="clearSimulatorFocus">Clear simulator focus</button>
+  </section>
+
   <WeekNavigator
     v-model:week-start="weekStart"
     v-model:selected-day="selectedDay"
@@ -449,7 +477,7 @@ async function runAction(booking, action) {
     Look for "Accept offer" below, or open the <RouterLink to="/facilities/waitlist">Waitlist</RouterLink> tab.
   </div>
 
-  <FacilityFilters v-model:filters="filters" :facilities="facilities" :week-label="weekLabel" :has-active-club="!!session.activeClubId" />
+  <FacilityFilters v-model:filters="filters" :facilities="facilities" :week-label="weekLabel" />
 
   <div v-if="loading" class="text-center py-5">
     <div class="spinner-border text-danger" role="status"></div>
