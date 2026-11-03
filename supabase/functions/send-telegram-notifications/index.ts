@@ -24,7 +24,11 @@ const ALLOWED_TYPES = [
   'WAITLIST_REMINDER',
   'TRANSFER_APPROVED',
   'TRANSFER_REJECTED',
-  'TRANSFER_EXPIRED'
+  'TRANSFER_EXPIRED',
+  'MEETING_REQUEST',
+  'MEETING_NUDGE',
+  'MEETING_CONFIRMED',
+  'MEETING_CANCELLED'
 ]
 
 type Notification = {
@@ -61,6 +65,8 @@ function linkFor(n: Notification): string {
 
 function buttonLabel(type: string): string {
   if (type === 'WAITLIST_OFFER' || type === 'WAITLIST_REMINDER') return 'Claim the slot in Pulse'
+  if (type === 'MEETING_REQUEST' || type === 'MEETING_NUDGE') return 'Mark my availability'
+  if (type === 'MEETING_CONFIRMED') return 'View meeting'
   return 'Open in Pulse'
 }
 
@@ -98,6 +104,30 @@ function messageFor(n: Notification, linkAsText: boolean): string {
     case 'TRANSFER_EXPIRED':
       message =
         `⌛ OSL Sign-off Deadline Passed\n\n` +
+        `${n.body}${link}`
+      break
+
+    case 'MEETING_REQUEST':
+      message =
+        `🗓 Pulse Meeting Request\n\n` +
+        `${n.body}${link}`
+      break
+
+    case 'MEETING_NUDGE':
+      message =
+        `⏰ Pulse Meeting Reminder\n\n` +
+        `${n.body}${link}`
+      break
+
+    case 'MEETING_CONFIRMED':
+      message =
+        `✅ Meeting Confirmed\n\n` +
+        `${n.body}${link}`
+      break
+
+    case 'MEETING_CANCELLED':
+      message =
+        `❌ Meeting Cancelled\n\n` +
         `${n.body}${link}`
       break
 
