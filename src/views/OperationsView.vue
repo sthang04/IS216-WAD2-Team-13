@@ -816,6 +816,13 @@ function checkInPerformer(person) {
   showToast(`${person.name} checked in at ${formatTime(showClock.value)}.`)
 }
 
+// For a check-in pressed by mistake
+function undoCheckIn(person) {
+  if (blockedForGuest()) return
+  person.checkedInAt = null
+  showToast(`${person.name} is no longer checked in.`)
+}
+
 /* ================================================================== */
 /* 12. STANDBY FINDER + NOTICE PARSER (under "More tools")             */
 /* ================================================================== */
@@ -1235,9 +1242,12 @@ function parseNoticeWithAi() {
             </div>
           </div>
 
-          <div v-if="checkedIn.length" class="ops-small text-muted mb-3">
-            <span class="fw-semibold text-success">✓ Checked in:</span>
-            {{ checkedIn.map(p => p.name).join(', ') }}
+          <div v-if="checkedIn.length" class="ops-small text-muted mb-3 d-flex flex-wrap align-items-center gap-1">
+            <span class="fw-semibold text-success me-1">✓ Checked in:</span>
+            <span v-for="p in checkedIn" :key="p.memberId" class="badge rounded-pill bg-light text-dark border fw-normal d-inline-flex align-items-center gap-1">
+              {{ p.name }}
+              <button type="button" class="btn btn-link p-0 text-muted text-decoration-none lh-1" :title="`Undo check-in for ${p.name}`" :aria-label="`Undo check-in for ${p.name}`" @click="undoCheckIn(p)">✕</button>
+            </span>
           </div>
 
           <div class="ops-small text-muted text-center">
