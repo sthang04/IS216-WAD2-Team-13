@@ -1,6 +1,6 @@
 // src/services/sessionState.js
 // Facility-specific session state -> stores member name, clubs and facility permissions -> these drive the facility UI
-// Authentication (sign in / sign out / guest) is still owned by authService.js.
+// Authentication (sign in / sign out) is owned by authService.js.
 //
 // Where the data comes from (Supabase):
 //   auth.users -> members (auth_user_id) -> club_memberships -> exco_roles
@@ -12,7 +12,7 @@
 import { ref, computed } from 'vue'
 // The single shared Supabase client (same one authService.js uses, so they share one login)
 import { supabase } from '../supabase'
-// restoreSession() asks authService who is signed in (or whether they are a guest)
+// restoreSession() asks authService who is signed in
 import { restoreSession } from './authService'
  
 // Keys used to remember choices in the browser's localStorage
@@ -208,7 +208,7 @@ function applyMember(person) {
  
 // ---------------- Loading the session ----------------
 // Called when the facility pages open. Steps:
-//   1. ask authService who is signed in (or whether they are a guest)
+//   1. ask authService who is signed in
 //   2. read their memberships (or the demo personas) from Supabase
 //   3. group the rows into people
 //   4. pick who is using the page and copy them into session
@@ -221,9 +221,8 @@ export async function initSession() {
     // Step 1: the team's authService decides who is signed in
     const teamPersona = await restoreSession()
  
-    // A guest can only look. Stop here so demo mode can never hand a guest
-    // a Logistics Director's permissions. (finally below still sets ready.)
-    if (teamPersona && teamPersona.role === 'guest') {
+    // If no persona is signed in, reset to public viewer with no permissions
+    if (!teamPersona) {
       session.value.authUserId = null
       session.value.personas = []
       applyMember(null)
@@ -283,8 +282,57 @@ export async function initSession() {
     // Step 4: choose who is using the page
     if (session.value.authUserId) {
       // Signed in: the person whose login matches
-      const me = session.value.personas.find((p) => p.auth_user_id === session.value.authUserId)
+      let me = session.value.personas.find((p) => p.auth_user_id === session.value.authUserId)
+      if (!me && teamPersona && teamPersona.cca) {
+        const isMarketing = (teamPersona.roleLabel || '').toLowerCase().includes('marketing')
+        const isLd = !isMarketing && ((teamPersona.roleLabel || '').toLowerCase().includes('logistics') || (teamPersona.roleLabel || '').toLowerCase().includes('exco'))
+        const roleName = isMarketing ? 'Marketing Director' : (isLd ? 'Logistics Director' : 'ExCo Member')
+        me = {
+          member_id: teamPersona.memberId || 999,
+          full_name: teamPersona.name,
+          auth_user_id: session.value.authUserId,
+          is_osl_admin: teamPersona.role === 'admin',
+          memberships: [
+            {
+              club_id: 1,
+              club_name: teamPersona.cca,
+              role_name: roleName,
+              role_code: isLd ? 'LD' : 'MD',
+              can_release_booking: isLd,
+              can_claim_booking: isLd,
+              can_manage_waitlist: isLd,
+              can_send_transfer_email: isLd,
+              can_manage_facilities: isLd
+            }
+          ]
+        }
+      }
       applyMember(me || null)
+    } else if (teamPersona && teamPersona.cca) {
+      // Signed in via local session (e.g. 1-click evaluator persona)
+      const isMarketing = (teamPersona.roleLabel || '').toLowerCase().includes('marketing')
+      const isLd = !isMarketing && ((teamPersona.roleLabel || '').toLowerCase().includes('logistics') || (teamPersona.roleLabel || '').toLowerCase().includes('exco'))
+      const roleName = isMarketing ? 'Marketing Director' : (isLd ? 'Logistics Director' : 'ExCo Member')
+      const localMe = {
+        member_id: teamPersona.memberId || 999,
+        full_name: teamPersona.name,
+        auth_user_id: null,
+        is_osl_admin: teamPersona.role === 'admin',
+        memberships: [
+          {
+            club_id: 1,
+            club_name: teamPersona.cca,
+            role_name: roleName,
+            role_code: isLd ? 'LD' : 'MD',
+            can_release_booking: isLd,
+            can_claim_booking: isLd,
+            can_manage_waitlist: isLd,
+            can_send_transfer_email: isLd,
+            can_manage_facilities: isLd
+          }
+        ]
+      }
+      applyMember(localMe)
     } else if (session.value.demoMode) {
       // Demo: the persona picked last time, else Darren Koh, else any Logistics Director.
       // .some() is true if at least one item in the list matches.
