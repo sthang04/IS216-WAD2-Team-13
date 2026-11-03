@@ -1,7 +1,7 @@
 <script setup>
-import { ref, watch, onUnmounted } from 'vue'
+import SplitFlap from './SplitFlap.vue'
 
-const props = defineProps({
+defineProps({
   tag: { type: String, default: 'SMU Facilities' },
   title: { type: String, required: true },
   subtitle: { type: String, default: '' },
@@ -9,23 +9,7 @@ const props = defineProps({
   variant: { type: String, default: 'default' }  // 'default' | 'admin'
 })
 
-// Numbers count up when they change, purely for feel.
-const shown = ref(props.stats.map(() => 0))
-let frame = null
-watch(() => props.stats.map(s => s.value), (targets) => {
-  cancelAnimationFrame(frame)
-  const from = targets.map((_, i) => shown.value[i] ?? 0)
-  const reduce = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
-  const start = performance.now()
-  const step = (now) => {
-    const t = reduce ? 1 : Math.min(1, (now - start) / 600)
-    const ease = 1 - Math.pow(1 - t, 3)
-    shown.value = targets.map((to, i) => Math.round(from[i] + (to - from[i]) * ease))
-    if (t < 1) frame = requestAnimationFrame(step)
-  }
-  frame = requestAnimationFrame(step)
-}, { immediate: true })
-onUnmounted(() => cancelAnimationFrame(frame))
+// The numbers flip in like an airport departure board (SplitFlap), then stay still.
 </script>
 
 <template>
@@ -41,7 +25,7 @@ onUnmounted(() => cancelAnimationFrame(frame))
       <div v-if="stats.length" class="col-lg-5">
         <div class="d-flex flex-wrap gap-2 justify-content-lg-end">
           <div v-for="(stat, i) in stats" :key="stat.label" class="pulse-stat" :class="`pulse-stat-${stat.tone || 'plain'}`">
-            <div class="pulse-stat-num">{{ shown[i] }}</div>
+            <div class="pulse-stat-num"><SplitFlap :value="stat.value" :delay="i * 80" /></div>
             <div class="pulse-stat-label">{{ stat.label }}</div>
           </div>
         </div>
