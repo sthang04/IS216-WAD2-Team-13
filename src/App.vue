@@ -709,7 +709,7 @@ onMounted(async () => {
  
         <!-- VIEW 4: Day-of Operations & Multi-Track Timeline -->
         <div v-show="currentView === 'operations'">
-          <OperationsView :api-mode="apiMode" :read-only="isGuest" />
+          <OperationsView :api-mode="apiMode" :active-persona="activePersona" :read-only="isGuest" />
         </div>
  
         <!-- VIEW 5: Event Risk Planning & What-If Simulator -->
