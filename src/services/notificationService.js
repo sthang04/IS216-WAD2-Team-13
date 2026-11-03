@@ -55,6 +55,17 @@ export async function createTelegramLinkCode() {
   return response.data
 }
 
+// true when the signed-in person's Telegram is linked to the bot.
+// Returns false (instead of failing) if the database function isn't installed yet.
+export async function fetchTelegramLinked() {
+  const response = await supabase.rpc('rpc_my_telegram_link')
+  if (response.error) {
+    console.log(response.error.message)
+    return false
+  }
+  return response.data === true
+}
+
 // Requests a Telegram account-linking code from Supabase.
 // The PostgreSQL RPC generates the code.
 // Supabase Edge Functions handle Telegram Bot API communication.

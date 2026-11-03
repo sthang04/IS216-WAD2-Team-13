@@ -4,7 +4,6 @@ import {
   SMU_CLUBS_DIRECTORY, 
   SSU_DEMERIT_POLICY, 
   calculateWaitlistCutoff, 
-  generateTransferEmailPayload 
 } from '../services/smuClubsDirectory';
 
 const props = defineProps({
@@ -142,7 +141,6 @@ const confirmedTransfers = computed(() => {
 // Administrative metrics
 const totalVenues = computed(() => props.slots.length);
 const pendingCount = computed(() => pendingTransfers.value.length);
-const marketplaceCount = computed(() => openMarketplaceSlots.value.length);
 const pendingSlimsCount = computed(() => slimsSubmissions.value.filter(s => !s.isEndorsed).length);
 const totalDemeritViolations = computed(() => clubComplianceLog.value.filter(c => c.demeritPoints > 0).length);
 
