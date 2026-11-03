@@ -741,13 +741,12 @@ onMounted(async () => {
             <span class="fw-semibold text-dark">Singapore Management University</span>
             <span class="text-muted">•</span>
             <span>Office of Student Life (OSL)</span>
-            <span class="text-muted">•</span>
-            <span>SMU Students' Association (SMUSA)</span>
+            
           </div>
           <div class="d-flex align-items-center gap-3 text-muted" style="font-size: 0.775rem;">
             <span>Pulse Co-Curricular & Arts Facilities Management</span>
-            <span class="text-muted">•</span>
-            <span>Connected to SMU OASIS</span>
+            
+            
           </div>
         </div>
       </footer>
