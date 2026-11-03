@@ -1,3 +1,4 @@
+import { requireEventRange, requireActivityRange } from './disruptionScheduleService.js'
 // Proposals stay hypothetical: merge choices here, then evaluate the complete
 // schedule before ranking. A high rank never supplies consent or booking approval.
 import { assessMemberReplacements, recommendFacilityRecovery, buildFacilityAndDelayRecoveryOptions } from './recoveryRecommendationService.js'
@@ -15,13 +16,14 @@ export function prepareDisruptionCards(data, eventId, cards) {
   const assigned = new Set((data.segment_assignments || []).filter(a => segments.some(s => same(s.id,a.segment_id))).map(a => String(a.member_id)))
   const linked = new Set((data.segment_facility_slots || []).filter(l => segments.some(s => same(s.id,l.segment_id))).map(l => String(l.facility_slot_id)))
   const venues = new Set((data.facility_slots || []).filter(s => linked.has(String(s.id))).map(s => s.venue_name))
+  const eventRange = requireEventRange(event)
   const ids = new Set()
   const timestamp = value => {
     const text = String(value || '')
-    const local = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(text)
-    const normalized = local ? text + ':00+08:00' : text
+    const local = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d{1,3})?)?$/.test(text)
+    const normalized = local ? text + (text.length === 16 ? ':00' : '') + '+08:00' : text
     if (!/(Z|[+-]\d{2}:\d{2})$/.test(normalized) || !Number.isFinite(Date.parse(normalized))) throw new Error('Enter valid Singapore date/time values.')
-    if (local && new Date(Date.parse(normalized) + 8 * 3600000).toISOString().slice(0,16) !== text) throw new Error('Invalid calendar date.')
+    if (local && new Date(Date.parse(normalized) + 8 * 3600000).toISOString().slice(0,text.length) !== text) throw new Error('Invalid calendar date.')
     return new Date(normalized).toISOString()
   }
   return cards.map((card,index) => {
@@ -32,11 +34,18 @@ export function prepareDisruptionCards(data, eventId, cards) {
       const segment = segments.find(s => same(s.id,card.segmentId))
       const delayMinutes = Number(card.delayMinutes)
       if (!segment || !Number.isInteger(delayMinutes) || delayMinutes <= 0 || delayMinutes > 1440) throw new Error('Disruption '+(index+1)+': select an activity and a whole delay from 1 to 1440 minutes.')
+      // Delay begins at the selected activity's scheduled start. Bound its original
+      // interval only: the delayed finish can legitimately exceed the event end.
+      requireActivityRange(eventRange, segment)
       return {...base,segmentId:segment.id,delayMinutes}
     }
     if (!['MEMBER_UNAVAILABLE','FACILITY_UNAVAILABLE'].includes(card.type)) throw new Error('Unsupported disruption type.')
     const start = timestamp(card.start), end = timestamp(card.end)
     if (Date.parse(start) >= Date.parse(end)) throw new Error('Disruption '+(index+1)+': end must be after start.')
+    // Resource outages are event-level intervals and may span concurrent activities
+    // or gaps. The engine targets affected assignments/bookings by actual overlap.
+    if (Date.parse(start) < eventRange.start || Date.parse(end) > eventRange.end)
+      throw new Error('Disruption '+(index+1)+': choose an interval within the selected event schedule (Singapore time).')
     if (card.type === 'MEMBER_UNAVAILABLE') {
       const member = (data.members || []).find(m => same(m.id,card.memberId) && assigned.has(String(m.id)))
       if (!member) throw new Error('Select a member assigned to this event.')

@@ -9,8 +9,8 @@ async function bootSimulation(page){
  await page.route('https://**',r=>r.abort())
  await page.route('**/src/services/simulationDataService.js*',r=>r.fulfill({contentType:'application/javascript',body:"import {campusConnectFixture} from '/e2e-simulator/fixtures/campusConnect.js';export async function loadSimulationData(){return campusConnectFixture()}"}))
  await page.goto('/e2e-simulator/harness.html')
- await page.getByLabel('Unavailable from (Singapore)',{exact:true}).fill('2026-11-02T10:00')
- await page.getByLabel('Unavailable until (Singapore)',{exact:true}).fill('2026-11-02T10:30')
+ await page.getByLabel('Unavailable from (Singapore)',{exact:true}).selectOption('2026-11-02T10:00')
+ await page.getByLabel('Unavailable until (Singapore)',{exact:true}).selectOption('2026-11-02T10:30')
  await act(page,page.getByRole('button',{name:'Run combined simulation (1)',exact:true}))
  await expect(page.getByText('Simulation complete',{exact:true})).toBeVisible()
 }
