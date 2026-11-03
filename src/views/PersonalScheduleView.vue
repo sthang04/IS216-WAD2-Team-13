@@ -70,7 +70,7 @@ const SMU_BUILDINGS = [
 ];
 
 // Initial Schedule Events with structured building names & room details
-const scheduleEvents = ref([
+const defaultEvents = [
   {
     id: 1,
     title: 'IS216 Web Application Development II (G1)',
@@ -147,7 +147,33 @@ const scheduleEvents = ref([
     notes: 'Verify studio equipment inventory and lock up keys per SSU Clause 9.2(c).',
     isCustom: false
   }
-]);
+];
+
+// ---- Saving: events are stored in this browser (localStorage) so they survive a page refresh ----
+const storageKey = computed(() => `pulse-schedule-${props.activePersona.email || props.activePersona.name}`)
+
+function loadSavedEvents() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(storageKey.value))
+    if (Array.isArray(saved)) return saved
+  } catch (e) { /* ignore corrupted or blocked storage */ }
+  return null
+}
+
+function sampleEvents() {
+  return JSON.parse(JSON.stringify(defaultEvents)) // a fresh copy of the sample data
+}
+
+// Start from the saved schedule if there is one, otherwise the sample data
+const scheduleEvents = ref(loadSavedEvents() ?? sampleEvents())
+
+// Save whenever anything changes (add, edit, delete, status toggle)
+watch(scheduleEvents, (events) => {
+  try { localStorage.setItem(storageKey.value, JSON.stringify(events)) } catch (e) { /* storage full or blocked */ }
+}, { deep: true })
+
+// If the logged-in persona changes, load that persona's own saved schedule
+watch(storageKey, () => { scheduleEvents.value = loadSavedEvents() ?? sampleEvents() })
 
 // All events, in order of date then start time
 const sortedEvents = computed(() =>
