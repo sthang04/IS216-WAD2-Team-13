@@ -4,7 +4,8 @@
 // Where a signed-in person's details come from (Supabase):
 //   auth.users -> members (auth_user_id) -> club_memberships -> exco_roles
 // The view v_user_club_memberships joins these: one row per CCA membership.
-// The old exco_members table is no longer read here.
+// The old exco_members table is no longer read here. Sign-up functions:
+// supabase/migrations/20261103000100_pulse_signup_self_roles.sql
  
 import { supabase, isSupabaseConfigured } from '../supabase'
 import { DEMO_PERSONAS, GUEST_PERSONA, DEMO_PASSWORD } from './authProfiles'
@@ -236,7 +237,7 @@ export async function checkSignupEligibility(email) {
   if (result.status === 'already_registered') {
     throw new Error('This email already has an account. Sign in instead.')
   }
-  return { email: normalized, ccas: result.ccas, roles: result.roles || [] }
+  return { email: normalized, fullName: result.full_name || '', ccas: result.ccas, roles: result.roles || [] }
 }
 
 // Sign-up step 2: create the account, then save their own name, Telegram handle and role.

@@ -27,6 +27,8 @@ async function handleCheckEmail() {
     email.value = result.email
     ccas.value = result.ccas
     roles.value = result.roles
+    // Prefill with the name OSL whitelisted; they can still correct it
+    if (result.fullName) fullName.value = result.fullName
     for (const cca of result.ccas) positions[cca] = positions[cca] || ''
     step.value = 2
   } catch (err) {
