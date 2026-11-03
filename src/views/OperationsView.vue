@@ -823,6 +823,12 @@ function undoCheckIn(person) {
   showToast(`${person.name} is no longer checked in.`)
 }
 
+function clearLate(person) {
+  if (blockedForGuest()) return
+  person.late = ''
+  showToast(`${person.name} is no longer marked late.`)
+}
+
 /* ================================================================== */
 /* 12. STANDBY FINDER + NOTICE PARSER (under "More tools")             */
 /* ================================================================== */
@@ -1230,8 +1236,11 @@ function parseNoticeWithAi() {
                 <span v-else-if="checkInStatus(p) === 'late'" class="badge bg-warning text-dark" style="font-size: 0.65rem;">Running late</span>
                 <span v-else class="badge bg-light text-muted border" style="font-size: 0.65rem;">{{ callTime(p) === null ? 'No tasks yet' : `Due ${formatTime(callTime(p))}` }}</span>
               </div>
-              <div class="text-muted ops-small">{{ p.role }} • {{ p.phone }}</div>
-              <div v-if="checkInStatus(p) === 'late'" class="text-secondary ops-small fw-semibold">{{ p.late }}</div>
+              <div class="text-muted ops-small">{{ p.role }}<template v-if="p.phone"> • {{ p.phone }}</template></div>
+              <div v-if="checkInStatus(p) === 'late'" class="text-secondary ops-small fw-semibold d-flex align-items-center gap-2">
+                {{ p.late }}
+                <button type="button" class="btn btn-link p-0 text-muted text-decoration-none lh-1" :title="`${p.name} isn't late`" :aria-label="`Clear late for ${p.name}`" @click="clearLate(p)">✕</button>
+              </div>
               <div v-else-if="checkInStatus(p) === 'missing'" class="text-danger ops-small fw-semibold">Was due at {{ formatTime(callTime(p)) }}, not checked in</div>
 
               <div v-if="checkInStatus(p) !== 'due'" class="d-flex gap-2 mt-1">
