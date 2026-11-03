@@ -1,8 +1,9 @@
 <script setup>
-import { ref, computed, watch } from 'vue';
+import { ref, computed, watch, onMounted } from 'vue';
+import { supabase } from '../supabase'; // Ensure relative path to your supabase client is correct
 
 const props = defineProps({
-  apiMode: { type: Boolean, default: false },
+  apiMode: { type: Boolean, default: true },
   readOnly: { type: Boolean, default: false }
 });
 
@@ -14,13 +15,11 @@ const emit = defineEmits(['back', 'meeting-scheduled']);
 const showClassBaseline = ref(true)
 const toastMsg = ref('')
 
-// Show a message at the top for a few seconds
 function showToast(msg, ms = 4000) {
   toastMsg.value = msg
   setTimeout(() => { toastMsg.value = '' }, ms)
 }
 
-// Guests can look around but not make changes
 function blockedForGuest() {
   if (!props.readOnly) return false
   showToast('Guest view is read-only. Sign in as a CCA ExCo to make changes.')
@@ -28,7 +27,7 @@ function blockedForGuest() {
 }
 
 /* ================================================================== */
-/* 2. DATE HELPERS (turn dates into text and back)                     */
+/* 2. DATE HELPERS                                                    */
 /* ================================================================== */
 const WEEKDAYS_SHORT = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 const WEEKDAYS_LONG = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
@@ -36,11 +35,8 @@ const MONTHS_SHORT = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'S
 const MONTHS_LONG = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
 
 function pad(n) { return String(n).padStart(2, '0') }
-
-// Date -> "2026-10-16"
 function toISO(dt) { return `${dt.getFullYear()}-${pad(dt.getMonth() + 1)}-${pad(dt.getDate())}` }
 
-// "2026-10-16" -> Date (or null if empty)
 function parseISO(s) {
   if (!s) return null
   const [y, m, d] = s.split('-').map(Number)
@@ -48,26 +44,24 @@ function parseISO(s) {
 }
 
 function addDays(dt, n) { return new Date(dt.getFullYear(), dt.getMonth(), dt.getDate() + n) }
-
-// Mon = 0, Tue = 1, ... Sun = 6 (JS normally starts the week on Sunday)
 function dayIndex(dt) { return (dt.getDay() + 6) % 7 }
 function mondayOf(dt) { return addDays(dt, -dayIndex(dt)) }
 
-function shortLabel(dt) { return `${WEEKDAYS_SHORT[dt.getDay()]} ${dt.getDate()} ${MONTHS_SHORT[dt.getMonth()]}` }               // Fri 16 Oct
-function longLabel(dt) { return `${WEEKDAYS_LONG[dt.getDay()]}, ${dt.getDate()} ${MONTHS_LONG[dt.getMonth()]} ${dt.getFullYear()}` } // Friday, 16 October 2026
+function shortLabel(dt) { return `${WEEKDAYS_SHORT[dt.getDay()]} ${dt.getDate()} ${MONTHS_SHORT[dt.getMonth()]}` }
+function longLabel(dt) { return `${WEEKDAYS_LONG[dt.getDay()]}, ${dt.getDate()} ${MONTHS_LONG[dt.getMonth()]} ${dt.getFullYear()}` }
 
-function hourLabel(h) { return `${pad(h)}:00` }          // 8 -> "08:00"
-function hourNum(label) { return parseInt(label, 10) }   // "08:00" -> 8
+function hourLabel(h) { return `${pad(h)}:00` }
+function hourNum(label) { return parseInt(label, 10) }
 
 /* ================================================================== */
 /* 3. WEEK NAVIGATION                                                  */
 /* ================================================================== */
-const EXAMPLE_WEEK_START = new Date(2026, 9, 12) // Mon 12 Oct 2026
-const weekStart = ref(EXAMPLE_WEEK_START)        // the Monday of the week being shown
+const EXAMPLE_WEEK_START = mondayOf(new Date()) // Defaults to current week's Monday
+const weekStart = ref(EXAMPLE_WEEK_START)
 
 const weekKey = computed(() => toISO(weekStart.value))
 const weekDates = computed(() => Array.from({ length: 7 }, (_, i) => addDays(weekStart.value, i)))
-const days = computed(() => weekDates.value.map(shortLabel)) // column headings
+const days = computed(() => weekDates.value.map(shortLabel))
 
 const weekRangeLabel = computed(() => {
   const first = weekDates.value[0]
@@ -75,54 +69,109 @@ const weekRangeLabel = computed(() => {
   return `${first.getDate()} ${MONTHS_SHORT[first.getMonth()]} – ${last.getDate()} ${MONTHS_SHORT[last.getMonth()]} ${last.getFullYear()}`
 })
 
-function shiftWeek(n) { weekStart.value = addDays(weekStart.value, n * 7) }
+function shiftWeek(n) {
+  weekStart.value = addDays(weekStart.value, n * 7)
+}
 function goToExampleWeek() { weekStart.value = EXAMPLE_WEEK_START }
 
 /* ================================================================== */
-/* 4. AVAILABILITY DATA                                                */
+/* 4. AVAILABILITY DATA & SUPABASE INTEGRATION                         */
 /* ================================================================== */
 const hours = ['08:00', '09:00', '10:00', '11:00', '12:00', '13:00', '14:00', '15:00', '16:00', '17:00', '18:00', '19:00', '20:00', '21:00']
 const TOTAL_MEMBERS = 12
 const CURRENT_USER_ID = 1 // Rachel Tan
 
-// Example data: how many of the 12 members are free. Rows = Mon..Sun, columns = the hours above.
-// TODO (apiMode): replace with a Supabase query for the week being shown.
-// For now EVERY week shows this same example data.
+// Fallback example baseline count for OTHER 11 members if database has no records yet
 const EXAMPLE_MATRIX = [
-  [0, 8, 0, 4, 8, 0, 4, 0, 0, 0, 0, 8, 4, 0], // Mon
-  [0, 0, 4, 8, 4, 0, 0, 8, 0, 4, 8, 8, 4, 0], // Tue
-  [0, 0, 8, 0, 0, 0, 0, 0, 4, 8, 4, 0, 0, 8], // Wed
-  [4, 8, 0, 4, 0, 8, 4, 0, 8, 11, 11, 4, 8, 0], // Thu
-  [8, 4, 0, 0, 8, 0, 0, 4, 11, 11, 11, 8, 4, 0], // Fri
-  [0, 0, 4, 8, 0, 4, 0, 8, 4, 0, 0, 4, 0, 4], // Sat
-  [4, 0, 8, 4, 0, 0, 8, 0, 4, 8, 8, 4, 0, 8]  // Sun
+  [0, 8, 0, 4, 8, 0, 4, 0, 0, 0, 0, 8, 4, 0],
+  [0, 0, 4, 8, 4, 0, 0, 8, 0, 4, 8, 8, 4, 0],
+  [0, 0, 8, 0, 0, 0, 0, 0, 4, 8, 4, 0, 0, 8],
+  [4, 8, 0, 4, 0, 8, 4, 0, 8, 11, 11, 4, 8, 0],
+  [8, 4, 0, 0, 8, 0, 0, 4, 11, 11, 11, 8, 4, 0],
+  [0, 0, 4, 8, 0, 4, 0, 8, 4, 0, 0, 4, 0, 4],
+  [4, 0, 8, 4, 0, 0, 8, 0, 4, 8, 8, 4, 0, 8]
 ]
 
-// Slots where YOU start off as available (Set is empty so no default slots are selected)
-const INITIAL_MINE = new Set()
+// Stores fetched Supabase records: { "dayIndex_hourIndex": Set(user_ids) }
+const dbAvailabilityMap = ref({})
+const isLoadingDb = ref(false)
 
-// Slots you have clicked. Key = "weekKey|dayIndex|hourIndex", value = true (available) or false (not available)
+// Slots you have clicked: Key = "weekKey|dayIndex|hourIndex", value = true/false
 const myClicks = ref({})
 
-// Are YOU available in this slot? (your click if you made one, otherwise the starting value)
-// Are YOU available in this slot? (Returns your click choice if made, otherwise defaults to false)
+// Fetch availability records for current week from Supabase
+async function fetchWeekAvailability() {
+  if (!supabase) return
+  isLoadingDb.value = true
+
+  try {
+    const { data, error } = await supabase
+      .from('exco_availability')
+      .select('user_id, day_index, hour_index, is_available')
+      .eq('week_key', weekKey.value)
+      .eq('is_available', true)
+
+    if (error) throw error
+
+    const map = {}
+    const userClicks = {}
+
+    if (data) {
+      data.forEach(row => {
+        const key = `${row.day_index}_${row.hour_index}`
+        if (!map[key]) map[key] = new Set()
+        map[key].add(row.user_id)
+
+        // Sync local click state for the current logged in user
+        if (row.user_id === CURRENT_USER_ID) {
+          userClicks[`${weekKey.value}|${row.day_index}|${row.hour_index}`] = true
+        }
+      })
+    }
+
+    dbAvailabilityMap.value = map
+    myClicks.value = { ...myClicks.value, ...userClicks }
+  } catch (err) {
+    console.warn('Supabase fetch failed, utilizing baseline matrix:', err.message)
+  } finally {
+    isLoadingDb.value = false
+  }
+}
+
+// Watch weekKey changes to load data dynamically
+watch(weekKey, () => {
+  fetchWeekAvailability()
+}, { immediate: true })
+
+// Are YOU available in this slot?
 function isMine(wk, d, h) {
   const clicked = myClicks.value[`${wk}|${d}|${h}`]
   return clicked === undefined ? false : clicked
 }
 
-// How many members are free in this slot? 
-// EXAMPLE_MATRIX holds the base count of OTHER members available (e.g. 11/12).
-// We simply add 1 if YOU click the slot as available.
+// Compute total free members dynamically from Supabase or fallback matrix
 function getCount(wk, d, h) {
+  const key = `${d}_${h}`
+  const userSet = dbAvailabilityMap.value[key]
+
+  if (userSet && userSet.size > 0) {
+    let count = userSet.size
+    const userInSet = userSet.has(CURRENT_USER_ID)
+    const localMine = isMine(wk, d, h)
+    
+    // Adjust real-time if local state differs from synced database state
+    if (localMine && !userInSet) count++
+    if (!localMine && userInSet) count--
+    
+    return Math.max(0, Math.min(TOTAL_MEMBERS, count))
+  }
+
+  // Fallback if no database data exists for this week
   const baseOthersCount = EXAMPLE_MATRIX[d][h]
   const myStatus = isMine(wk, d, h) ? 1 : 0
-
-  const count = baseOthersCount + myStatus
-  return Math.max(0, Math.min(TOTAL_MEMBERS, count))
+  return Math.max(0, Math.min(TOTAL_MEMBERS, baseOthersCount + myStatus))
 }
 
-// Colour rule: below 50% = red, 50-75% = yellow, above 75% = green
 function heatClass(count) {
   const percent = count / TOTAL_MEMBERS
   if (percent < 0.5) return 'avail-red'
@@ -130,12 +179,20 @@ function heatClass(count) {
   return 'avail-green'
 }
 
-// Which members are free in this slot? (Example names only, there is no per-person data yet.)
-// We keep the order of the other 11 members, rotate it differently each day, and say the first N are free.
 function freeMemberIds(wk, d, h) {
+  const key = `${d}_${h}`
+  const userSet = dbAvailabilityMap.value[key]
+
+  if (userSet && userSet.size > 0) {
+    const ids = Array.from(userSet)
+    const mine = isMine(wk, d, h)
+    if (mine && !ids.includes(CURRENT_USER_ID)) ids.push(CURRENT_USER_ID)
+    if (!mine && ids.includes(CURRENT_USER_ID)) return ids.filter(id => id !== CURRENT_USER_ID)
+    return ids
+  }
+
   const mine = isMine(wk, d, h)
   const othersFreeCount = getCount(wk, d, h) - (mine ? 1 : 0)
-
   const others = allMembers.filter(m => m.id !== CURRENT_USER_ID)
   const shift = (d * 4) % others.length
   const rotated = [...others.slice(shift), ...others.slice(0, shift)]
@@ -145,12 +202,32 @@ function freeMemberIds(wk, d, h) {
   return freeIds
 }
 
-// Click on a heatmap cell = toggle your own availability
-function handleCellClick(d, h, dIdx, hIdx) {
+// Dynamic Click & Supabase Upsert
+async function handleCellClick(d, h, dIdx, hIdx) {
   if (blockedForGuest()) return
-  
+
   const nowAvailable = !isMine(weekKey.value, dIdx, hIdx)
   myClicks.value[`${weekKey.value}|${dIdx}|${hIdx}`] = nowAvailable
+
+  // Write change to Supabase
+  if (supabase) {
+    try {
+      const { error } = await supabase
+        .from('exco_availability')
+        .upsert({
+          user_id: CURRENT_USER_ID,
+          week_key: weekKey.value,
+          day_index: dIdx,
+          hour_index: hIdx,
+          is_available: nowAvailable,
+          updated_at: new Date().toISOString()
+        }, { onConflict: 'user_id,week_key,day_index,hour_index' })
+
+      if (error) throw error
+    } catch (err) {
+      console.error('Failed to sync availability to Supabase:', err.message)
+    }
+  }
 
   const total = getCount(weekKey.value, dIdx, hIdx)
   const deltaText = nowAvailable ? '+1' : '-1'
@@ -160,20 +237,16 @@ function handleCellClick(d, h, dIdx, hIdx) {
 }
 
 /* ================================================================== */
-/* 5. CLASS BLOCKS (same every week)                                   */
+/* 5. CLASS BLOCKS & REMINDERS                                        */
 /* ================================================================== */
 function isClassBlock(dIdx, hIdx) {
   if (dIdx === 0 && hIdx >= 7 && hIdx <= 9) return true   // Mon: CS101
   if (dIdx === 2 && hIdx >= 7 && hIdx <= 10) return true  // Wed: IS216
   return false
 }
-// Only drawn on the grid when the toggle button is on
 function isClassSlot(dIdx, hIdx) { return showClassBaseline.value && isClassBlock(dIdx, hIdx) }
 function getClassName(dIdx) { return dIdx === 0 ? 'CS101' : dIdx === 2 ? 'IS216' : '' }
 
-/* ================================================================== */
-/* 6. TELEGRAM REMINDERS                                               */
-/* ================================================================== */
 const unconfirmedMembers = ref([
   { name: 'Darren Koh', role: 'Performance Lead', handle: '@darrenk' },
   { name: 'Marcus Tan', role: 'Stage Manager', handle: '@marcustan' },
@@ -191,29 +264,25 @@ function pingAllOnTelegram() {
 }
 
 /* ================================================================== */
-/* 7. AI SCHEDULING ENGINE: find every slot where all 12 are free      */
+/* 6. AI SCHEDULING ENGINE                                             */
 /* ================================================================== */
-const refreshCount = ref(0)       // goes up by 1 on every refresh, which makes bestMatches recalculate
+const refreshCount = ref(0)
 const isRefreshing = ref(false)
 const lastRefreshed = ref(new Date())
 const lastRefreshedLabel = computed(() => `${pad(lastRefreshed.value.getHours())}:${pad(lastRefreshed.value.getMinutes())}`)
 
-function refreshMatches() {
+async function refreshMatches() {
   if (isRefreshing.value) return
   isRefreshing.value = true
-  // TODO (apiMode): re-query Supabase here before recalculating
-  setTimeout(() => {
-    refreshCount.value++
-    lastRefreshed.value = new Date()
-    isRefreshing.value = false
-    showToast('Scheduling engine refreshed with the latest ExCo availability.', 3000)
-  }, 700)
+  await fetchWeekAvailability()
+  refreshCount.value++
+  lastRefreshed.value = new Date()
+  isRefreshing.value = false
+  showToast('Scheduling engine refreshed with live Supabase ExCo availability.', 3000)
 }
 
-// The most members free in any single slot this week (class blocks are skipped).
-// This is 12 if there is a slot where everyone is free, otherwise 11, 10, and so on.
 const bestCount = computed(() => {
-  refreshCount.value // read it so this recalculates when Refresh is pressed
+  refreshCount.value
   let best = 0
   for (let d = 0; d < 7; d++) {
     for (let h = 0; h < hours.length; h++) {
@@ -223,14 +292,12 @@ const bestCount = computed(() => {
   return best
 })
 
-// Is this slot one of the best ones this week?
 function isBestSlot(d, h) {
   return !isClassBlock(d, h) && getCount(weekKey.value, d, h) === bestCount.value
 }
 
-// Go through each day and join consecutive best slots into one window (e.g. 16:00 - 19:00)
 const bestMatches = computed(() => {
-  if (bestCount.value === 0) return [] // nobody is free at all
+  if (bestCount.value === 0) return []
   const matches = []
 
   for (let d = 0; d < 7; d++) {
@@ -243,7 +310,7 @@ const bestMatches = computed(() => {
           iso: toISO(weekDates.value[d]),
           label: longLabel(weekDates.value[d]),
           start: hours[startHour],
-          end: hourLabel(8 + h), // the hours list starts at 08:00
+          end: hourLabel(8 + h),
           duration: h - startHour
         })
       } else {
@@ -255,12 +322,10 @@ const bestMatches = computed(() => {
 })
 
 /* ================================================================== */
-/* 8. PICK ANY DATE + SEE WHO IS UNAVAILABLE                           */
+/* 7. MEETING SELECTION & FORM                                         */
 /* ================================================================== */
-const selectedSlot = ref({ date: '2026-10-16', start: '16:00', end: '19:00' })
-
+const selectedSlot = ref({ date: toISO(new Date()), start: '16:00', end: '19:00' })
 const startOptions = hours
-// "To" can only be later than "From"
 const endOptions = computed(() =>
   [...hours, '22:00'].filter(t => hourNum(t) > hourNum(selectedSlot.value.start))
 )
@@ -272,20 +337,17 @@ function selectMatch(m) {
   selectedSlot.value = { date: m.iso, start: m.start, end: m.end }
 }
 
-// If "From" moves past "To", push "To" forward
 watch(() => selectedSlot.value.start, () => {
   if (!endOptions.value.includes(selectedSlot.value.end)) {
     selectedSlot.value.end = endOptions.value[0]
   }
 })
 
-// When you pick a new date, show that date's week in the grid
 watch(() => selectedSlot.value.date, (newDate) => {
   const dt = parseISO(newDate)
   if (dt) weekStart.value = mondayOf(dt)
 })
 
-// Works out who is free / unavailable for the selected date and time window
 const slotReport = computed(() => {
   const dt = parseISO(selectedSlot.value.date)
   if (!dt) return null
@@ -293,13 +355,13 @@ const slotReport = computed(() => {
   const wk = toISO(mondayOf(dt))
   const d = dayIndex(dt)
   const firstHour = hourNum(selectedSlot.value.start)
-  const lastHour = hourNum(selectedSlot.value.end) // not included
+  const lastHour = hourNum(selectedSlot.value.end)
 
-  const busyHoursByMember = {} // memberId -> list of hours they are unavailable
+  const busyHoursByMember = {}
   let classClash = ''
 
   for (let hour = firstHour; hour < lastHour; hour++) {
-    const h = hour - 8 // position in the hours list
+    const h = hour - 8
     if (isClassBlock(d, h)) classClash = getClassName(d)
 
     const freeIds = freeMemberIds(wk, d, h)
@@ -324,12 +386,12 @@ const slotReport = computed(() => {
 })
 
 /* ================================================================== */
-/* 9. MEETING FORM + MODAL                                             */
+/* 8. MODAL & EXPORT                                                   */
 /* ================================================================== */
 const showMeetingModal = ref(false)
 const meetingConfirmed = ref(false)
 const meetingForm = ref({
-  date: 'Friday, 16 October 2026',
+  date: longLabel(new Date()),
   time: '16:00 – 19:00',
   title: 'SMU Eurhythmix — Arts Festival Run-of-Show Alignment',
   venue: 'SMU Connexion Meeting Room 3',
@@ -352,7 +414,6 @@ const allMembers = [
   { id: 12, name: 'Valerie Chee', handle: '@valeriec', role: 'Front-of-House Manager', subcommittee: 'Marketing' },
 ]
 
-// Who receives the Telegram broadcast (starts with everyone)
 const selectedRecipientIds = ref([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12])
 const recipientSearch = ref('')
 
@@ -367,28 +428,20 @@ const filteredRecipients = computed(() => {
   )
 })
 
-function selectAllRecipients() {
-  selectedRecipientIds.value = allMembers.map(m => m.id)
-}
-function selectDancersOnly() {
-  selectedRecipientIds.value = allMembers.filter(m => m.subcommittee === 'Dancers').map(m => m.id)
-}
-function selectLogisticsOnly() {
-  selectedRecipientIds.value = allMembers.filter(m => m.subcommittee === 'Logistics' || m.subcommittee === 'Technical').map(m => m.id)
-}
-function selectExecutiveOnly() {
-  selectedRecipientIds.value = allMembers.filter(m => m.subcommittee === 'Executive').map(m => m.id)
-}
+function selectAllRecipients() { selectedRecipientIds.value = allMembers.map(m => m.id) }
+function selectDancersOnly() { selectedRecipientIds.value = allMembers.filter(m => m.subcommittee === 'Dancers').map(m => m.id) }
+function selectLogisticsOnly() { selectedRecipientIds.value = allMembers.filter(m => m.subcommittee === 'Logistics' || m.subcommittee === 'Technical').map(m => m.id) }
+function selectExecutiveOnly() { selectedRecipientIds.value = allMembers.filter(m => m.subcommittee === 'Executive').map(m => m.id) }
+
 function toggleRecipient(id) {
   if (selectedRecipientIds.value.includes(id)) {
-    if (selectedRecipientIds.value.length === 1) return // keep at least 1
+    if (selectedRecipientIds.value.length === 1) return
     selectedRecipientIds.value = selectedRecipientIds.value.filter(i => i !== id)
   } else {
     selectedRecipientIds.value.push(id)
   }
 }
 
-// Open the modal, filled in with the date and time chosen in the "Meeting Slot" card
 function openMeetingModal() {
   if (blockedForGuest()) return
   const dt = parseISO(selectedSlot.value.date)
@@ -401,7 +454,7 @@ function confirmAndBroadcastMeeting() {
   meetingConfirmed.value = true
   showMeetingModal.value = false
 
-  exportToCalendar(meetingForm.value) // downloads the .ics file
+  exportToCalendar(meetingForm.value)
 
   const count = selectedRecipientIds.value.length
   const sampleHandles = allMembers
@@ -413,7 +466,6 @@ function confirmAndBroadcastMeeting() {
 
   showToast(`Meeting scheduled! Telegram broadcast dispatched to ${count} members (${handlesText}) with agenda and calendar invite.`, 6000)
 
-  // Tell App.vue so it can add this to the notifications bell
   emit('meeting-scheduled', {
     title: meetingForm.value.title,
     day: meetingForm.value.date,
@@ -424,17 +476,12 @@ function confirmAndBroadcastMeeting() {
   })
 }
 
-/* ================================================================== */
-/* 10. CALENDAR (.ics) EXPORT                                          */
-/* ================================================================== */
-// "2026-10-16" + "16:00" -> "20261016T080000Z" (Singapore is 8 hours ahead of UTC)
 function toUtcStamp(iso, time) {
   const [y, m, d] = iso.split('-').map(Number)
   const utc = new Date(Date.UTC(y, m - 1, d, hourNum(time) - 8))
   return utc.toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '')
 }
 
-// Uses the date and time currently chosen in the "Meeting Slot" card
 function exportToCalendar(details = null) {
   const slot = selectedSlot.value
   if (!parseISO(slot.date)) {
@@ -465,7 +512,6 @@ function exportToCalendar(details = null) {
     'END:VCALENDAR'
   ].join('\r\n')
 
-  // Make a temporary download link and click it
   const blob = new Blob([icsContent], { type: 'text/calendar;charset=utf-8' })
   const link = document.createElement('a')
   link.href = window.URL.createObjectURL(blob)
