@@ -352,14 +352,25 @@ async function handleManualLogin() {
 
     <!-- Cohesive Enterprise Container: Desktop & Laptop Dimension Optimized -->
     <div class="container-fluid position-relative" style="max-width: 1320px; z-index: 1;">
+      
+      <!-- Mobile-only Top Brand Lockup (Cleanly introduces Pulse at the top of phone screens) -->
+      <div class="d-lg-none text-center mb-3 reveal" style="--d: 0;">
+        <div class="d-inline-flex flex-column align-items-center">
+          <PulseWordmark class="landing-wordmark-mobile" />
+          <span class="text-muted fw-semibold mt-1" style="font-size: 0.72rem; letter-spacing: 0.01em;">
+            Singapore Management University • Facilities &amp; Operations
+          </span>
+        </div>
+      </div>
+
       <div class="row align-items-center g-4 g-xl-5">
         
         <!-- Left Column: Unified Value Proposition & Interactive Live Operations Telemetry -->
         <div class="col-12 col-lg-6 col-xl-6 order-2 order-lg-1">
           <div class="pe-lg-4">
             
-            <!-- Brand lockup: Pulse wordmark | SMU campus portal -->
-            <div class="landing-brand mb-4 reveal" style="--d: 0;">
+            <!-- Desktop Brand lockup: Pulse wordmark | SMU campus portal -->
+            <div class="landing-brand mb-4 reveal d-none d-lg-flex" style="--d: 0;">
               <PulseWordmark class="landing-wordmark" />
               <span class="landing-brand-divider" aria-hidden="true"></span>
               <span class="landing-brand-org">
@@ -368,11 +379,22 @@ async function handleManualLogin() {
               </span>
             </div>
 
-            <h1 class="landing-headline mb-3 reveal" style="--d: 1;">
+            <!-- Mobile-only Section Title for Feature Preview -->
+            <div class="d-lg-none text-center mb-3 pt-3 border-top">
+              <span class="badge bg-danger bg-opacity-10 text-danger rounded-pill px-3 py-1 fw-bold" style="font-size: 0.68rem; letter-spacing: 0.05em;">
+                LIVE CAPABILITIES DEMO
+              </span>
+              <h2 class="h6 fw-bold mt-2 mb-1" style="color: var(--pulse-ink);">Centralised Facilities &amp; Operations</h2>
+              <p class="text-muted small mb-3" style="font-size: 0.78rem;">
+                Interactive preview: studio transfers, availability heatmaps &amp; event contingency simulations.
+              </p>
+            </div>
+
+            <h1 class="landing-headline mb-3 reveal d-none d-lg-block" style="--d: 1;">
               Centralised Facilities &amp; Operations
             </h1>
 
-            <p class="text-muted mb-4 reveal" style="--d: 2; font-size: 0.95rem; line-height: 1.6;">
+            <p class="text-muted mb-4 reveal d-none d-lg-block" style="--d: 2; font-size: 0.95rem; line-height: 1.6;">
               A centralised co-curricular management platform for <strong>SMU</strong> student clubs, performance groups, and Office of Student Life (OSL) administrators. Simplifies arts studio handovers, automates waitlists for in-demand venues, and streamlines rehearsal logistics across the city campus.
             </p>
 
@@ -380,7 +402,7 @@ async function handleManualLogin() {
             <LandingFeatureDemo class="mb-4 reveal" style="--d: 3;" />
 
             <!-- Security Assurance Note -->
-            <div class="d-flex align-items-center gap-2 text-muted small reveal" style="--d: 4; font-size: 0.775rem;">
+            <div class="d-flex align-items-center justify-content-center justify-content-lg-start gap-2 text-muted small reveal" style="--d: 4; font-size: 0.775rem;">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
                 <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
@@ -392,8 +414,8 @@ async function handleManualLogin() {
         </div>
 
         <!-- Right Column: Liquid Glass Sign-In Portal (Order-1 on Mobile so no scrolling required) -->
-        <div class="col-12 col-lg-6 col-xl-6 order-1 order-lg-2 d-flex justify-content-center justify-content-lg-end mb-4 mb-lg-0">
-          <div class="pulse-card liquid-glass-card p-4 p-xl-4 shadow-lg border w-100 position-relative reveal" style="--d: 2; max-width: 560px;">
+        <div class="col-12 col-lg-6 col-xl-6 order-1 order-lg-2 d-flex justify-content-center justify-content-lg-end mb-2 mb-lg-0">
+          <div class="pulse-card liquid-glass-card p-3 p-sm-4 p-xl-4 shadow-lg border w-100 position-relative reveal" style="--d: 2; max-width: 560px;">
             
             <!-- Sleek Enterprise Header (Clean Dimensions, No Overlapping Pulsing Dots) -->
             <div class="d-flex align-items-center justify-content-between mb-3 pb-3 border-bottom flex-wrap gap-2">
@@ -1140,10 +1162,42 @@ async function handleManualLogin() {
   color: var(--pulse-ink);
 }
 
+@media (max-width: 991.98px) {
+  .pulse-bg-rings {
+    display: none !important;
+  }
+  .liquid-orb {
+    display: none !important;
+  }
+  .pulse-login-canvas {
+    padding-top: 1.25rem !important;
+    padding-bottom: 2rem !important;
+    padding-left: 0.5rem !important;
+    padding-right: 0.5rem !important;
+    justify-content: flex-start !important;
+    overflow-x: hidden !important;
+    max-width: 100vw !important;
+  }
+  .liquid-glass-card {
+    padding: 1.25rem 1rem !important;
+    border-radius: 1.25rem !important;
+    width: 100% !important;
+    max-width: 100% !important;
+  }
+  .landing-wordmark-mobile {
+    font-size: 2.25rem;
+    font-weight: 900;
+    line-height: 1;
+    letter-spacing: -0.02em;
+    display: inline-flex;
+    align-items: center;
+  }
+}
+
 @media (max-width: 575.98px) {
   .landing-brand { flex-direction: column; align-items: flex-start; gap: 10px; }
   .landing-brand-divider { display: none; }
-  .landing-wordmark { font-size: 3.5rem; }
+  .landing-wordmark { font-size: 2.75rem; }
   .landing-brand-org { font-size: 0.72rem; }
   .landing-brand-org .text-muted { font-size: 0.66rem; }
 }
