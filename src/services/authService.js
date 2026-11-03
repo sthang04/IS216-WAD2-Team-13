@@ -175,22 +175,43 @@ export async function signIn(email, password) {
   if (!isSmuEmail(normalized)) {
     throw new Error('Restricted: please sign in with your @smu.edu.sg email.')
   }
- 
+
+  const demoPersona = findPersonaByEmail(normalized)
+
   if (isSupabaseConfigured() && supabase) {
     const response = await supabase.auth.signInWithPassword({ email: normalized, password: password })
     if (response.error) {
+      // If Supabase authentication returned an error (e.g. demo account not yet in Supabase auth),
+      // check if this is an official demo persona with the shared demo password
+      if (demoPersona && password === DEMO_PASSWORD) {
+        console.warn(`[auth] Supabase auth returned ${response.error.message}; activating demo persona fallback for ${normalized}`)
+        writeLocalSession({ email: normalized })
+        sessionPersona = demoPersona
+        return demoPersona
+      }
       if (response.error.message === 'Invalid login credentials') {
         throw new Error('Incorrect email or password.')
       }
       throw new Error(response.error.message)
     }
- 
+
     let persona = null
     try {
       persona = await personaForSignedInEmail(normalized)
     } catch (error) {
       console.log(error.message)
     }
+
+    // If signed into Supabase Auth but has no active CCA membership row in DB
+    // (e.g. Dev Admin whose credentials exist in auth.users but has no row in v_user_club_memberships),
+    // fall back cleanly to the built-in demo persona
+    if (!persona && demoPersona) {
+      console.warn(`[auth] Supabase user has no database membership rows; falling back to demo persona for ${normalized}`)
+      writeLocalSession({ email: normalized })
+      sessionPersona = demoPersona
+      return demoPersona
+    }
+
     if (!persona) {
       await supabase.auth.signOut()
       throw new Error(NOT_EXCO_MESSAGE)
@@ -199,7 +220,7 @@ export async function signIn(email, password) {
     sessionPersona = persona
     return persona
   }
- 
+
   // Offline fallback (no Supabase keys): demo accounts with the shared demo password only
   const persona = findPersonaByEmail(normalized)
   if (!persona) {
@@ -212,7 +233,7 @@ export async function signIn(email, password) {
   sessionPersona = persona
   return persona
 }
- 
+
 // Sign-up step 1: does this email have a members row with an active CCA, and no login yet?
 // OSL adds the club_memberships row (role EXCO_MEMBER); roles = what the person may pick next.
 export async function checkSignupEligibility(email) {
@@ -291,7 +312,7 @@ export async function restoreSession() {
   if (isSupabaseConfigured() && supabase) {
     const response = await supabase.auth.getSession()
     const authSession = response.data.session
- 
+
     if (authSession) {
       let persona = null
       try {
@@ -303,29 +324,33 @@ export async function restoreSession() {
         sessionPersona = persona
         return persona
       }
-      // Signed in to Supabase but has no active CCA membership
+      // Signed in to Supabase but has no active CCA membership in database
+      const demo = findPersonaByEmail(authSession.user.email)
+      if (demo) {
+        sessionPersona = demo
+        return demo
+      }
       await supabase.auth.signOut()
     }
-  } else {
-    const saved = readLocalSession()
-    let persona = null
-    if (saved) {
-      persona = findPersonaByEmail(saved.email)
-    }
-    if (persona) {
-      sessionPersona = persona
-      return persona
-    }
   }
- 
+
   const saved = readLocalSession()
+  let persona = null
+  if (saved && saved.email) {
+    persona = findPersonaByEmail(saved.email)
+  }
+  if (persona) {
+    sessionPersona = persona
+    return persona
+  }
+
   if (saved && saved.guest) {
     sessionPersona = GUEST_PERSONA
     return GUEST_PERSONA
   }
   return null
 }
- 
+
 // Who is signed in right now (the router's page guard reads this)
 export function currentSessionPersona() {
   return sessionPersona
