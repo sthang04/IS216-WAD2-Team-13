@@ -876,16 +876,7 @@ async function handleManualLogin() {
               </transition>
             </div>
 
-            <!-- Guest Explorer Link (Card Footer) -->
-            <div class="border-top pt-3 mt-3 text-center">
-              <button 
-                type="button" 
-                class="btn btn-link text-muted small text-decoration-none guest-link"
-                @click="emit('explore')"
-              >
-                Skip sign-in and explore live facility calendar as guest →
-              </button>
-            </div>
+
 
             <!-- Interactive Authenticating / Fun Fact Screen Overlay -->
             <transition name="loading-fade">
