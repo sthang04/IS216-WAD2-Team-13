@@ -28,6 +28,20 @@ export const ALL_CLUBS = [
   'ACF ExCo',
 ];
 
+// Deprecated guest placeholder for unauthenticated initial states
+export const GUEST_PERSONA = {
+  id: 'guest',
+  name: 'Guest',
+  email: null,
+  role: 'guest',
+  roleLabel: 'Guest (View Only)',
+  cca: null,
+  allowedClubs: [],
+  isDev: false,
+  sector: 'Public',
+  smartSearches: ['Dance Studio', 'Acoustic Room', 'All Venues'],
+};
+
 // Shared password for the demo accounts below
 export const DEMO_PASSWORD = 'Password123!';
 
@@ -62,12 +76,12 @@ export const DEMO_PERSONAS = {
     name: 'Marcus Lim',
     email: 'marcus.lim.2024@socsc.smu.edu.sg',
     role: 'club',
-    roleLabel: 'SMU Symphonia ExCo',
-    cca: 'Symphonia',
-    allowedClubs: ['Symphonia'],
+    roleLabel: 'Eurhythmix Marketing Director',
+    cca: 'Eurhythmix',
+    allowedClubs: ['Eurhythmix'],
     isDev: false,
     sector: 'ACF • Arts & Culture',
-    smartSearches: ['SMU Hall', 'Acoustic Room', 'Instrument Storage', 'Connexion'],
+    smartSearches: ['Studio L7.2', 'Dance Studio', 'Sprung Floor', 'Connexion'],
   },
   chloe: {
     id: 'chloe',
@@ -93,18 +107,4 @@ export const DEMO_PERSONAS = {
     sector: 'System Administration',
     smartSearches: ['All Venues', 'Studio L7.2', 'Pending Admin Sign-off', 'Waitlist > 1', 'Dance Studio'],
   },
-};
-
-// Anyone exploring without signing in: can view, cannot act
-export const GUEST_PERSONA = {
-  id: 'guest',
-  name: 'Guest',
-  email: null,
-  role: 'guest',
-  roleLabel: 'Guest (View Only)',
-  cca: null,
-  allowedClubs: [],
-  isDev: false,
-  sector: 'Public',
-  smartSearches: ['Dance Studio', 'Acoustic Room', 'All Venues'],
 };

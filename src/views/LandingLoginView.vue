@@ -3,6 +3,7 @@ import { ref, computed, onMounted, onUnmounted } from 'vue';
 import { DEMO_PERSONAS, DEMO_PASSWORD } from '../services/authProfiles';
 import { signIn, isSmuEmail as checkSmuEmail, findPersonaByEmail } from '../services/authService';
 import PasswordVisibilityToggle from '../components/PasswordVisibilityToggle.vue';
+import { playLoginSuccessChime } from '../utils/soundEffects';
 
 const emit = defineEmits(['login', 'explore', 'signup']);
 
@@ -76,6 +77,7 @@ async function handleQuickLogin(personaKey) {
   if (!p) return;
   email.value = p.email;
   password.value = DEMO_PASSWORD;
+  playLoginSuccessChime();
   await completeLogin(p.email, DEMO_PASSWORD);
 }
 
@@ -87,21 +89,6 @@ function handleMouseMove(e) {
   const rect = e.currentTarget.getBoundingClientRect()
   mouseX.value = ((e.clientX - rect.left) / rect.width - 0.5) * 24
   mouseY.value = ((e.clientY - rect.top) / rect.height - 0.5) * 24
-}
-
-// Mascot Cat dynamic tracking (peeks on left or right side based on cursor proximity)
-const catSide = ref('right')
-const isButtonHovered = ref(false)
-
-function handleButtonMouseMove(e) {
-  const rect = e.currentTarget.getBoundingClientRect()
-  const mouseXRel = e.clientX - rect.left
-  catSide.value = mouseXRel < rect.width / 2 ? 'left' : 'right'
-  isButtonHovered.value = true
-}
-
-function handleButtonLeave() {
-  isButtonHovered.value = false
 }
 
 // SMU Domain Validation & ExCo list preview (same rules the sign-in uses)
@@ -281,6 +268,7 @@ async function completeLogin(loginEmail, loginPassword) {
       } catch {}
     }
     
+    playLoginSuccessChime()
     setTimeout(() => {
       isAuthenticating.value = false
       emit('login', persona)
@@ -716,35 +704,8 @@ async function handleManualLogin() {
                 </div>
               </div>
 
-              <!-- Sign In CTA with Side-Peeking Mascot Cat & Hover Animation -->
-              <div 
-                class="sign-in-btn-wrapper position-relative"
-                @mousemove="handleButtonMouseMove"
-                @mouseleave="handleButtonLeave"
-              >
-                <!-- Peeking Mascot Cat Animation (Smaller, pops out on left or right depending on cursor proximity) -->
-                <div 
-                  class="peeking-mascot-cat"
-                  :class="[catSide, { 'is-active': isButtonHovered }]"
-                >
-                  <div class="cat-bubble">
-                    <span>meow! 🐾</span>
-                  </div>
-                  <svg width="28" height="26" viewBox="0 0 60 50" fill="none" class="peeking-cat-svg">
-                    <polygon points="12,24 6,4 24,14" fill="#fda4af" stroke="#e11d48" stroke-width="2.5" class="ear-l" />
-                    <polygon points="48,24 54,4 36,14" fill="#fda4af" stroke="#e11d48" stroke-width="2.5" class="ear-r" />
-                    <ellipse cx="30" cy="32" rx="22" ry="18" fill="#ffffff" stroke="#e11d48" stroke-width="2.5" />
-                    <path d="M20,28 Q24,23 28,28" stroke="#1e293b" stroke-width="2.2" stroke-linecap="round" fill="none" />
-                    <path d="M32,28 Q36,23 40,28" stroke="#1e293b" stroke-width="2.2" stroke-linecap="round" fill="none" />
-                    <polygon points="30,33 27,30 33,30" fill="#f43f5e" />
-                    <path d="M26,36 Q30,39 30,34 Q30,39 34,36" stroke="#1e293b" stroke-width="1.8" stroke-linecap="round" fill="none" />
-                    <circle cx="16" cy="33" r="3" fill="#fecdd3" opacity="0.9" />
-                    <circle cx="44" cy="33" r="3" fill="#fecdd3" opacity="0.9" />
-                    <ellipse cx="18" cy="46" rx="5" ry="3.5" fill="#ffffff" stroke="#e11d48" stroke-width="2" />
-                    <ellipse cx="42" cy="46" rx="5" ry="3.5" fill="#ffffff" stroke="#e11d48" stroke-width="2" />
-                  </svg>
-                </div>
-
+              <!-- Sign In CTA -->
+              <div class="mt-3">
                 <button 
                   type="submit" 
                   class="btn btn-pulse-primary w-100 py-2.5 fw-bold d-flex align-items-center justify-content-center gap-2 shadow-sm pulse-submit-btn text-white position-relative"
@@ -839,7 +800,7 @@ async function handleManualLogin() {
                   </div>
 
                   <div class="row g-2">
-                    <!-- Persona 1: Rachel Tan -->
+                    <!-- Persona 1: Rachel Tan (Eurhythmix LD) -->
                     <div class="col-12 col-sm-6">
                       <button 
                         type="button" 
@@ -849,13 +810,30 @@ async function handleManualLogin() {
                       >
                         <div class="me-1 text-truncate">
                           <strong class="d-block text-dark text-truncate" style="font-size: 0.76rem;">Rachel Tan</strong>
-                          <small class="text-muted d-block text-truncate" style="font-size: 0.66rem;">Eurhythmix ExCo</small>
+                          <small class="text-muted d-block text-truncate" style="font-size: 0.66rem;">Eurhythmix Logistics Lead</small>
                         </div>
-                        <span class="badge bg-danger bg-opacity-10 text-danger border flex-shrink-0" style="font-size: 0.65rem;">Arts</span>
+                        <span class="badge bg-success bg-opacity-10 text-success border border-success-subtle flex-shrink-0" style="font-size: 0.65rem;">Full LD</span>
                       </button>
                     </div>
 
-                    <!-- Persona 2: Darren Koh -->
+                    <!-- Persona 2: Marcus Lim (Eurhythmix MD - Non-LD RBAC View Only Demo) -->
+                    <div class="col-12 col-sm-6">
+                      <button 
+                        type="button" 
+                        class="btn btn-sm btn-outline-warning w-100 text-start p-2 rounded-3 d-flex justify-content-between align-items-center bg-white persona-tile h-100 border-warning border-opacity-50"
+                        :disabled="isSubmitting"
+                        @click="handleQuickLogin('marcus')"
+                        title="Click to see View-Only RBAC restrictions on facility calendar"
+                      >
+                        <div class="me-1 text-truncate">
+                          <strong class="d-block text-dark text-truncate" style="font-size: 0.76rem;">Marcus Lim</strong>
+                          <small class="text-muted d-block text-truncate" style="font-size: 0.66rem;">Eurhythmix Marketing Lead</small>
+                        </div>
+                        <span class="badge bg-warning bg-opacity-20 text-dark border border-warning-subtle flex-shrink-0 fw-bold" style="font-size: 0.65rem;">🔒 RBAC View</span>
+                      </button>
+                    </div>
+
+                    <!-- Persona 3: Darren Koh -->
                     <div class="col-12 col-sm-6">
                       <button 
                         type="button" 
@@ -867,11 +845,11 @@ async function handleManualLogin() {
                           <strong class="d-block text-dark text-truncate" style="font-size: 0.76rem;">Darren Koh</strong>
                           <small class="text-muted d-block text-truncate" style="font-size: 0.66rem;">Samba Masala ExCo</small>
                         </div>
-                        <span class="badge bg-warning bg-opacity-25 text-dark border flex-shrink-0" style="font-size: 0.65rem;">Samba</span>
+                        <span class="badge bg-secondary-subtle text-dark border flex-shrink-0" style="font-size: 0.65rem;">Samba</span>
                       </button>
                     </div>
 
-                    <!-- Persona 3: Chloe Ang -->
+                    <!-- Persona 4: Chloe Ang -->
                     <div class="col-12 col-sm-6">
                       <button 
                         type="button" 
@@ -887,8 +865,8 @@ async function handleManualLogin() {
                       </button>
                     </div>
 
-                    <!-- Persona 4: Dev Administrator -->
-                    <div class="col-12 col-sm-6">
+                    <!-- Persona 5: Dev Administrator -->
+                    <div class="col-12">
                       <button 
                         type="button" 
                         class="btn btn-sm btn-outline-secondary w-100 text-start p-2 rounded-3 d-flex justify-content-between align-items-center bg-white persona-tile h-100"
@@ -897,7 +875,7 @@ async function handleManualLogin() {
                       >
                         <div class="me-1 text-truncate">
                           <strong class="d-block text-dark text-truncate" style="font-size: 0.76rem;">Dev Administrator</strong>
-                          <small class="text-muted d-block text-truncate" style="font-size: 0.66rem;">All CCAs Super-Admin</small>
+                          <small class="text-muted d-block text-truncate" style="font-size: 0.66rem;">All 24 CCAs Access • System Super-Admin</small>
                         </div>
                         <span class="badge text-white flex-shrink-0" style="background-color: var(--pulse-purple-transit); font-size: 0.65rem;">Dev</span>
                       </button>
@@ -907,15 +885,15 @@ async function handleManualLogin() {
               </transition>
             </div>
 
-            <!-- Guest Explorer Link (Card Footer) -->
-            <div class="border-top pt-3 mt-3 text-center">
-              <button 
-                type="button" 
-                class="btn btn-link text-muted small text-decoration-none guest-link"
-                @click="emit('explore')"
-              >
-                Skip sign-in and explore live facility calendar as guest →
-              </button>
+            <!-- Institutional Security Note (Strict RBAC Governance) -->
+            <div class="border-top pt-2.5 mt-3 text-center">
+              <span class="text-muted d-inline-flex align-items-center gap-1.5" style="font-size: 0.72rem;">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+                  <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+                </svg>
+                Restricted SMU ExCo portal • SSO & Role-Based Access Control Enforced
+              </span>
             </div>
 
             <!-- Interactive Authenticating / Fun Fact Screen Overlay -->
@@ -925,24 +903,12 @@ async function handleManualLogin() {
                 class="position-absolute top-0 start-0 w-100 h-100 d-flex flex-column justify-content-center align-items-center p-4 rounded-4 auth-loading-overlay text-center"
                 style="z-index: 25;"
               >
-                <!-- Animated Mascot Cat Head & Crown -->
-                <div class="auth-mascot-container mb-3 position-relative">
-                  <div class="supreme-crown">👑</div>
-                  <div class="mascot-cat-face">
-                    <svg width="76" height="76" viewBox="0 0 100 100" fill="none" class="cat-svg">
-                      <polygon points="18,36 10,8 36,22" fill="#fda4af" stroke="#e11d48" stroke-width="3" stroke-linejoin="round" class="cat-ear-left" />
-                      <polygon points="82,36 90,8 64,22" fill="#fda4af" stroke="#e11d48" stroke-width="3" stroke-linejoin="round" class="cat-ear-right" />
-                      <circle cx="50" cy="54" r="38" fill="#ffffff" stroke="#e11d48" stroke-width="3.5" />
-                      <path d="M34,48 Q40,42 46,48" stroke="#1e293b" stroke-width="3.5" stroke-linecap="round" fill="none" />
-                      <path d="M54,48 Q60,42 66,48" stroke="#1e293b" stroke-width="3.5" stroke-linecap="round" fill="none" />
-                      <polygon points="50,56 46,52 54,52" fill="#f43f5e" />
-                      <path d="M44,61 Q50,66 50,58 Q50,66 56,61" stroke="#1e293b" stroke-width="2.5" stroke-linecap="round" fill="none" />
-                      <line x1="22" y1="52" x2="38" y2="55" stroke="#94a3b8" stroke-width="2" stroke-linecap="round" />
-                      <line x1="20" y1="60" x2="38" y2="60" stroke="#94a3b8" stroke-width="2" stroke-linecap="round" />
-                      <line x1="78" y1="52" x2="62" y2="55" stroke="#94a3b8" stroke-width="2" stroke-linecap="round" />
-                      <line x1="80" y1="60" x2="62" y2="60" stroke="#94a3b8" stroke-width="2" stroke-linecap="round" />
-                      <circle cx="28" cy="58" r="5" fill="#fecdd3" opacity="0.8" />
-                      <circle cx="72" cy="58" r="5" fill="#fecdd3" opacity="0.8" />
+                <!-- Clean Pulse Institutional Security Shield -->
+                <div class="mb-3 position-relative">
+                  <div class="rounded-circle d-flex align-items-center justify-content-center mx-auto shadow-sm" style="width: 58px; height: 58px; background: #fff1f2; border: 1.5px solid #fda4af;">
+                    <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#e11d48" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                      <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
+                      <path d="m9 12 2 2 4-4"></path>
                     </svg>
                   </div>
                 </div>
@@ -1168,82 +1134,8 @@ async function handleManualLogin() {
 }
 
 /* ==========================================================================
-   Sign In Button & Peeking Cat Mascot
+   Interactive Mascot Cat (GitHub / ReadMe Style - Prof K's Orange Cat)
    ========================================================================== */
-.sign-in-btn-wrapper {
-  margin-top: 0.25rem;
-}
-
-/* Side-Peeking Mascot Cat (Pops out from left or right edge beside the button) */
-.peeking-mascot-cat {
-  position: absolute;
-  top: 50%;
-  z-index: 10;
-  pointer-events: none;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  opacity: 0;
-  transition: all 0.28s cubic-bezier(0.34, 1.56, 0.64, 1);
-}
-
-/* Left side peeking: peeks out from the left edge */
-.peeking-mascot-cat.left {
-  left: -8px;
-  transform: translateY(-50%) translateX(16px) scale(0.6) rotate(-8deg);
-}
-
-.peeking-mascot-cat.left.is-active,
-.sign-in-btn-wrapper:hover .peeking-mascot-cat.left {
-  transform: translateY(-50%) translateX(-14px) scale(1) rotate(-8deg);
-  opacity: 1;
-}
-
-/* Right side peeking: peeks out from the right edge */
-.peeking-mascot-cat.right {
-  right: -8px;
-  transform: translateY(-50%) translateX(-16px) scale(0.6) rotate(8deg);
-}
-
-.peeking-mascot-cat.right.is-active,
-.sign-in-btn-wrapper:hover .peeking-mascot-cat.right {
-  transform: translateY(-50%) translateX(14px) scale(1) rotate(8deg);
-  opacity: 1;
-}
-
-.cat-bubble {
-  background: #ffffff;
-  border: 1.5px solid #fda4af;
-  color: #e11d48;
-  font-size: 0.54rem;
-  font-weight: 800;
-  padding: 1px 6px;
-  border-radius: 9999px;
-  box-shadow: 0 4px 10px rgba(225, 29, 72, 0.15);
-  margin-bottom: -2px;
-  white-space: nowrap;
-  animation: bubble-bounce 1s ease infinite alternate;
-}
-
-@keyframes bubble-bounce {
-  0% { transform: translateY(0); }
-  100% { transform: translateY(-3px); }
-}
-
-.sign-in-btn-wrapper:hover .ear-l {
-  animation: ear-twitch 0.8s ease infinite alternate;
-}
-
-.sign-in-btn-wrapper:hover .ear-r {
-  animation: ear-twitch 0.8s ease 0.2s infinite alternate;
-}
-
-@keyframes ear-twitch {
-  0% { transform: rotate(0deg); }
-  50% { transform: rotate(-8deg); }
-  100% { transform: rotate(0deg); }
-}
-
 /* Neutralize Safari & Chrome aggressive autofill solid blue/yellow background locks */
 input:-webkit-autofill,
 input:-webkit-autofill:hover, 
@@ -1446,13 +1338,6 @@ input:-webkit-autofill:active {
   box-shadow: 0 4px 12px rgba(225, 29, 72, 0.12);
 }
 
-.guest-link {
-  transition: color 0.15s ease;
-}
-
-.guest-link:hover {
-  color: var(--pulse-primary, #e11d48) !important;
-}
 
 /* ==========================================================================
    Interactive Auth Loading Screen Overlay
@@ -1462,51 +1347,6 @@ input:-webkit-autofill:active {
   backdrop-filter: blur(20px) saturate(180%);
   -webkit-backdrop-filter: blur(20px) saturate(180%);
   animation: fadeIn 0.25s ease-out;
-}
-
-.supreme-crown {
-  position: absolute;
-  top: -14px;
-  left: 50%;
-  transform: translateX(-50%) rotate(4deg);
-  font-size: 1.35rem;
-  z-index: 5;
-  animation: crown-float 1.5s ease-in-out infinite alternate;
-}
-
-@keyframes crown-float {
-  0% { transform: translateX(-50%) translateY(0) rotate(4deg); }
-  100% { transform: translateX(-50%) translateY(-3px) rotate(-2deg); }
-}
-
-.mascot-cat-face {
-  filter: drop-shadow(0 6px 16px rgba(225, 29, 72, 0.18));
-  animation: cat-breathe 2s ease-in-out infinite alternate;
-}
-
-@keyframes cat-breathe {
-  0% { transform: scale(1); }
-  100% { transform: scale(1.04); }
-}
-
-.cat-ear-left {
-  animation: ear-wiggle-left 1.8s infinite ease-in-out;
-  transform-origin: 20px 30px;
-}
-
-.cat-ear-right {
-  animation: ear-wiggle-right 1.8s infinite ease-in-out 0.3s;
-  transform-origin: 70px 30px;
-}
-
-@keyframes ear-wiggle-left {
-  0%, 100% { transform: rotate(0deg); }
-  50% { transform: rotate(-5deg); }
-}
-
-@keyframes ear-wiggle-right {
-  0%, 100% { transform: rotate(0deg); }
-  50% { transform: rotate(5deg); }
 }
 
 .loading-fade-enter-active,
