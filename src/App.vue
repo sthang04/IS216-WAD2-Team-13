@@ -529,17 +529,7 @@ onMounted(async () => {
               Reset Demo
             </button>
  
-            <!-- Toggle API Badges (Defaults to OFF; Toggleable for Pitch / Architecture review) -->
-            <button
-              type="button"
-              class="btn btn-sm rounded-pill fw-bold d-none d-xxl-flex align-items-center gap-1 pulse-api-toggle-btn"
-              :class="apiMode ? 'pulse-api-active' : 'pulse-api-inactive'"
-              title="Toggle API architecture tags across all views"
-              @click="apiMode = !apiMode"
-            >
-              <span class="pulse-toggle-indicator" :class="{ active: apiMode }"></span>
-              <span>APIs: {{ apiMode ? 'Visible' : 'Hidden' }}</span>
-            </button>
+
  
             <!-- One bell for the whole site (Pip's "Open notifications" opens it too) -->
             <NotificationBell />
