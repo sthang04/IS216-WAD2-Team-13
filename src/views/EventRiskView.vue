@@ -30,6 +30,7 @@ import {
 } from '../services/recoveryPlanEvaluationService.js'
 
 import PipMascot from '../components/PipMascot.vue'
+import {notificationStore, setPipStatic, setPipQuiet} from '../services/notificationStore'
 import SimulatorImpactWorkspace from '../components/SimulatorImpactWorkspace.vue'
 import SimulatorRecoveryWorkflow from '../components/SimulatorRecoveryWorkflow.vue'
 import {projectRecoveryPreview} from '../services/simulatorWorkflowService.js'
@@ -1601,6 +1602,10 @@ function proposedVenueFor(segment) {
     <PipMascot v-if="result"
     class="simulation-pip"
     mode="simulation"
+    :is-static="notificationStore.pipStatic"
+    @update:is-static="setPipStatic"
+    :is-quiet="notificationStore.pipQuiet"
+    @update:is-quiet="setPipQuiet"
     :result="result"
     />
 
