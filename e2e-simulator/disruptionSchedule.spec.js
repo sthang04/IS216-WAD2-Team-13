@@ -20,7 +20,7 @@ async function boot(page,change=()=>{}) {
 }
 const start=page=>page.getByLabel('Unavailable from (Singapore)',{exact:true})
 const end=page=>page.getByLabel('Unavailable until (Singapore)',{exact:true})
-const run=page=>page.getByRole('button',{name:/Run combined simulation/})
+const run=page=>page.getByRole('button',{name:/Run simulation/})
 
 test('single day initializes exact bounds, includes earliest/latest and fits viewport',async({page})=>{
  await boot(page)

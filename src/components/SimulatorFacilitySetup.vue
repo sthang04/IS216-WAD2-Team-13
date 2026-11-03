@@ -51,8 +51,9 @@ async function linkOriginal(){
 </script>
 <template>
  <section class="border rounded p-3 mt-3" aria-label="Event facility booking setup">
-  <h6 class="fw-bold">Event facility booking links</h6>
-  <p class="small">Claims, waitlists and approval stay in the Master Facility Calendar. Selecting or claiming a room there does not automatically link it to this event.</p>
+  <h6 class="fw-bold">Facility Bookings</h6>
+  <p class="small">{{ linkCount }} linked booking records. Linking associates an existing booking; it does not create or approve one.</p><details class="small"><summary>Booking workflow and approval</summary><p>Claims, waitlists and approval stay in the Master Facility Calendar. Selecting or claiming a room there does not automatically link it to this event.</p></details>
+  <h6 class="small fw-bold mt-3">1. Choose an activity</h6>
   <label for="facility-setup-activity" class="small fw-bold">Activity for calendar</label>
   <select id="facility-setup-activity" v-model="selectedId" class="form-select form-select-sm mb-2">
    <option v-for="row in rows" :key="row.segment.id" :value="row.segment.id">{{ row.segment.title }} | {{ row.segment.starts_at }} to {{ row.segment.ends_at }}</option>
@@ -61,7 +62,10 @@ async function linkOriginal(){
   <button type="button" class="btn btn-outline-secondary btn-sm" :disabled="busy" @click="emit('refresh')">Refresh booking information</button>
   <p v-if="!linkCount" class="small text-warning mt-2">This event has no loaded booking links. Open the calendar to inspect or claim an existing eligible slot. Vacant intervals cannot be booked here.</p>
   
+  <!-- Keep discovery, suitability confirmation and link activation unchanged.
+       These numbered sections explain existing operations, not a new booking. -->
   <div class="small border rounded p-2 my-2">
+   <h6 class="small fw-bold">2. Find an existing booking</h6>
    <button type="button" class="btn btn-outline-primary btn-sm" :disabled="busy || working || !selected" @click="discover">Find eligible original bookings</button>
    <p class="text-muted mb-1">Server-checked existing bookings only. Linking does not create, claim or approve a reservation.</p>
    <p v-if="!ORIGINAL_BOOKING_LINK_VERIFIED" class="text-warning">Original booking linking is unavailable in this environment. You can inspect existing bookings and arrange reservations in Facility Calendar.</p>
@@ -77,6 +81,7 @@ async function linkOriginal(){
     <div v-for="reason in candidate.verification_required || []" :key="reason">{{ reason }}</div>
     <SimulatorCalendarActions :facility-id="candidate.facility_id" :venue="candidate.facility_name" :start="selected?.segment.starts_at" :end="selected?.segment.ends_at" :event-club-id="event?.club_id" :event-club-name="event?.club_name" />
    </div>
+   <h6 class="small fw-bold mt-3">3. Verify and link</h6>
    <label class="d-block"><input v-model="confirmOriginal" type="checkbox" :disabled="working"> I confirm this booking and activity, actual audience capacity, required equipment and suitability.</label>
    <button type="button" class="btn btn-outline-primary btn-sm mt-1" :disabled="!ORIGINAL_BOOKING_LINK_VERIFIED || working || busy || !confirmOriginal || !chosenBooking?.eligible" @click="linkOriginal">Link approved booking to activity</button>
   </div>

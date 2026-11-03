@@ -7,7 +7,7 @@ import {simulatorCalendarTarget} from '../services/simulatorCalendarNavigation.j
 import { fetchActiveClubEntries } from '../services/waitlistService'
 import { session, activeMembership, canManageActiveClub } from '../services/sessionState'
 import { calendarOptionsForRecommendation, readSimulatorCalendarSnapshot } from '../services/simulatorCalendarIntegration.js'
-const props=defineProps({venue:String,facilityId:[String,Number],start:String,end:String,eventClubId:[String,Number],eventClubName:String})
+const props=defineProps({venue:String,facilityId:[String,Number],start:String,end:String,eventClubId:[String,Number],eventClubName:String,compact:{type:Boolean,default:false},requestLabel:String})
 const rows=ref(null),entries=ref([]),error=ref(''),busy=ref(false)
 // Increment on every context change so a slow response cannot show claim
 // eligibility for the previous club, room or time range.
@@ -45,8 +45,8 @@ onUnmounted(invalidate)
 </script>
 <template>
  <div class="small border-start ps-2 mt-1">
-  <RouterLink v-if="venue" :to="target" class="btn btn-outline-primary btn-sm me-2">View / Request this facility</RouterLink>
-  <button type="button" class="btn btn-outline-primary btn-sm" :disabled="busy" @click="refresh">{{ busy?'Checking calendar...':'Check / refresh actual slot status' }}</button>
+  <RouterLink v-if="venue" :to="target" class="btn btn-outline-primary btn-sm me-2">{{ requestLabel || (compact?'View / Request facility':'View / Request this facility') }}</RouterLink>
+  <button type="button" class="btn btn-outline-primary btn-sm" :disabled="busy" @click="refresh">{{ busy?(compact?'Refreshing...':'Checking calendar...'):(compact?'Refresh booking status':'Check / refresh actual slot status') }}</button>
   <div v-if="error" role="alert">{{ error }}</div>
   <div v-if="!clubMatches" class="text-muted">Select the event's club in the calendar. No claim eligibility is assumed for another club.</div>
   <div v-for="(option,index) in options" :key="option.bookingId ?? index" class="mt-1">
@@ -57,6 +57,6 @@ onUnmounted(invalidate)
         Simulator focus parameters select facility/time only; no mutation is triggered. -->
    <RouterLink :to="target" class="ms-2">Open in Calendar</RouterLink>
   </div>
-  <div class="text-muted">Snapshot only; calendar permissions and availability are rechecked when acting. No room is claimed here. After a claim, return and refresh. Pending approval never confirms a replacement.</div>
+  <details class="text-muted mt-1"><summary>Booking verification limits</summary><p class="mb-0">Snapshot only; calendar permissions and availability are rechecked when acting. No room is claimed here. After a claim, return and refresh. Pending approval never confirms a replacement.</p></details>
  </div>
 </template>

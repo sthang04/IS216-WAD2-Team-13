@@ -31,6 +31,9 @@ import {
 
 import { singaporeLocal as toSingaporeLocal, scheduleRange } from '../services/disruptionScheduleService.js'
 
+import SimulatorPlanComparison from '../components/SimulatorPlanComparison.vue'
+import SimulatorRecoveryPlanCard from '../components/SimulatorRecoveryPlanCard.vue'
+import SimulatorBackToTop from '../components/SimulatorBackToTop.vue'
 import PipMascot from '../components/PipMascot.vue'
 import {notificationStore, setPipStatic, setPipQuiet} from '../services/notificationStore'
 import SimulatorDisruptionInterval from '../components/SimulatorDisruptionInterval.vue'
@@ -134,6 +137,8 @@ async function selectCandidate(assessment,candidate){
 }
 function setOutageWindow(card,mode){card.intervalMode=mode;if(mode==='event'){card.start=toSingaporeLocal(selectedEvent.value?.starts_at);card.end=toSingaporeLocal(selectedEvent.value?.ends_at)}}
 const selectedRecoveryPlan = computed(() => rankedRecoveryPlans.value.find(p => p.id === selectedRecoveryId.value) || null)
+const displayScore=value=>typeof value==='number'&&Number.isFinite(value)?value+'/100':'Score unavailable'
+function openPlanEvidence(id){const details=document.getElementById('plan-evidence-'+id);if(details)details.open=true}
 function selectRecoveryPlan(id) {
   selectedSavedRecovery.value=null
   selectedRecoveryId.value = id
@@ -289,12 +294,8 @@ function createDisruption() {
     start: toSingaporeLocal(selectedEvent.value?.starts_at), end: toSingaporeLocal(selectedEvent.value?.ends_at) }
 }
 function addDisruption() { disruptionCards.value.push(createDisruption()) }
-// A preset uses a real selected-event activity and only changes preview inputs.
-function addDelayPreset(){
- if(!eventSegments.value.length)return
- const card=createDisruption();card.type='SCHEDULE_DELAY';card.delayMinutes=15
- disruptionCards.value.push(card)
-}
+// Add/Remove edits only this hypothetical session; persisted history is separate.
+
 function removeDisruption(id) {
   // Keep one editable card so the user can configure a fresh scenario.
   if (disruptionCards.value.length > 1) disruptionCards.value = disruptionCards.value.filter(d => d.id !== id)
@@ -334,13 +335,21 @@ function changeEvent(event) {
 function resetSession() { resetSelections() }
 function beforeUnload(event) { if(props.active && hasUnsavedWork.value) { event.preventDefault(); event.returnValue = '' } }
 // App.vue uses v-show; routed and KeepAlive consumers use the same local reset.
+// A tagged recovery calendar round trip preserves this hypothetical proposal.
+// Other navigation still uses the normal discard/reset behaviour.
+let recoveryCalendarTrip=false
+const recoveryCalendarTarget=to=>to.path==='/facilities'&&typeof to.query.simRecoveryToken==='string'&&!!to.query.simRecoveryToken
 const removeNavigationGuard = router.beforeEach((to,from) => {
-  if(props.active && (to.path !== from.path || to.query.eventId !== from.query.eventId || to.query.event_id !== from.query.event_id) && !confirmDiscard()) return false
+  if(props.active && !recoveryCalendarTarget(to) && (to.path !== from.path || to.query.eventId !== from.query.eventId || to.query.event_id !== from.query.event_id) && !confirmDiscard()) return false
 })
 const removeAfterNavigation = router.afterEach((to,from,failure) => {
-  if(!failure && to.path !== from.path && props.active) resetSelections()
+  if(failure)return
+  if(recoveryCalendarTarget(to)&&props.active){recoveryCalendarTrip=true;return}
+  if(recoveryCalendarTrip&&!to.path.startsWith('/facilities')&&!['/events','/'].includes(to.path))recoveryCalendarTrip=false
+  if(recoveryCalendarTrip&&['/events','/'].includes(to.path))return
+  if(to.path !== from.path && props.active) resetSelections()
 })
-watch(() => props.active, active => { if(active) { resetSelections(); adoptEventContext() } })
+watch(() => props.active, active => { if(active) { if(recoveryCalendarTrip){recoveryCalendarTrip=false;adoptEventContext();return} resetSelections(); adoptEventContext() } })
 function adoptEventContext() {
   const id = navigationEventId()
   if(id != null && events.value.some(e => String(e.id) === String(id))) selectedEventId.value = events.value.find(e => String(e.id) === String(id)).id
@@ -348,7 +357,7 @@ function adoptEventContext() {
 watch(() => [props.eventId, route.query.eventId, route.query.event_id], () => { if(props.active) adoptEventContext() })
 let wasDeactivated = false
 onDeactivated(() => { wasDeactivated = true })
-onActivated(() => { if(wasDeactivated) { resetSelections(); adoptEventContext(); wasDeactivated = false } })
+onActivated(() => { if(wasDeactivated) { if(!recoveryCalendarTrip)resetSelections();recoveryCalendarTrip=false; adoptEventContext(); wasDeactivated = false } })
 onMounted(() => window.addEventListener('beforeunload', beforeUnload))
 onUnmounted(() => { removeNavigationGuard(); removeAfterNavigation(); window.removeEventListener('beforeunload', beforeUnload) })
 
@@ -809,7 +818,7 @@ function proposedVenueFor(segment) {
           </span>
         </div>
 
-        <h3 class="fw-bold mb-1">
+        <h3 class="fw-bold mb-1" tabindex="-1">
           Event Control Room
         </h3>
 
@@ -859,71 +868,6 @@ function proposedVenueFor(segment) {
          KPI CARDS
     ==================================================== -->
 
-    <div v-if="result" class="d-flex justify-content-between align-items-center mb-2"><h5 class="fw-bold mb-0">Simulation overview</h5><span v-if="result" class="small text-muted" role="status">Simulation complete</span></div>
-    <div v-if="result" class="row g-3 mx-0 mb-4 simulator-metrics">
-
-      <div class="col-6 col-md-3">
-        <div class="pulse-card p-3 shadow-sm text-center">
-          <div
-            class="text-muted small text-uppercase fw-bold"
-            style="font-size: 0.65rem;"
-          >
-            Affected Activities
-          </div>
-
-          <div class="fw-bold fs-5 mt-1 text-danger">
-            {{ impactedCount ?? '-' }}
-          </div>
-        </div>
-      </div>
-
-      <div class="col-6 col-md-3">
-        <div class="pulse-card p-3 shadow-sm text-center">
-          <div
-            class="text-muted small text-uppercase fw-bold"
-            style="font-size: 0.65rem;"
-          >
-            Assignments Requiring Review
-          </div>
-
-          <div class="fw-bold fs-5 mt-1 text-warning">
-            {{ assignmentCount ?? '-' }}
-          </div>
-        </div>
-      </div>
-
-      <div class="col-6 col-md-3">
-        <div class="pulse-card p-3 shadow-sm text-center">
-          <div
-            class="text-muted small text-uppercase fw-bold"
-            style="font-size: 0.65rem;"
-          >
-            Potential Conflicts
-          </div>
-
-          <div class="fw-bold fs-5 mt-1 text-danger">
-            {{ conflictCount ?? '-' }}
-          </div>
-        </div>
-      </div>
-
-      <div class="col-6 col-md-3">
-        <div class="pulse-card p-3 shadow-sm text-center">
-          <div
-            class="text-muted small text-uppercase fw-bold"
-            style="font-size: 0.65rem;"
-          >
-            Recovery Feasibility
-          </div>
-
-          <div class="fw-bold mt-1" :class="bestRecoveryPlan?'text-success':'text-muted'">
-            {{ recoveryStatus }}
-          </div>
-        </div>
-      </div>
-
-    </div>
-
     <!-- ===================================================
          SCENARIO SANDBOX
     ==================================================== -->
@@ -944,7 +888,7 @@ function proposedVenueFor(segment) {
           </span>
 
           <h5 class="fw-bold mb-0">
-            Choose Disruption Scenarios
+            Scenario Builder
           </h5>
         </div>
 
@@ -957,6 +901,7 @@ function proposedVenueFor(segment) {
       </div>
 
       <!-- Original Add/Remove disruption-card pattern, now in the unified view. -->
+      <div class="scenario-builder-fields"><div class="scenario-event">
       <label class="small fw-bold" for="simulation-event">Event</label>
       <select id="simulation-event" :value="selectedEventId" @change="changeEvent" class="form-select form-select-sm mb-3" :disabled="loading">
         <option v-for="event in events" :key="event.id" :value="event.id">{{ event.name }}</option>
@@ -964,6 +909,7 @@ function proposedVenueFor(segment) {
       <p v-if="eventSchedule" class="small text-muted" data-testid="event-schedule">Event schedule (Singapore): {{ formatTime(selectedEvent.starts_at) }} to {{ formatTime(selectedEvent.ends_at) }}</p>
       <p v-else class="alert alert-warning small">This event has a missing or invalid schedule. Verify its start and end before simulating.</p>
       <p class="small text-muted">Add member, facility and delay disruptions together. Repeated delays on one activity accumulate. Times use Singapore time.</p>
+      </div><div class="scenario-disruptions">
       <div v-for="(d,index) in disruptionCards" :key="d.id" class="simulator-scenario-card mt-3 p-3 rounded-3 bg-light border">
         <div class="d-flex justify-content-between align-items-center mb-2">
           <strong>Disruption {{ index + 1 }}</strong>
@@ -1002,30 +948,30 @@ function proposedVenueFor(segment) {
           <label class="small fw-bold" :for="d.id + '-delay'">Delay (minutes)</label>
           <input :id="d.id + '-delay'" v-model.number="d.delayMinutes" type="number" min="1" max="1440" class="form-control form-control-sm">
         </template>
-        <p v-if="d.type==='FACILITY_UNAVAILABLE' && !eventLinkedBookings.length" class="small text-warning">No linked facility booking is available. Arrange the original booking in Facility Setup / Booking Readiness below before simulating an outage.</p>
+        <p v-if="d.type==='FACILITY_UNAVAILABLE' && !eventLinkedBookings.length" class="small text-warning">No linked facility booking is available. Arrange the original booking in Facility Bookings below before simulating an outage.</p>
         <div v-if="d.type==='FACILITY_UNAVAILABLE'" class="my-2"><label class="small fw-bold" :for="d.id+'-window'">Outage interval</label><select :id="d.id+'-window'" class="form-select form-select-sm" :value="d.intervalMode || 'custom'" @change="setOutageWindow(d,$event.target.value)"><option value="custom">Specific time interval</option><option value="event">Entire event</option></select></div>
         <SimulatorDisruptionInterval v-if="d.type !== 'SCHEDULE_DELAY'" :id="d.id" :index="index+1" :event="selectedEvent" v-model:start="d.start" v-model:end="d.end" :disabled="d.intervalMode==='event'" />
       </div>
 
+      </div></div>
       <div class="d-flex flex-wrap gap-2 mt-3">
-        <button type="button" class="btn btn-outline-secondary btn-sm" :disabled="loading || !eventSegments.length" @click="addDelayPreset">Add 15-min delay</button>
         <button type="button" class="btn btn-outline-secondary btn-sm" :disabled="loading" @click="addDisruption">Add disruption</button>
         <button type="button" class="btn btn-outline-secondary btn-sm" :disabled="loading" @click="resetSession">Reset Simulation</button>
-        <button type="button" class="btn btn-pulse-primary btn-sm" :disabled="loading || !canRunSimulation" @click="runSimulation">Run combined simulation ({{ disruptionCards.length }})</button>
+        <button type="button" class="btn btn-pulse-primary btn-sm" :disabled="loading || !canRunSimulation" @click="runSimulation">Run simulation ({{ disruptionCards.length }})</button>
       </div>
     </section>
     <section v-if="!result" class="pulse-card p-3 p-lg-4 align-self-start" aria-label="Start a simulation"><h5>Start a new simulation</h5><p>Choose an event, configure a member absence, facility outage or activity delay, then run the simulation to explore impacts and recovery plans.</p><p class="small text-muted mb-0">This is a hypothetical session. Saved recoveries, approvals and history remain available below.</p><p v-if="!loading && validationMessage" class="small mt-2 mb-0" role="status">{{ validationMessage }}</p></section>
+    </div>
     <SimulatorImpactWorkspace v-if="result" :data="impactData" :event-id="selectedEventId" :result="result"
       :disruptions="result ? buildDisruptions() : []" :recovery="comparedRecovery" :loading="loading" />
-    </div>
 
-    <section v-if="data && selectedEvent && hasFacilityDisruptions" class="pulse-card p-3 mb-4" aria-label="Facility readiness">
-     <div class="d-flex flex-wrap justify-content-between gap-2"><h6 class="fw-bold mb-1">Facility readiness</h6><button type="button" class="btn btn-outline-secondary btn-sm" @click="openFacilitySetup">Manage facility setup</button></div>
-     <p class="small mb-1">{{ bookingCoverage.linked }} of {{ bookingCoverage.total }} activities have loaded booking information. {{ bookingCoverage.linked===bookingCoverage.total?'Booking links are present; approvals and suitability still require verification.':'Some booking information is missing. Arrange original bookings before simulating affected rooms.' }}</p>
-     <p class="small text-muted mb-0">Hypothetical member and schedule simulations can continue. Facility recovery requires approved, suitable bookings before Apply.</p>
+    <section v-if="data && selectedEvent && hasFacilityDisruptions" class="pulse-card p-3 mb-4" style="margin-top:20px" aria-label="Facility Bookings">
+     <div class="d-flex flex-wrap justify-content-between gap-2"><div><h6 class="fw-bold mb-1">Facility Bookings</h6><span class="badge bg-light text-dark border">{{ bookingCoverage.linked }} of {{ bookingCoverage.total }} linked</span></div><button type="button" class="btn btn-outline-secondary btn-sm" @click="openFacilitySetup">Manage bookings</button></div>
+     <p class="small mt-2 mb-1">{{ bookingCoverage.total-bookingCoverage.linked }} activities need booking information. Linked records still require approval and suitability checks.</p>
+     <p class="small text-muted mb-0">Arrange or verify original bookings through Manage bookings.</p>
     </section>
-    <dialog ref="setupDialog" class="pulse-card facility-setup-dialog" aria-label="Facility setup administration">
-     <div class="d-flex justify-content-between gap-3"><h5 class="fw-bold">Facility setup</h5><button type="button" class="btn btn-outline-secondary btn-sm" @click="setupDialog.close()">Return to simulator</button></div>
+    <dialog ref="setupDialog" class="pulse-card facility-setup-dialog" aria-label="Manage Facility Bookings">
+     <div class="d-flex justify-content-between gap-3"><h5 class="fw-bold">Manage Facility Bookings</h5><button type="button" class="btn btn-outline-secondary btn-sm" @click="setupDialog.close()">Return to simulator</button></div>
      <SimulatorFacilitySetup v-if="data && selectedEvent" :initial-activity-id="setupActivityId" :data="data" :event-id="selectedEventId" :busy="loading" @refresh="refreshSimulator(true)" />
     </dialog>
     <!-- ===================================================
@@ -1048,7 +994,7 @@ function proposedVenueFor(segment) {
           </span>
 
           <h5 class="fw-bold mb-0">
-            Build your recovery
+            Recovery Builder
           </h5>
         </div>
 
@@ -1063,9 +1009,10 @@ function proposedVenueFor(segment) {
         </span>
       </div>
 
-      <p class="small text-muted">{{ recommendationTitle }}. Adjust individual options here, or select a complete proposal in the combined ranking.</p>
-      <p class="small recovery-selection-summary" role="status"><template v-if="selectedRecoveryPlan"><strong>Current preview: {{ selectedRecoveryPlan.title }}</strong><br>Selected options are highlighted below. Adjusting a choice recalculates a custom recovery; it does not change the live event.</template><template v-else>Choose member and facility options, or select a ranked recovery to start your preview.</template></p>
-      <p v-if="showMemberAvailabilityWarning" class="small text-muted" role="status">Candidate availability has not been confirmed. Check with your selected replacement before proceeding.</p>
+      <details v-if="result" class="small mb-2"><summary>Simulation checks</summary><p>{{ impactedCount }} affected activities &middot; {{ assignmentCount }} assignments requiring review &middot; {{ recoveryStatus }}. Feasibility does not confirm approval.</p></details>
+      <p class="small text-muted">Preview an alternative or choose a complete recovery plan below.</p>
+      <p class="small recovery-selection-summary" role="status"><template v-if="selectedRecoveryPlan"><strong>Current preview: {{ selectedRecoveryPlan.title }}</strong><br>Selected options are highlighted below. Adjusting a choice recalculates a custom recovery; it does not change the live event.</template><template v-else>Choose an alternative or a ranked plan to preview.</template></p>
+      <details v-if="showMemberAvailabilityWarning" class="small text-muted mb-2"><summary>Member availability limits</summary><p>Candidate availability has not been confirmed. Check with your selected replacement before proceeding.</p></details>
 
       <p
         v-if="!result"
@@ -1074,8 +1021,8 @@ function proposedVenueFor(segment) {
         Waiting for a successful simulation.
       </p>
 
-      <template v-if="result"><SimulatorCandidateChooser v-for="assessment in memberAssessments" :key="assessment.memberId" :assessment="assessment" :selected-id="previewMemberId(assessment.memberId)" @use="selectCandidate(assessment,$event)" /></template>
-      <SimulatorFacilityChoices v-if="result && hasFacilityDisruptions" :recommendations="facilityRecovery" :options="combinedAssessment.facilityOptions" :ranked-plans="rankedRecoveryPlans" :selected="displayedFacilityChoices" :data="data" :event="selectedEvent" @choose="chooseFacility" />
+      <div v-if="result" class="recovery-alternatives" :class="{both:memberAssessments.length && hasFacilityDisruptions}"><div v-if="memberAssessments.length"><SimulatorCandidateChooser v-for="assessment in memberAssessments" :key="assessment.memberId" :assessment="assessment" :selected-id="previewMemberId(assessment.memberId)" @use="selectCandidate(assessment,$event)" /></div>
+      <SimulatorFacilityChoices v-if="result && hasFacilityDisruptions" :recommendations="facilityRecovery" :options="combinedAssessment.facilityOptions" :ranked-plans="rankedRecoveryPlans" :selected="displayedFacilityChoices" :data="data" :event="selectedEvent" @choose="chooseFacility" /></div>
     </section>
     <!-- ===================================================
          RECOVERY PLAN EVALUATION RESULTS
@@ -1096,7 +1043,7 @@ function proposedVenueFor(segment) {
           </span>
 
           <h5 class="fw-bold mb-0">
-            Combined recovery ranking
+            Recovery Plan Ranking
           </h5>
         </div>
 
@@ -1105,12 +1052,7 @@ function proposedVenueFor(segment) {
         </span>
       </div>
 
-      <p class="small text-muted">
-        Evaluates concrete proposed recovery plans using
-        conflict resolution (40%), timetable preservation
-        (30%), member suitability and workload (20%) and venue suitability
-        (10%).
-      </p>
+      <details class="small text-muted mb-3"><summary>How plans are ranked</summary><p>Conflict resolution (40%), timetable preservation (30%), member suitability and workload (20%), venue suitability (10%). Existing evaluator scores are unchanged.</p></details>
 
       <p
         v-if="!result"
@@ -1120,63 +1062,10 @@ function proposedVenueFor(segment) {
       </p>
 
       <template v-else>
-
-        <div
-          v-if="bestRecoveryPlan"
-          class="alert alert-success small"
-        >
-          <strong>
-            Recommended Evaluated Option:
-          </strong>
-
-          {{ bestRecoveryPlan.title }}
-
-          <div class="mt-1">
-            Whole-plan score:
-            <strong>
-              {{ bestRecoveryPlan.score }}/100
-            </strong>
-          </div>
-
-          <div class="mt-1">
-            {{
-              bestRecoveryPlan.reasons.join('; ')
-            }}
-          </div>
-
-          <div class="mt-2">
-            Based on accessible records.
-            Organiser approval is still required.
-          </div>
-        </div>
-
-        <div
-          v-else
-          class="alert alert-warning small"
-        >
-          <strong>
-            No fully verified recovery plan yet.
-          </strong>
-
-          <div class="mt-1">
-            {{
-              recoveryEvaluation?.summary ||
-              'No recovery options could be evaluated.'
-            }}
-          </div>
-
-          <div
-            v-if="hasFacilityDisruptions"
-            class="mt-2"
-          >
-            Facility and schedule suggestions are now passed
-            into the evaluation algorithm as proposed changes.
-            Options may still require booking, capacity,
-            equipment or organiser verification.
-          </div>
-        </div>
-
-        <details class="small mb-3"><summary>Ranking method and shared verification requirements</summary><p>Member acceptance, organiser confirmation and approved facility booking evidence are required before applying relevant changes.</p><div class="alert alert-info small" role="status">
+        <p class="small score-colour-guide" aria-label="Score colour guide"><span class="score-green">80+</span> / <span class="score-amber">50-79</span> / <span class="score-rose">below 50</span> &middot; Score ranges only, never approval or readiness.</p>
+        <p v-if="!bestRecoveryPlan" class="small ranking-warning" role="status"><strong>No fully verified recovery plan yet.</strong> Review conflicts and missing evidence. Facility and timing proposals still require final validation.</p>
+        <p v-else class="small text-muted">Recommended proposal: {{ bestRecoveryPlan.title }}. Review requirements before applying.</p>
+        <details class="small mb-3"><summary>Ranking method and shared verification requirements</summary><p>{{ recoveryEvaluation?.summary }}</p><p>Member acceptance, organiser confirmation and approved facility booking evidence are required before applying relevant changes.</p><div class="alert alert-info small" role="status">
           <strong>Facility booking checks</strong>
           <div class="mt-1">
             Confirmed overlapping reservations are treated as conflicts.
@@ -1194,7 +1083,7 @@ function proposedVenueFor(segment) {
           </div>
         </div>
 
-        <p class="small text-muted">Overall options combine available building blocks and are checked against all selected disruptions. Search is limited to four choices per requirement and 64 combinations; this is not an exhaustive optimum. Individual member and facility suggestions remain available in Build your recovery. Missing choices and unresolved conflicts require organizer review.</p>
+        <p class="small text-muted">Overall options combine available building blocks and are checked against all selected disruptions. Search is limited to four choices per requirement and 64 combinations; this is not an exhaustive optimum. Individual member and facility suggestions remain available in Recovery Builder. Missing choices and unresolved conflicts require organizer review.</p>
         </details>
         <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
           <span class="small" role="status">{{ overallRankedPlans.length }} ranked plans / {{ displayedRankedPlans.length }} shown</span>
@@ -1203,186 +1092,7 @@ function proposedVenueFor(segment) {
         <p v-if="rankingLimit !== 'all' && displayedRankedPlans.length > Number(rankingLimit)" class="small text-muted">Your selected plan is also shown below the top {{ rankingLimit }}.</p>
         <!-- RANKED EVALUATED OPTIONS -->
 
-        <div
-          v-for="plan in displayedRankedPlans"
-          :key="plan.id"
-          class="p-3 border rounded-3 mb-3 recovery-choice" :class="{'is-selected': selectedRecoveryId===plan.id}" :data-plan-id="plan.id" :data-plan-title="plan.title"
-        >
-          <div
-            class="d-flex flex-wrap justify-content-between
-                   align-items-center gap-2 mb-2"
-          >
-            <div>
-              <strong>
-                #{{ plan.rank }} —
-                {{ plan.title }}
-              </strong>
-            </div>
-
-            <span
-              class="badge"
-              :class="
-                plan.status === 'FEASIBLE'
-                  ? 'bg-success'
-                  : plan.status === 'NEEDS_REVIEW'
-                    ? 'bg-warning text-dark'
-                    : 'bg-danger'
-              "
-            >
-              {{ {FEASIBLE:'Ready for review',NEEDS_REVIEW:'Verification needed',INFEASIBLE:'Unresolved conflicts'}[plan.status] || plan.status }}
-            </span>
-          </div>
-
-          <div class="fw-bold mb-2">
-            Recovery Score:
-            {{ plan.score }}/100
-          </div>
-
-          <p class="small mb-2">{{ plan.conflicts.length }} unresolved conflict(s) in accessible records; {{ plan.warnings.length }} verification item(s).</p>
-          <p class="small mb-1">{{ changeSummary(plan, 'replacementMemberId') || 'Member: no replacement proposed' }}</p>
-          <p class="small mb-2">{{ changeSummary(plan, 'venueName') || 'Facility: no change proposed' }}</p>
-          <p class="small text-muted mb-2">Organiser approval required / {{ selectedRecoveryId === plan.id ? 'Selected for preview' : 'Proposal only' }}</p>
-          <button type="button" class="btn btn-pulse-primary btn-sm mb-2" :aria-pressed="selectedRecoveryId===plan.id" @click="selectRecoveryPlan(plan.id)">{{ selectedRecoveryId===plan.id ? 'Selected plan' : 'Select this plan' }}</button>
-          <details class="small"><summary>Checks and score breakdown</summary><h6 class="mt-2">Full activity changes</h6>
-          <ul class="small selected-changes"><li v-for="(change,i) in plan.changes" :key="i">
-            <strong>{{ eventSegments.find(s => String(s.id)===String(change.segmentId))?.title || 'Activity' }}</strong>
-            <span v-if="change.starts_at || change.ends_at">: {{ formatTime(change.starts_at) }} to {{ formatTime(change.ends_at) }}</span>
-            <span v-if="change.venueName">: move to {{ change.venueName }}</span>
-            <span v-if="change.replacementMemberId!=null">: replace {{ data.members.find(m => String(m.id)===String(change.replacedMemberId))?.full_name || 'assigned member' }} with {{ data.members.find(m => String(m.id)===String(change.replacementMemberId))?.full_name || 'replacement member' }}</span>
-          </li></ul>
-          <div class="row g-2 small mb-2 mt-2 recovery-score-grid">
-
-            <div class="col-6 col-md-3">
-              <div class="bg-light p-2 rounded">
-                <div class="text-muted">
-                  Conflict Resolution
-                </div>
-
-                <strong>
-                  {{ plan.scoreBreakdown.conflict }}/100
-                </strong>
-              </div>
-            </div>
-
-            <div class="col-6 col-md-3">
-              <div class="bg-light p-2 rounded">
-                <div class="text-muted">
-                  Timetable
-                </div>
-
-                <strong>
-                  {{ plan.scoreBreakdown.timetable }}/100
-                </strong>
-              </div>
-            </div>
-
-            <div class="col-6 col-md-3">
-              <div class="bg-light p-2 rounded">
-                <div class="text-muted">
-                  Staffing suitability / workload
-                </div>
-
-                <strong>
-                  {{ plan.scoreBreakdown.workload }}/100
-                </strong>
-              </div>
-            </div>
-
-            <div class="col-6 col-md-3">
-              <div class="bg-light p-2 rounded">
-                <div class="text-muted">
-                  Venue Suitability
-                </div>
-
-                <strong>
-                  {{ plan.scoreBreakdown.venue }}/100
-                </strong>
-              </div>
-            </div>
-
-          </div>
-
-          <div class="small text-muted mb-2">
-            {{ plan.metrics.conflictCount }}
-            known conflict(s),
-
-            {{ plan.metrics.warningCount }}
-            verification warning(s).
-          </div>
-
-          <div
-            v-for="(reason, index) in plan.reasons"
-            :key="index"
-            class="small text-muted"
-          >
-            • {{ reason }}
-          </div>
-
-          <!-- Separate booking outcomes from general recovery checks. -->
-          <div class="border rounded-3 p-3 mt-3 bg-light">
-            <div class="fw-bold small mb-2">
-              Facility Booking Verification
-            </div>
-
-            <div v-if="bookingConflicts(plan).length" class="small text-danger mb-2">
-              <strong>Booking conflict — venue cannot be used as proposed</strong>
-              <div v-for="(item, index) in bookingConflicts(plan)" :key="'bc-' + index">
-                • {{ item.message }}
-              </div>
-            </div>
-
-            <div v-if="bookingWarnings(plan).length" class="small text-warning-emphasis mb-2">
-              <strong>Booking approval or verification required</strong>
-              <div v-for="(message, index) in bookingWarnings(plan)" :key="'bw-' + index">
-                • {{ message }}
-              </div>
-            </div>
-
-            <div
-              v-if="!bookingConflicts(plan).length && !bookingWarnings(plan).length"
-              class="small text-muted"
-            >
-              No booking issues reported by the evaluator for this plan.
-              This is based on accessible records, not a new reservation or
-              independent confirmation of complete CCA booking visibility.
-            </div>
-          </div>
-
-          <div
-            v-if="plan.conflicts.length"
-            class="mt-2"
-          >
-            <strong class="small text-danger">
-              Detected Conflicts
-            </strong>
-
-            <div
-              v-for="(conflict, index) in plan.conflicts"
-              :key="index"
-              class="small text-danger"
-            >
-              • {{ conflict.message }}
-            </div>
-          </div>
-
-          <div
-            v-if="otherWarnings(plan).length"
-            class="mt-2"
-          >
-            <strong class="small text-warning">
-              Other Manual Verification Required
-            </strong>
-
-            <div
-              v-for="(warning, index) in otherWarnings(plan)"
-              :key="index"
-              class="small text-muted"
-            >
-              • {{ warning }}
-            </div>
-          </div>
-        </details>
-        </div>
+        <SimulatorRecoveryPlanCard v-for="plan in displayedRankedPlans" :key="plan.id" :plan="plan" :data="data" :segments="eventSegments" :selected="selectedRecoveryId===plan.id" @select="selectRecoveryPlan(plan.id)" />
 
       </template>
     </section>
@@ -1392,200 +1102,15 @@ function proposedVenueFor(segment) {
          PLAN COMPARISON
     ==================================================== -->
 
-    <div v-if="result || selectedSavedRecovery" id="simulator-comparison" class="pulse-card p-4 shadow-sm">
-
-      <div
-        class="d-flex flex-wrap justify-content-between
-               align-items-center gap-3 mb-3"
-      >
-        <h5 class="fw-bold mb-0">
-          Plan Comparison
-        </h5>
-
-        <div class="btn-group btn-group-sm">
-
-          <button
-            type="button"
-            class="btn"
-            :class="
-              activeComparison === 'original'
-                ? 'btn-secondary text-white'
-                : 'btn-outline-secondary'
-            "
-            @click="activeComparison = 'original'"
-          >
-            Original Plan
-          </button>
-
-          <button
-            type="button"
-            class="btn"
-            :class="
-              activeComparison === 'disrupted'
-                ? 'btn-warning text-dark'
-                : 'btn-outline-warning'
-            "
-            @click="activeComparison = 'disrupted'"
-          >
-            Disrupted Plan
-          </button>
-
-          <button
-            type="button"
-            class="btn"
-            :class="
-              activeComparison === 'recovery'
-                ? 'btn-success text-white'
-                : 'btn-outline-success'
-            "
-            :disabled="!comparedRecovery"
-            @click="activeComparison = 'recovery'"
-          >
-            Recovery Plan
-          </button>
-
-        </div>
-      </div>
-
-      <p v-if="!comparedRecovery" class="small text-muted">Select a ranked recovery above to compare and prepare that exact proposal.</p>
-      <p v-else class="small" role="status">Selected for comparison and preparation: <strong>{{ comparedRecovery.title }}</strong>. Availability and approvals are checked again before Apply.</p>
-      <div
-        class="p-3 rounded-3 bg-light border"
-      >
-        <p
-          v-if="!result && !selectedSavedRecovery"
-          class="small text-muted mb-0"
-        >
-          Waiting for a successful simulation.
-        </p>
-
-        <template v-else>
-
-          <strong class="d-block mb-2">
-            {{ comparisonTitle }}
-          </strong>
-
-          <p
-            v-if="activeComparison === 'original'"
-            class="small text-muted"
-          >
-            {{ selectedSavedRecovery ? 'Original schedule captured before this saved recovery.' : 'Currently loaded event schedule. Simulation does not change it.' }}
-          </p>
-
-          <p
-            v-else-if="activeComparison === 'disrupted'"
-            class="small text-muted"
-          >
-            Schedule after the simulated disruption.
-
-            This is NOT necessarily a valid recovery plan.
-          </p>
-
-          <p
-            v-else
-            class="small text-muted"
-          >
-            Selected recovery option:
-            <strong>
-              {{ comparedRecovery?.title }}
-            </strong>.
-
-            This remains a preview and has not been
-            applied to Supabase.
-          </p>
-
-          <ul v-if="activeComparison==='recovery' && comparedRecovery" class="small">
-            <li v-for="(change,i) in comparedRecovery.changes.filter(c=>c.replacementMemberId!=null)" :key="i">{{ data.members.find(m=>String(m.id)===String(change.replacedMemberId))?.full_name || 'Assigned member' }} to {{ data.members.find(m=>String(m.id)===String(change.replacementMemberId))?.full_name || 'Replacement member' }} for {{ eventSegments.find(s=>String(s.id)===String(change.segmentId))?.title }} ({{ change.roleName || 'role requires verification' }})</li>
-          </ul>
-          <div
-            v-for="segment in comparisonSegments"
-            :key="segment.id"
-            class="small py-2 border-bottom"
-          >
-            <div
-              class="d-flex flex-wrap justify-content-between
-                     align-items-center gap-2"
-            >
-              <div>
-                <strong>
-                  {{ segment.title }}
-                </strong>
-
-                <div class="text-muted">
-                  {{ formatTime(segment.starts_at) }}
-                  to
-                  {{ formatTime(segment.ends_at) }}
-                </div>
-
-                <div
-                  v-if="proposedVenueFor(segment)"
-                  class="text-muted"
-                >
-                  Proposed venue:
-                  {{ proposedVenueFor(segment) }}
-                </div>
-              </div>
-
-              <span
-                v-if="isSegmentChanged(segment)"
-                class="badge bg-warning text-dark"
-              >
-                Time Changed
-              </span>
-            </div>
-          </div>
-
-          <div
-            v-if="
-              activeComparison === 'recovery' &&
-              comparedRecovery
-            "
-            class="small mt-3"
-          >
-            <strong>
-              Evaluated Recovery Score:
-            </strong>
-
-            {{ comparedRecovery.score ?? 'Not re-scored' }}/100
-
-            <div class="text-muted">
-              {{ comparedRecovery.metrics?.conflictCount ?? 'Unverified' }}
-              known conflict(s) detected in accessible records.
-            </div>
-          </div>
-
-          <div
-            v-else-if="activeComparison === 'disrupted'"
-            class="small mt-3"
-          >
-            <strong>
-              Disruption Impact:
-            </strong>
-
-            {{ conflictCount }} reported conflict(s).
-
-            {{
-              result.downstreamRisks?.length || 0
-            }}
-            downstream risk(s).
-          </div>
-
-        </template>
-      </div>
-
-      <p class="small text-muted mt-3 mb-0">
-        All comparison views are read-only.
-        Actual saved plan status and confirmed database operations
-        are shown in the recovery workflow below.
-      </p>
-    </div>
+    <SimulatorPlanComparison v-if="result || selectedSavedRecovery" id="simulator-comparison" :data="data" :segments="eventSegments" :before="selectedSavedRecovery?.before_state" :saved-status="selectedSavedRecovery?.application_status" :recovery="comparedRecovery" :result="result" />
 
     <!-- Review the comparison before confirming database recovery. -->
-    <section aria-label="Saved Recoveries" class="mt-4"><h5>Saved Recoveries</h5><p class="small text-muted">Review saved plans, pending approvals, invitations and applied history independently of this hypothetical simulation.</p>
-    <SimulatorRecoveryWorkflow :session-version="sessionVersion" @operation-complete="activeComparison=$event==='Undone'?'original':'recovery'" @stage-change="workflowStage=$event" @review-saved="reviewSavedRecovery" :selected-recovery-id="selectedRecoveryId" @select-option="selectRecoveryPlan" :refresh-event="refreshSimulator" :refresh-version="invitationRefreshVersion" @invitations-changed="invitationRefreshVersion++" :data="data" :event-id="selectedEventId" :options="recoveryOptions"
+    <section aria-label="Recovery Workflow and Saved Recoveries" class="mt-4">
+    <SimulatorRecoveryWorkflow :active="props.active" :session-version="sessionVersion" @operation-complete="activeComparison=$event==='Undone'?'original':'recovery'" @stage-change="workflowStage=$event" @review-saved="reviewSavedRecovery" :selected-recovery-id="selectedRecoveryId" @select-option="selectRecoveryPlan" :refresh-event="refreshSimulator" :refresh-version="invitationRefreshVersion" @invitations-changed="invitationRefreshVersion++" :data="data" :event-id="selectedEventId" :options="recoveryOptions"
       :disruptions="result ? buildDisruptions() : []" />
     </section>
 
+    <SimulatorBackToTop />
     <PipMascot v-if="result"
     class="simulation-pip"
     mode="simulation"
@@ -1611,7 +1136,7 @@ function proposedVenueFor(segment) {
 .simulator-steps a span{display:grid;place-items:center;width:1.3rem;height:1.3rem;border:1px solid var(--pulse-border);border-radius:50%;font-size:.7rem}
 #simulator-scenarios,#simulator-recovery,#simulator-comparison{scroll-margin-top:1.5rem}
 .simulator-builder .row>[class*="col-"]{width:100%}
-@media(max-width:1100px){.simulator-control-grid{grid-template-columns:1fr}.simulator-builder{position:static;max-height:none}.simulator-builder .row>[class*="col-"]{width:50%}}
+@media(max-width:1023px){.simulator-control-grid{grid-template-columns:1fr}.simulator-builder{position:static;max-height:none}.simulator-builder .row>[class*="col-"]{width:50%}}
 @media(max-width:575px){.simulator-builder .row>[class*="col-"]{width:100%}.simulator-steps{gap:.15rem}.simulator-steps a{font-size:.72rem;padding:.35rem}.simulator-scenario-card{padding:.75rem!important}}
 .simulator-metrics>div{display:flex}.simulator-metrics .pulse-card{width:100%;height:100%;min-height:6rem;display:flex;flex-direction:column;justify-content:space-between;gap:.25rem}.simulator-metrics .text-uppercase{min-height:2rem}.simulator-metrics .fs-5{font-size:clamp(.95rem,2vw,1.25rem)!important}
 .simulator-steps .current{background:var(--pulse-primary-light);color:var(--pulse-primary)}.pulse-candidate-card.is-selected{border-color:var(--pulse-primary)!important;box-shadow:0 0 0 2px var(--pulse-primary-light)}
@@ -1629,5 +1154,10 @@ function proposedVenueFor(segment) {
 .recovery-planning-workspace{display:grid;grid-template-columns:minmax(0,1fr);gap:1.25rem;align-items:start}
 .recovery-build,.recovery-ranking{min-width:0;overflow-wrap:anywhere}
 .recovery-selection-summary{padding:.85rem;border:1px solid var(--pulse-border);border-radius:.65rem;background:var(--pulse-bg)}
-@media(min-width:1200px){.recovery-planning-workspace{grid-template-columns:minmax(0,3fr) minmax(0,2fr)}.recovery-score-grid>.col-md-3{width:50%}}
+@media(min-width:1200px){.recovery-planning-workspace{grid-template-columns:minmax(0,1fr)}.recovery-score-grid>.col-md-3{width:50%}}
+@media(min-width:1280px){.simulator-control-grid{grid-template-columns:minmax(360px,400px) minmax(0,1fr)}}@media(min-width:1024px) and (max-width:1279px){.simulator-control-grid{grid-template-columns:330px minmax(0,1fr)}}
+.recovery-alternatives{display:grid;gap:1.25rem;min-width:0}.recovery-alternatives>*{min-width:0}@media(min-width:1024px){.recovery-alternatives.both{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.simulator-control-grid{display:block}.simulator-builder{width:100%}.scenario-builder-fields{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.4fr);gap:1.5rem}.scenario-builder-fields>div{min-width:0}.scenario-disruptions>.simulator-scenario-card:first-child{margin-top:0!important}.simulator-builder .row>[class*="col-"]{width:100%}@media(max-width:767px){.scenario-builder-fields{grid-template-columns:1fr}}.simulator-builder :is(select,input):focus{border-color:var(--pulse-primary);box-shadow:0 0 0 .2rem var(--pulse-primary-light)}
+.score-colour-guide{display:flex;flex-wrap:wrap;gap:.4rem}.score-green{color:#2b8064}.score-amber{color:#966809}.score-rose{color:#c73b61}.ranking-warning{padding:.7rem;border-left:3px solid var(--pulse-amber);background:var(--pulse-amber-bg)}.recovery-choice.is-selected{background:var(--pulse-primary-light)}.simulator-page :deep(button[aria-pressed=true]:not(.btn-success)),.simulator-page :deep(.facility-choice.chosen){background:var(--pulse-primary-light);border-color:var(--pulse-primary)!important;color:var(--pulse-ink)}
+.simulator-scenario-card{background:var(--pulse-primary-light)!important;border-color:var(--pulse-primary-border)!important}
 </style>

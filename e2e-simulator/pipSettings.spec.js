@@ -7,7 +7,7 @@ test('simulator Pip settings persist, reverse, and synchronize with another Pip'
  await page.goto('/e2e-simulator/harness.html')
  async function run(){
   await page.getByLabel('Disruption type',{exact:true}).selectOption('SCHEDULE_DELAY')
-  await page.getByRole('button',{name:'Run combined simulation (1)',exact:true}).click()
+  await page.getByRole('button',{name:'Run simulation (1)',exact:true}).click()
  }
  await run()
  const pip=page.locator('.simulation-pip'),button=pip.locator('.pip-button')

@@ -5,6 +5,7 @@
 
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import {readSimulatorCalendarFocus,bookingMatchesSimulatorFocus,clearSimulatorCalendarFocus} from '../services/simulatorCalendarNavigation.js'
+import {reportRecoveryBookingClaim} from '../services/simulatorBookingBridge.js'
 import { useRoute, useRouter } from 'vue-router'
 import FacilityTabs from '../components/FacilityTabs.vue'
 import PageHero from '../components/PageHero.vue'
@@ -411,6 +412,7 @@ async function confirmPending() {
       showToast('Release undone. ' + booking.facility_name + ' is Booked for ' + activeClubName.value + ' again.', 'success')
     } else if (type === 'claim') {
       await claimBooking(booking.booking_id, clubId)
+      reportRecoveryBookingClaim(route.query,booking.booking_id,clubId)
       showToast('Claim submitted: Pending Admin Sign-off. The transfer request has been emailed to OSL.', 'success')
     } else if (type === 'leave') {
       await leaveWaitlist(booking.booking_id, clubId)

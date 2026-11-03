@@ -95,7 +95,7 @@ test('UI provides selectable candidates and preserves exclusion evidence',()=>{
   // Markup wiring guard; this is not a browser interaction test.
   const view=readFileSync(new URL('../../../src/views/EventRiskView.vue',import.meta.url),'utf8')
   const source=readFileSync(new URL('../../../src/components/SimulatorCandidateChooser.vue',import.meta.url),'utf8')
-  assert.match(source,/Show All Candidates/); assert.match(source,/Show Top 5/)
+  assert.match(source,/Show all/); assert.match(source,/Show less/)
   assert.match(source,/assessment.excluded/); assert.match(source,/conflict.eventName/)
   assert.match(source,/Use in recovery preview/); assert.match(view,/@use="selectCandidate\(assessment,\$event\)"/); assert.doesNotMatch(view,/openTelegramDispatch/)
 })
