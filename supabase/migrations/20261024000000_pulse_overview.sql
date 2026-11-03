@@ -1,0 +1,32 @@
+-- =====================================================================
+-- Pulse Facility Calendar: what this SQL is for (comments only)
+--
+-- SMU data it uses (already in the project, never dropped):
+--   members            one profile per student or staff member (name, SMU email, Telegram, login link)
+--   clubs              CCAs, plus "Office of Student Life" for OSL staff
+--   exco_roles         ExCo roles and what each may do (release, claim, waitlist, email, admin)
+--   club_memberships   who holds which role in which CCA, per academic year (old years kept inactive)
+--   facilities         SMU venues (ACC, Studio 7.1/7.2, Gym Studio, ...)
+--   facility_bookings  FBS bookings: venue, date, time, owning CCA, FBS reference
+--
+-- Records Pulse keeps (needed for OSL's audit trail):
+--   facility_transfers     each release -> claim -> OSL decision, with its audit voucher
+--   transfer_audit_log     who did what and when (append-only, cannot be edited)
+--   waitlist_entries       CCAs queueing for a slot, with the 30-minute offer
+--   transfer_emails        emails to OSL (request, reminder, confirmation) and their send status
+--   transfer_email_config  OSL's To/CC list (studentlife@, artsvenues@, ...)
+--   notifications          in-app (and Telegram) alerts per member
+--   app_config             settings: 48h sign-off, 24h reminder, 4-day lock, demo mode
+--   telegram_links         a member's Telegram chat (private, never sent to the browser)
+--   telegram_test_chats    testers' Telegram chats while in test mode
+--
+-- Files, in the order they run (install_pulse_calendar.sql joins them):
+--   0090 archive   copy members + club_memberships before the demo changes them
+--   0100 align     add missing columns/settings to the tables above; nothing removed
+--   0200 logic     the rules: permission checks, release/claim/waitlist, OSL approval,
+--                  48h deadline, emails and notifications (functions named rpc_* are
+--                  the only ones the website may call)
+--   0300 demo      the 4 login personas and sample transfers (only when demo_mode is on)
+--   0350 check     prints "Pulse install OK" if everything is in place
+--   0400 schedules optional, run separately: timed jobs (offer expiry, OSL deadline, email/Telegram sending)
+-- =====================================================================

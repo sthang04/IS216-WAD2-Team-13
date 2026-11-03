@@ -7,11 +7,15 @@ import { approveTransfer, rejectTransfer } from './services/transferService';
 import { DEMO_PERSONAS, ALL_CLUBS, GUEST_PERSONA } from './services/authProfiles';
 import {
   enterGuest, restoreSession, signOut,
-  canActForClub, canOpenView, canResetDemo as canResetDemoFor, homeView,
+  canOpenView, canResetDemo as canResetDemoFor, homeView,
 } from './services/authService';
-import { session as facilitySession, setActiveClub } from './services/sessionState';
-import { startNotifications, reloadAll } from './services/notificationStore';
+import { session as facilitySession, initSession, setActiveClub } from './services/sessionState';
+import {
+  notificationStore, unreadCount, soonestOfferSeconds,
+  startNotifications, reloadAll, setPipStatic, setPipQuiet
+} from './services/notificationStore';
 import NotificationBell from './components/NotificationBell.vue';
+import PipMascot from './components/PipMascot.vue';
 import LandingLoginView from './views/LandingLoginView.vue';
 import SignUpView from './views/SignUpView.vue';
 import AvailabilityView from './views/AvailabilityView.vue';
@@ -22,6 +26,8 @@ import OslAdminView from './views/OslAdminView.vue';
  
 // App Views state
 const currentView = ref('landing') // 'landing', 'admin', 'facilities', 'schedule', 'heatmap', 'operations', 'risk'
+// OSL's header has two tabs inside the facility module: the calendar and OSL Review
+const isOslReviewRoute = computed(() => route.path.startsWith('/facilities/admin'))
  
 // Keep currentView and the URL in step (src/router/index.js): clicking a tab
 // changes the URL, and opening or refreshing a URL opens that page.
@@ -36,50 +42,11 @@ watch(() => route.meta.view, (view) => {
 // /signup opens the sign-up screen
 watch(() => route.meta.signup, (signup) => { if (signup && !isLoggedIn.value) showSignUp.value = true })
 const apiMode = ref(false) // Toggle API badge tags on/off across all views (Default: OFF as requested)
-const notificationsOpen = ref(false)
- 
-const notificationsList = ref([
-  {
-    id: 1,
-    type: 'swap',
-    title: 'Facility Available for Swap',
-    desc: 'Chinese Orchestra listed Studio L7.1 (Music) for Fri 16 Oct (16:00 - 19:00).',
-    time: '5m ago',
-    unread: true,
-    badge: 'Marketplace'
-  },
-  {
-    id: 2,
-    type: 'transit',
-    title: 'Transit Buffer Reminder',
-    desc: 'Recommended departure to Main Hall Stage at 18:20 (8 min walk via Concourse).',
-    time: '25m ago',
-    unread: true,
-    badge: 'OneMap API'
-  },
-  {
-    id: 3,
-    type: 'waitlist',
-    title: 'Waitlist Priority Alert',
-    desc: '2 CCAs are queued for Studio L7.2. Early release frees the room for waiting clubs.',
-    time: '1h ago',
-    unread: true,
-    badge: 'Waitlist Alert'
-  }
-])
- 
-const unreadNotificationCount = computed(() => notificationsList.value.filter(n => n.unread).length)
- 
-function markAllNotificationsRead() {
-  notificationsList.value.forEach(n => n.unread = false)
-}
- 
 const slots = ref([])
 const loading = ref(true)
 const processingId = ref(null)
 const toast = ref('')
 const toastType = ref('info')
-const searchQuery = ref('')
  
 // User & Role State with Strict CCA Scoping
 const authReady = ref(false) // false until the saved session has been checked on load
@@ -88,13 +55,30 @@ const sessionPersona = ref(null) // who signed in
 const activePersona = ref(GUEST_PERSONA) // who the app is acting as (only Dev can switch this)
 const selectedClub = ref(null)
 const profileMenuOpen = ref(false)
+ 
+// 'Darren Koh' -> 'DK' for the round avatar in the header
+const personaInitials = computed(() => {
+  const words = (activePersona.value.name || '').trim().split(/\s+/).filter(Boolean)
+  return words.slice(0, 2).map((w) => w[0].toUpperCase()).join('') || '?'
+})
+const profileMenu = ref(null)
+ 
+// Close the profile menu when pressing outside it, or with Escape (same as the bell)
+function closeProfileOnOutside(event) {
+  if (profileMenuOpen.value && profileMenu.value && !profileMenu.value.contains(event.target)) {
+    profileMenuOpen.value = false
+  }
+}
+ 
+function closeProfileOnEscape(event) {
+  if (event.key === 'Escape') profileMenuOpen.value = false
+}
 const showSignUp = ref(false)
  
 const isAdmin = computed(() => activePersona.value.role === 'admin')
 const isDev = computed(() => activePersona.value.isDev)
 const isGuest = computed(() => activePersona.value.role === 'guest')
 const allowedClubs = computed(() => activePersona.value.allowedClubs || [])
-const canAct = computed(() => canActForClub(activePersona.value, selectedClub.value))
 const canSwitchPersona = computed(() => !!sessionPersona.value?.isDev)
 const canResetDemo = computed(() => canResetDemoFor(sessionPersona.value))
  
@@ -117,146 +101,10 @@ watch(currentView, (view) => {
   }
 })
  
-// Dynamic Animated Search Placeholder (Robust Auto-Typing with restart on clear)
-const searchPlaceholder = ref('Search venue or location...')
-let searchTimer = null
-let searchIndex = 0
-let searchCharIndex = 0
-let searchIsDeleting = false
- 
-function tickSearchPlaceholder() {
-  if (searchQuery.value && searchQuery.value.length > 0) return
- 
-  const list = activePersona.value.smartSearches && activePersona.value.smartSearches.length 
-    ? activePersona.value.smartSearches 
-    : ['Studio L7.2', 'Dance Studio', 'Sprung Floor', 'Connexion', 'Sound Studio']
-    
-  const target = list[searchIndex % list.length] || 'Studio L7.2'
- 
-  if (!searchIsDeleting) {
-    searchCharIndex++
-    searchPlaceholder.value = `Try searching: "${target.substring(0, searchCharIndex)}"`
-    if (searchCharIndex >= target.length) {
-      searchIsDeleting = true
-      searchTimer = setTimeout(tickSearchPlaceholder, 1800)
-      return
-    }
-    searchTimer = setTimeout(tickSearchPlaceholder, 50)
-  } else {
-    searchCharIndex--
-    searchPlaceholder.value = `Try searching: "${target.substring(0, searchCharIndex)}"`
-    if (searchCharIndex <= 0) {
-      searchIsDeleting = false
-      searchIndex = (searchIndex + 1) % list.length
-      searchTimer = setTimeout(tickSearchPlaceholder, 400)
-      return
-    }
-    searchTimer = setTimeout(tickSearchPlaceholder, 30)
-  }
-}
- 
-function resetSearchPlaceholder() {
-  if (searchTimer) clearTimeout(searchTimer)
-  searchIndex = 0
-  searchCharIndex = 0
-  searchIsDeleting = false
-  searchPlaceholder.value = 'Search venue or location...'
-  searchTimer = setTimeout(tickSearchPlaceholder, 300)
-}
- 
-// Watch searchQuery: if user clears or deletes their input, restart dynamic typewriter animation immediately
-watch(searchQuery, (newVal) => {
-  if (!newVal || newVal.length === 0) {
-    resetSearchPlaceholder()
-  }
-})
- 
-watch(activePersona, () => {
-  resetSearchPlaceholder()
-})
- 
-// Facility Wishlist State (save facilities to receive alerts when freed or swapped)
-const wishlistVenueIds = ref([2, 3]) // Pre-star Studio L7.1 and Studio L7.2 for demo
- 
-function isWishlisted(id) {
-  return wishlistVenueIds.value.includes(id)
-}
- 
-function toggleWishlist(slot) {
-  const idx = wishlistVenueIds.value.indexOf(slot.id)
-  if (idx > -1) {
-    wishlistVenueIds.value.splice(idx, 1)
-    toast.value = `Removed ${slot.venue_name} from your facility wishlist.`
-    toastType.value = 'info'
-  } else {
-    wishlistVenueIds.value.push(slot.id)
-    toast.value = `Added ${slot.venue_name} to your Wishlist. You will receive an instant notification when this facility becomes available.`
-    toastType.value = 'success'
-  }
-}
- 
 function handleMeetingScheduled(meeting) {
-  notificationsList.value.unshift({
-    id: Date.now(),
-    type: 'meeting',
-    title: `New Meeting: ${meeting.title}`,
-    desc: `${meeting.day} (${meeting.time}) at ${meeting.venue}. Default message and agenda dispatched to 12 ExCo members on Telegram.`,
-    time: 'Just now',
-    unread: true,
-    badge: 'Telegram Broadcast'
-  })
   toast.value = `Meeting scheduled! Telegram broadcast sent to team with agenda: "${meeting.title}"`
   toastType.value = 'success'
 }
- 
-// Venue Category Filters
-// OSL Facility Administrator oversees university-wide facilities and does not require a personal club wishlist
-const categories = computed(() => {
-  const list = [
-    { label: 'All Venues', value: 'All' },
-  ]
-  if (selectedClub.value !== 'Office of Student Life' && !isGuest.value) {
-    list.push({ label: 'Wishlist', value: 'Wishlist' })
-  }
-  list.push(
-    { label: 'Dance Studios', value: 'Dance Studio' },
-    { label: 'Acoustic Rooms', value: 'Acoustic Room' },
-    { label: 'Sports Courts', value: 'Sports Court' },
-    { label: 'Multi-Purpose', value: 'Multi-Purpose' }
-  )
-  return list
-})
-const selectedCategory = ref('All')
- 
-watch(selectedClub, (newClub) => {
-  if (newClub === 'Office of Student Life' && selectedCategory.value === 'Wishlist') {
-    selectedCategory.value = 'All'
-  }
-})
- 
-function getCategoryCount(catValue) {
-  if (catValue === 'All') return slots.value.length
-  if (catValue === 'Wishlist') return wishlistVenueIds.value.length
-  return slots.value.filter(s => s.venue_type === catValue).length
-}
- 
-const filteredSlots = computed(() => {
-  return slots.value.filter((slot) => {
-    let matchesCategory = true
-    if (selectedCategory.value === 'Wishlist') {
-      matchesCategory = wishlistVenueIds.value.includes(slot.id)
-    } else if (selectedCategory.value !== 'All') {
-      matchesCategory = slot.venue_type === selectedCategory.value
-    }
-    const query = searchQuery.value.trim().toLowerCase()
-    const matchesSearch = !query || 
-      slot.venue_name.toLowerCase().includes(query) ||
-      slot.building_location.toLowerCase().includes(query) ||
-      slot.owner_club.toLowerCase().includes(query) ||
-      slot.venue_type.toLowerCase().includes(query)
-    return matchesCategory && matchesSearch
-  })
-})
  
 // Dev-only: view the app as another persona (permissions still come from the Dev sign-in)
 function switchPersona(personaKey) {
@@ -265,7 +113,6 @@ function switchPersona(personaKey) {
   activePersona.value = p
   selectedClub.value = p.cca
   profileMenuOpen.value = false
-  searchQuery.value = ''
   
   if (p.role === 'admin' || !canOpenView(p, currentView.value)) {
     currentView.value = homeView(p)
@@ -364,12 +211,40 @@ async function handleResetDemo() {
 const isAutoRunning = ref(false)
 const autoStepText = ref('')
  
+// Who you are comes from the team's sign-in, so the facility module's
+// demo persona switcher stays off
+facilitySession.value.demoMode = false
+ 
+// The bell and Pip (on every page) read the facility session's notifications,
+// so load that session whenever someone signs in or out
+async function loadNotificationSession() {
+  try {
+    await initSession()
+  } catch (error) {
+    console.log(error.message)
+  }
+  startNotifications()
+}
+ 
+const pipVisible = computed(() => isLoggedIn.value && facilitySession.value.ready && !!facilitySession.value.memberId)
+ 
+// Pip's buttons: open the bell, or go to the waitlist offer
+function openNotifications() {
+  notificationStore.value.bellOpen = true
+}
+ 
+function openOffer() {
+  currentView.value = 'facilities'
+  router.push('/facilities/waitlist')
+}
+ 
 // stayOnLanding: a restored sign-in opened at "/" keeps showing the landing page
 function applySession(persona, { stayOnLanding = false } = {}) {
   sessionPersona.value = persona
   activePersona.value = persona
   selectedClub.value = persona.cca
   isLoggedIn.value = true
+  loadNotificationSession()
   if (stayOnLanding) {
     currentView.value = 'landing'
     return
@@ -433,8 +308,19 @@ async function handleSignOut() {
     selectedClub.value = null
     currentView.value = 'landing'
     toast.value = ''
+    loadNotificationSession()
   }
 }
+ 
+onMounted(() => {
+  document.addEventListener('pointerdown', closeProfileOnOutside)
+  document.addEventListener('keydown', closeProfileOnEscape)
+})
+ 
+onUnmounted(() => {
+  document.removeEventListener('pointerdown', closeProfileOnOutside)
+  document.removeEventListener('keydown', closeProfileOnEscape)
+})
  
 onMounted(async () => {
   // Clean enterprise light theme enforcement
@@ -455,7 +341,6 @@ onMounted(async () => {
       authReady.value = true
     }
     await loadSlots()
-    searchTimer = setTimeout(tickSearchPlaceholder, 1000)
   } catch (error) {
     toastType.value = 'danger'
     toast.value = `Error loading facilities: ${error.message}`
@@ -464,9 +349,6 @@ onMounted(async () => {
   }
 })
  
-onUnmounted(() => {
-  if (searchTimer) clearTimeout(searchTimer)
-})
 </script>
  
 <template>
@@ -497,12 +379,12 @@ onUnmounted(() => {
     <div v-else class="min-vh-100 d-flex flex-column" style="background-color: var(--pulse-bg);">
       
       <!-- Top Modern SaaS Header -->
-      <header class="pulse-header px-3 px-lg-5 py-2">
-        <div class="container-fluid d-flex flex-wrap justify-content-between align-items-center gap-2">
+      <header class="pulse-header px-3 px-lg-4 py-2">
+        <div class="container-fluid d-flex flex-wrap flex-lg-nowrap align-items-center gap-2 gap-lg-3">
           
           <!-- Left: Logo & Community Switcher (Scoped per persona) -->
-          <div class="d-flex align-items-center gap-3">
-            <a href="#" class="pulse-brand-logo text-decoration-none" @click.prevent="currentView = isAdmin ? 'admin' : 'facilities'">
+          <div class="d-flex align-items-center gap-3 flex-shrink-0">
+            <a href="#" class="pulse-brand-logo text-decoration-none" @click.prevent="router.push('/facilities')">
               <div class="pulse-logo-badge">
                 <span>P</span>
                 <span class="pulse-logo-dot"></span>
@@ -557,43 +439,32 @@ onUnmounted(() => {
                   <option v-for="club in allowedClubs" :key="club" :value="club">{{ club }}</option>
                 </select>
               </div>
-              <span class="badge bg-light text-muted border ms-2 px-2 py-1 d-none d-xl-inline" style="font-size: 0.65rem;">
-                Scoped: {{ selectedClub }}
-              </span>
             </div>
           </div>
  
           <!-- Center: Navigation Tabs (Role-tailored) -->
           <!-- OSL Admin View: Administrative Oversight & Governance -->
-          <nav v-if="isAdmin" class="d-none d-lg-flex align-items-center gap-1">
-            <button 
-              type="button" 
-              class="pulse-nav-pill" 
-              :class="{ active: currentView === 'admin' }"
-              @click="currentView = 'admin'"
-            >
-              OSL Approvals & Compliance
-            </button>
-            <button 
-              type="button" 
-              class="pulse-nav-pill" 
-              :class="{ active: currentView === 'facilities' }"
-              @click="currentView = 'facilities'"
+          <nav v-if="isAdmin" class="d-none d-lg-flex align-items-center gap-1 pulse-header-nav">
+            <button
+              type="button"
+              class="pulse-nav-pill"
+              :class="{ active: currentView === 'facilities' && !isOslReviewRoute }"
+              @click="router.push('/facilities')"
             >
               Master Facility Calendar
             </button>
-            <button 
-              type="button" 
-              class="pulse-nav-pill" 
-              :class="{ active: currentView === 'heatmap' }"
-              @click="currentView = 'heatmap'"
+            <button
+              type="button"
+              class="pulse-nav-pill"
+              :class="{ active: isOslReviewRoute }"
+              @click="router.push('/facilities/admin')"
             >
-              Campus Demand Heatmap
+              OSL Review
             </button>
           </nav>
  
           <!-- Student ExCo View: Complete 5-Feature Operational Suite -->
-          <nav v-else class="d-none d-lg-flex align-items-center gap-1">
+          <nav v-else class="d-none d-lg-flex align-items-center gap-1 pulse-header-nav">
             <button 
               type="button" 
               class="pulse-nav-pill" 
@@ -641,13 +512,13 @@ onUnmounted(() => {
           </nav>
  
           <!-- Right: Presentation Utility Bar (API Mode, Reset, Role & Sign Out) -->
-          <div class="d-flex align-items-center gap-2 ms-auto flex-wrap justify-content-end">
+          <div class="d-flex align-items-center gap-2 ms-auto flex-shrink-0">
             
             <!-- Reset Demo Button -->
             <button
               v-if="canResetDemo"
               type="button"
-              class="btn btn-outline-danger btn-sm px-3 fw-bold rounded-pill"
+              class="btn btn-outline-danger btn-sm px-3 fw-bold rounded-pill d-none d-lg-inline-block"
               :disabled="isAutoRunning"
               @click="handleResetDemo"
             >
@@ -657,7 +528,7 @@ onUnmounted(() => {
             <!-- Toggle API Badges (Defaults to OFF; Toggleable for Pitch / Architecture review) -->
             <button
               type="button"
-              class="btn btn-sm rounded-pill fw-bold d-flex align-items-center gap-1 pulse-api-toggle-btn"
+              class="btn btn-sm rounded-pill fw-bold d-none d-xxl-flex align-items-center gap-1 pulse-api-toggle-btn"
               :class="apiMode ? 'pulse-api-active' : 'pulse-api-inactive'"
               title="Toggle API architecture tags across all views"
               @click="apiMode = !apiMode"
@@ -666,101 +537,20 @@ onUnmounted(() => {
               <span>APIs: {{ apiMode ? 'Visible' : 'Hidden' }}</span>
             </button>
  
-            <!-- Facility pages: the live facility bell (Pip's "Open notifications" opens this one) -->
-            <NotificationBell v-if="currentView === 'facilities'" />
- 
-            <!-- Centralized Notification Bell (Anchored safely on right, zero clipping) -->
-            <div v-else class="position-relative pulse-notification-wrapper">
-              <button
-                type="button"
-                class="btn btn-sm btn-pulse-outline position-relative rounded-pill px-2 py-1 bg-white d-flex align-items-center"
-                aria-label="Notifications"
-                @click="notificationsOpen = !notificationsOpen; profileMenuOpen = false"
-              >
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path>
-                  <path d="M13.73 21a2 2 0 0 1-3.46 0"></path>
-                </svg>
-                <span 
-                  v-if="unreadNotificationCount > 0" 
-                  class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger"
-                  style="font-size: 0.575rem; padding: 0.2em 0.4em;"
-                >
-                  {{ unreadNotificationCount }}
-                </span>
-              </button>
- 
-              <!-- Centralized Notification Dropdown Panel -->
-              <div 
-                v-if="notificationsOpen"
-                class="card shadow-lg p-0 border-0 pulse-notification-panel"
-                style="z-index: 1060; border-radius: 1rem; overflow: hidden;"
-              >
-                <div class="p-3 border-bottom d-flex justify-content-between align-items-center bg-light">
-                  <div class="d-flex align-items-center gap-2">
-                    <span class="fw-bold" style="font-size: 0.85rem;">Centralized Alerts</span>
-                    <span class="badge bg-danger rounded-pill" style="font-size: 0.65rem;">
-                      {{ unreadNotificationCount }} new
-                    </span>
-                  </div>
-                  <button 
-                    v-if="unreadNotificationCount > 0"
-                    type="button" 
-                    class="btn btn-link btn-sm p-0 text-decoration-none text-muted"
-                    style="font-size: 0.7rem;"
-                    @click="markAllNotificationsRead"
-                  >
-                    Mark all read
-                  </button>
-                </div>
- 
-                <div class="p-2" style="max-height: 320px; overflow-y: auto;">
-                  <div 
-                    v-for="item in notificationsList" 
-                    :key="item.id"
-                    class="p-2 mb-1 rounded-3 transition-all"
-                    :class="item.unread ? 'bg-danger bg-opacity-10 border border-danger-subtle' : 'bg-transparent'"
-                  >
-                    <div class="d-flex justify-content-between align-items-start gap-1 mb-1">
-                      <span class="fw-bold" style="font-size: 0.775rem;">{{ item.title }}</span>
-                      <span class="badge bg-secondary bg-opacity-10 text-secondary" style="font-size: 0.6rem;">{{ item.time }}</span>
-                    </div>
-                    <p class="mb-1 text-muted" style="font-size: 0.725rem; line-height: 1.35;">{{ item.desc }}</p>
-                    <div class="d-flex justify-content-between align-items-center mt-1">
-                      <span class="badge bg-purple text-white" style="font-size: 0.6rem; background-color: var(--pulse-purple-transit);">
-                        {{ item.badge }}
-                      </span>
-                      <button 
-                        type="button" 
-                        class="btn btn-link btn-sm p-0 text-danger text-decoration-none fw-semibold"
-                        style="font-size: 0.675rem;"
-                        @click="item.unread = false; notificationsOpen = false"
-                      >
-                        Dismiss
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
+            <!-- One bell for the whole site (Pip's "Open notifications" opens it too) -->
+            <NotificationBell />
  
             <!-- Persona Switcher Dropdown (Pitch Presentation Helper) -->
-            <div class="position-relative">
+            <div ref="profileMenu" class="position-relative">
               <button
                 type="button"
-                class="btn btn-pulse-outline btn-sm d-flex align-items-center gap-2 rounded-pill px-3 bg-white"
+                class="pulse-avatar-btn"
                 :aria-expanded="profileMenuOpen"
+                :aria-label="`Account menu for ${activePersona.name}`"
+                :title="activePersona.name"
                 @click="profileMenuOpen = !profileMenuOpen"
               >
-                <!-- Clean SVG User Icon (No Emoji) -->
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
-                  <circle cx="12" cy="7" r="4"></circle>
-                </svg>
-                <span class="fw-bold" style="font-size: 0.775rem;">
-                  {{ activePersona.name }}
-                </span>
-                <span style="font-size: 0.65rem;">▼</span>
+                {{ personaInitials }}
               </button>
  
               <div 
@@ -768,8 +558,8 @@ onUnmounted(() => {
                 class="card shadow-lg position-absolute end-0 mt-2 p-2 border-0" 
                 style="min-width: 260px; z-index: 1050; border-radius: 0.85rem;"
               >
-                <!-- Signed-in identity (everyone except Dev sees just this) -->
-                <div v-if="!canSwitchPersona" class="p-2 border-bottom mb-2">
+                <!-- Signed-in identity (the avatar only shows initials) -->
+                <div class="p-2 border-bottom mb-2">
                   <div class="fw-bold" style="font-size: 0.825rem;">{{ activePersona.name }}</div>
                   <small class="text-muted d-block" style="font-size: 0.7rem;">{{ activePersona.roleLabel }}</small>
                   <small v-if="activePersona.email" class="text-muted d-block" style="font-size: 0.7rem;">{{ activePersona.email }}</small>
@@ -856,6 +646,7 @@ onUnmounted(() => {
  
       <!-- Main Content Area -->
       <main class="container-xl py-4 flex-grow-1">
+        <div :class="{ 'pulse-pip-gutter': pipVisible }">
  
         <!-- Autopilot Banner -->
         <div v-if="isAutoRunning" class="alert alert-dark border-0 shadow-lg text-white mb-4 d-flex align-items-center justify-content-between p-3" style="border-radius: 1rem; background: linear-gradient(135deg, #1e1020, #2a1435);">
@@ -926,7 +717,22 @@ onUnmounted(() => {
           <EventRiskView :api-mode="apiMode" :read-only="isGuest" />
         </div>
  
+        </div>
       </main>
+ 
+      <!-- Pip watches notifications and waitlist offers on every page -->
+      <PipMascot
+        v-if="pipVisible"
+        mode="notifications"
+        :unanswered-count="unreadCount"
+        :offer-seconds-left="soonestOfferSeconds"
+        :is-static="notificationStore.pipStatic"
+        @update:is-static="setPipStatic"
+        :is-quiet="notificationStore.pipQuiet"
+        @update:is-quiet="setPipQuiet"
+        @open-notifications="openNotifications"
+        @open-offer="openOffer"
+      />
  
       <!-- Footer -->
       <footer class="py-3 border-top text-muted small bg-white mt-auto">
@@ -935,13 +741,12 @@ onUnmounted(() => {
             <span class="fw-semibold text-dark">Singapore Management University</span>
             <span class="text-muted">•</span>
             <span>Office of Student Life (OSL)</span>
-            <span class="text-muted">•</span>
-            <span>SMU Students' Association (SMUSA)</span>
+            
           </div>
           <div class="d-flex align-items-center gap-3 text-muted" style="font-size: 0.775rem;">
             <span>Pulse Co-Curricular & Arts Facilities Management</span>
-            <span class="text-muted">•</span>
-            <span>Connected to SMU OASIS</span>
+            
+            
           </div>
         </div>
       </footer>
