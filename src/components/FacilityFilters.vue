@@ -1,5 +1,5 @@
 <script setup>
-import { computed } from 'vue'
+import { computed, ref, onMounted, onUnmounted, watch } from 'vue'
 import { OTHER_CCA_FILTER } from '../services/facilityService'
 
 // Options come from the facilities table, not from hard-coded metadata.
@@ -34,6 +34,65 @@ const equipmentOptions = computed(() => [...new Set(props.facilities.flatMap(f =
 function update(key, value) {
   emit('update:filters', { ...props.filters, [key]: value })
 }
+
+// Dynamic Animated Typewriter Placeholder for Search Box
+const searchPlaceholderQueries = [
+  "Search 'Dance Studio A'…",
+  "Search 'Li Ka Shing B1'…",
+  "Search 'Sprung Floor'…",
+  "Search 'Samba Masala'…",
+  "Search 'Acoustic Room'…",
+  "Search 'Mirrors'…",
+  "Search 'ACC Concourse'…"
+]
+const currentSearchPlaceholder = ref('')
+let searchPlaceholderTimer = null
+let sqIndex = 0
+let scIndex = 0
+let sqDeleting = false
+
+function tickSearchPlaceholder() {
+  if (props.filters?.search && props.filters.search.length > 0) return
+
+  const target = searchPlaceholderQueries[sqIndex]
+  if (!sqDeleting) {
+    scIndex++
+    currentSearchPlaceholder.value = target.substring(0, scIndex)
+    if (scIndex >= target.length) {
+      sqDeleting = true
+      searchPlaceholderTimer = setTimeout(tickSearchPlaceholder, 1800)
+      return
+    }
+    searchPlaceholderTimer = setTimeout(tickSearchPlaceholder, 40)
+  } else {
+    scIndex--
+    currentSearchPlaceholder.value = target.substring(0, scIndex)
+    if (scIndex <= 0) {
+      sqDeleting = false
+      sqIndex = (sqIndex + 1) % searchPlaceholderQueries.length
+      searchPlaceholderTimer = setTimeout(tickSearchPlaceholder, 380)
+      return
+    }
+    searchPlaceholderTimer = setTimeout(tickSearchPlaceholder, 22)
+  }
+}
+
+watch(() => props.filters?.search, (newVal) => {
+  if (!newVal) {
+    if (searchPlaceholderTimer) clearTimeout(searchPlaceholderTimer)
+    scIndex = 0
+    sqDeleting = false
+    searchPlaceholderTimer = setTimeout(tickSearchPlaceholder, 250)
+  }
+})
+
+onMounted(() => {
+  searchPlaceholderTimer = setTimeout(tickSearchPlaceholder, 400)
+})
+
+onUnmounted(() => {
+  if (searchPlaceholderTimer) clearTimeout(searchPlaceholderTimer)
+})
 </script>
 
 <template>
@@ -89,7 +148,7 @@ function update(key, value) {
         <input
           type="search"
           class="form-control pulse-search pulse-apple-input"
-          placeholder="Search facility, CCA or equipment…"
+          :placeholder="filters.search ? '' : (currentSearchPlaceholder || 'Search facility, CCA or equipment…')"
           aria-label="Search facility, CCA or equipment"
           :value="filters.search"
           @input="update('search', $event.target.value)"

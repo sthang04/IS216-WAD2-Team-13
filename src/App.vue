@@ -602,9 +602,9 @@ onMounted(async () => {
                 >
                   <div class="d-flex justify-content-between align-items-center">
                     <span>Marcus Lim</span>
-                    <span class="badge bg-info bg-opacity-10 text-dark" style="font-size: 0.65rem;">Symphonia</span>
+                    <span class="badge bg-danger bg-opacity-10 text-danger" style="font-size: 0.65rem;">Eurhythmix</span>
                   </div>
-                  <small class="text-muted" style="font-size: 0.7rem;">Orchestra hall coordinator</small>
+                  <small class="text-muted" style="font-size: 0.7rem;">Marketing Director / Arts studio access</small>
                 </button>
  
                 <!-- Option 4: Chloe Ang -->
@@ -619,6 +619,20 @@ onMounted(async () => {
                     <span class="badge bg-dark text-white" style="font-size: 0.65rem;">OSL Admin</span>
                   </div>
                   <small class="text-muted" style="font-size: 0.7rem;">Verify compliance & issue audit ticket</small>
+                </button>
+
+                <!-- Option 5: Dev Administrator -->
+                <button 
+                  type="button" 
+                  class="btn text-start mb-1 py-2 px-3 rounded-3" 
+                  :class="activePersona.id === 'dev' ? 'btn-light fw-bold text-danger' : 'btn-white'"
+                  @click="switchPersona('dev')"
+                >
+                  <div class="d-flex justify-content-between align-items-center">
+                    <span>Dev Administrator</span>
+                    <span class="badge text-white" style="background-color: var(--pulse-purple-transit); font-size: 0.65rem;">Dev</span>
+                  </div>
+                  <small class="text-muted" style="font-size: 0.7rem;">Super-Admin / All CCAs</small>
                 </button>
  
                 <hr class="my-1">
