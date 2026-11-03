@@ -816,6 +816,12 @@ function checkInPerformer(person) {
   showToast(`${person.name} checked in at ${formatTime(showClock.value)}.`)
 }
 
+// 'Rachel Tan' -> 'Rachel T' (the grid's name column on phones)
+function shortName(name) {
+  const parts = name.trim().split(/\s+/)
+  return parts.length > 1 ? `${parts[0]} ${parts[parts.length - 1][0]}` : parts[0]
+}
+
 // For a check-in pressed by mistake
 function undoCheckIn(person) {
   if (blockedForGuest()) return
@@ -1114,7 +1120,7 @@ function parseNoticeWithAi() {
           <div v-if="activeTab === 'me'">
             <div class="d-flex align-items-center gap-2 mb-3">
               <label for="opsPerson" class="small text-muted mb-0">Showing</label>
-              <select id="opsPerson" v-model="selectedName" class="form-select form-select-sm w-auto">
+              <select id="opsPerson" v-model="selectedName" class="form-select form-select-sm w-auto ops-person-select">
                 <option value="">{{ meIsSignedInUser && !selectedName ? `${me.name} (you)` : 'Choose a person' }}</option>
                 <option v-for="p in crew" :key="p.name" :value="p.name">{{ p.name }} • {{ p.role }}</option>
               </select>
@@ -1180,9 +1186,10 @@ function parseNoticeWithAi() {
                   <div class="ops-grid-name">
                     <div class="fw-semibold small d-flex align-items-center gap-1">
                       <span class="ops-dot" :class="`ops-dot-${checkInStatus(p)}`"></span>
-                      <span class="text-truncate">{{ p.name }}</span>
+                      <span class="text-truncate ops-name-full">{{ p.name }}</span>
+                      <span class="text-truncate ops-name-short">{{ shortName(p.name) }}</span>
                     </div>
-                    <div class="text-muted ops-small text-truncate">{{ p.role }}</div>
+                    <div class="text-muted ops-small text-truncate ops-grid-role">{{ p.role }}</div>
                   </div>
                   <div class="ops-grid-track">
                     <span v-for="t in halfHours" :key="t" class="ops-gridline" :style="{ left: `${percentAt(t)}%` }"></span>
@@ -1660,6 +1667,10 @@ function parseNoticeWithAi() {
 
 /* The delay menu opens to the right so it stays on screen on phones */
 .ops-delay .ops-more-menu { left: 0; right: auto; min-width: 140px; }
+/* On phones More tools wraps to the left edge, so open that one to the right too */
+@media (max-width: 576px) {
+  .ops-more .ops-more-menu { left: 0; right: auto; }
+}
 
 .ops-more-menu {
   position: absolute;
@@ -1725,6 +1736,17 @@ function parseNoticeWithAi() {
   background: #fff;
 }
 .ops-grid-me .ops-grid-name { box-shadow: inset 3px 0 0 #dc3545; padding-left: 0.5rem; }
+.ops-name-short { display: none; }
+/* Long names + roles would push the picker past the card on phones */
+.ops-person-select { min-width: 0; max-width: 100%; text-overflow: ellipsis; }
+
+/* Phones only: thinner name column so more of the timeline fits */
+@media (max-width: 576px) {
+  .ops-grid-name { width: 84px; }
+  .ops-name-full,
+  .ops-grid-role { display: none; }
+  .ops-name-short { display: inline; }
+}
 .ops-grid-track { position: relative; flex-grow: 1; min-height: 52px; }
 .ops-grid-head .ops-grid-track { min-height: 22px; }
 .ops-tick { position: absolute; top: 0; padding-left: 4px; font-size: 0.65rem; color: #64748b; font-variant-numeric: tabular-nums; }
