@@ -127,6 +127,47 @@ body {
   font-weight: 700;
 }
 
+/* Header: brand on the left, tabs in the middle, bell + avatar pinned to the right
+   (YouTube-style layout). The tabs scroll sideways instead of wrapping the bar. */
+.pulse-header-nav {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+  padding-block: 0.5rem;   /* room for the active tab's underline inside the scroll box */
+  margin-block: -0.5rem;
+}
+.pulse-header-nav::-webkit-scrollbar { display: none; }
+.pulse-header-nav .pulse-nav-pill { white-space: nowrap; flex-shrink: 0; }
+/* Centre the tabs when they fit; when they don't, scroll from the first tab
+   (justify-content: center would cut off the start instead) */
+.pulse-header-nav > :first-child { margin-left: auto; }
+.pulse-header-nav > :last-child { margin-right: auto; }
+@media (max-width: 1399.98px) {
+  .pulse-header-nav .pulse-nav-pill { padding: 0.5rem 0.6rem; }
+}
+
+.pulse-avatar-btn {
+  width: 34px;
+  height: 34px;
+  border-radius: 999px;
+  border: 0;
+  background: linear-gradient(135deg, var(--pulse-primary), var(--pulse-primary-hover));
+  color: #fff;
+  font-size: 0.75rem;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: box-shadow 0.15s ease, transform 0.15s ease;
+}
+.pulse-avatar-btn:hover,
+.pulse-avatar-btn[aria-expanded="true"] {
+  box-shadow: 0 0 0 3px var(--pulse-primary-light);
+}
+
 .pulse-nav-pill.active::after {
   content: '';
   position: absolute;
@@ -845,4 +886,15 @@ body {
   box-shadow: 0 14px 30px -5px rgba(225, 29, 72, 0.12);
 }
 
+/* Keep Pip (fixed, bottom-right, ~115px wide) off the page content: reserve a right
+   gutter when the screen margin beside the container is too narrow, and room at
+   the bottom so the last rows can scroll clear of it. */
+.pulse-pip-gutter {
+  padding-bottom: 120px;
+}
 
+@media (min-width: 768px) {
+  .pulse-pip-gutter {
+    padding-right: max(0px, calc(125px - (100vw - 100%) / 2));
+  }
+}
