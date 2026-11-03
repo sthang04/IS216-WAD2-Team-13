@@ -92,28 +92,33 @@ const EXAMPLE_MATRIX = [
   [0, 8, 0, 4, 8, 0, 4, 0, 0, 0, 0, 8, 4, 0], // Mon
   [0, 0, 4, 8, 4, 0, 0, 8, 0, 4, 8, 8, 4, 0], // Tue
   [0, 0, 8, 0, 0, 0, 0, 0, 4, 8, 4, 0, 0, 8], // Wed
-  [4, 8, 0, 4, 0, 8, 4, 0, 8, 12, 12, 4, 8, 0], // Thu
-  [8, 4, 0, 0, 8, 0, 0, 4, 12, 12, 12, 8, 4, 0], // Fri
+  [4, 8, 0, 4, 0, 8, 4, 0, 8, 11, 11, 4, 8, 0], // Thu
+  [8, 4, 0, 0, 8, 0, 0, 4, 11, 11, 11, 8, 4, 0], // Fri
   [0, 0, 4, 8, 0, 4, 0, 8, 4, 0, 0, 4, 0, 4], // Sat
   [4, 0, 8, 4, 0, 0, 8, 0, 4, 8, 8, 4, 0, 8]  // Sun
 ]
 
-// Slots where YOU start off as available (already included in the numbers above). Format: "dayIndex_hourIndex"
-const INITIAL_MINE = new Set(['4_8', '4_9', '4_10', '3_9', '3_10'])
+// Slots where YOU start off as available (Set is empty so no default slots are selected)
+const INITIAL_MINE = new Set()
 
 // Slots you have clicked. Key = "weekKey|dayIndex|hourIndex", value = true (available) or false (not available)
 const myClicks = ref({})
 
 // Are YOU available in this slot? (your click if you made one, otherwise the starting value)
+// Are YOU available in this slot? (Returns your click choice if made, otherwise defaults to false)
 function isMine(wk, d, h) {
   const clicked = myClicks.value[`${wk}|${d}|${h}`]
-  return clicked === undefined ? INITIAL_MINE.has(`${d}_${h}`) : clicked
+  return clicked === undefined ? false : clicked
 }
 
-// How many members are free in this slot? Start from the example number, then adjust if you changed your own slot.
+// How many members are free in this slot? 
+// EXAMPLE_MATRIX holds the base count of OTHER members available (e.g. 11/12).
+// We simply add 1 if YOU click the slot as available.
 function getCount(wk, d, h) {
-  const startedAsMine = INITIAL_MINE.has(`${d}_${h}`)
-  const count = EXAMPLE_MATRIX[d][h] + (isMine(wk, d, h) ? 1 : 0) - (startedAsMine ? 1 : 0)
+  const baseOthersCount = EXAMPLE_MATRIX[d][h]
+  const myStatus = isMine(wk, d, h) ? 1 : 0
+
+  const count = baseOthersCount + myStatus
   return Math.max(0, Math.min(TOTAL_MEMBERS, count))
 }
 
@@ -143,11 +148,15 @@ function freeMemberIds(wk, d, h) {
 // Click on a heatmap cell = toggle your own availability
 function handleCellClick(d, h, dIdx, hIdx) {
   if (blockedForGuest()) return
+  
   const nowAvailable = !isMine(weekKey.value, dIdx, hIdx)
   myClicks.value[`${weekKey.value}|${dIdx}|${hIdx}`] = nowAvailable
 
   const total = getCount(weekKey.value, dIdx, hIdx)
-  showToast(`When2Meet: Marked Rachel Tan as ${nowAvailable ? 'Available' : 'Unavailable'} on ${d} @ ${h} (${nowAvailable ? '+1' : '-1'} member). Total: ${total}/12 members.`)
+  const deltaText = nowAvailable ? '+1' : '-1'
+  const statusText = nowAvailable ? 'Available' : 'Unavailable'
+
+  showToast(`When2Meet: Marked Rachel Tan as ${statusText} on ${d} @ ${h} (${deltaText} member). Total: ${total}/12 members.`)
 }
 
 /* ================================================================== */
@@ -956,10 +965,7 @@ function exportToCalendar(details = null) {
             </div>
           </div>
 
-          <div class="modal-footer border-top px-4 py-3 bg-light d-flex justify-content-between">
-            <button type="button" class="btn btn-outline-secondary btn-sm rounded-pill px-3" @click="showMeetingModal = false">
-              Cancel
-            </button>
+          <div class="modal-footer border-top px-4 py-3 bg-light d-flex justify-content-end">
             <button type="button" class="btn btn-pulse-primary btn-sm rounded-pill px-4 fw-bold" @click="confirmAndBroadcastMeeting">
               Confirm Meeting & Dispatch Telegram Broadcast
             </button>
