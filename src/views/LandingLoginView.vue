@@ -3,6 +3,8 @@ import { ref, computed, onMounted, onUnmounted } from 'vue';
 import { DEMO_PERSONAS, DEMO_PASSWORD } from '../services/authProfiles';
 import { signIn, isSmuEmail as checkSmuEmail, findPersonaByEmail } from '../services/authService';
 import PasswordVisibilityToggle from '../components/PasswordVisibilityToggle.vue';
+import LandingFeatureDemo from '../components/LandingFeatureDemo.vue';
+import PulseWordmark from '../components/PulseWordmark.vue';
 
 const emit = defineEmits(['login', 'explore', 'signup']);
 
@@ -317,14 +319,20 @@ async function handleManualLogin() {
 
 <template>
   <div 
-    class="min-vh-100 d-flex flex-column justify-content-center align-items-center position-relative py-5 px-3 pulse-login-canvas overflow-hidden"
+    class="min-vh-100 d-flex flex-column justify-content-center align-items-center position-relative py-5 px-3 pulse-login-canvas landing-type overflow-hidden"
     @mousemove="handleMouseMove"
   >
     <!-- Liquid Ambient Aura Orbs (Modern Glass Lighting) -->
-    <div class="liquid-orb liquid-orb-primary" :style="{ transform: `translate(${mouseX * 0.4}px, ${mouseY * 0.4}px)` }"></div>
-    <div class="liquid-orb liquid-orb-cyan" :style="{ transform: `translate(${-mouseX * 0.3}px, ${-mouseY * 0.3}px)` }"></div>
-    <div class="liquid-orb liquid-orb-purple" :style="{ transform: `translate(${mouseX * 0.25}px, ${mouseY * 0.5}px)` }"></div>
+    <!-- Parallax uses `translate` so it stacks on top of the float animation's `transform` -->
+    <div class="liquid-orb liquid-orb-primary" :style="{ translate: `${mouseX * 2}px ${mouseY * 2}px` }"></div>
+    <div class="liquid-orb liquid-orb-cyan" :style="{ translate: `${-mouseX * 1.5}px ${-mouseY * 1.5}px` }"></div>
+    <div class="liquid-orb liquid-orb-purple" :style="{ translate: `${mouseX * 1.2}px ${mouseY * 2.4}px` }"></div>
     <div class="liquid-mesh-grid"></div>
+
+    <!-- Brand motif: radar rings behind the sign-in card -->
+    <div class="pulse-bg-rings" aria-hidden="true">
+      <span></span><span></span><span></span>
+    </div>
 
     <!-- Cohesive Enterprise Container: Desktop & Laptop Dimension Optimized -->
     <div class="container-fluid position-relative" style="max-width: 1320px; z-index: 1;">
@@ -334,122 +342,29 @@ async function handleManualLogin() {
         <div class="col-12 col-lg-6 col-xl-6">
           <div class="pe-lg-4">
             
-            <!-- Dignified Institutional Badge with Full University Name & Acronym (Mentioned Once) -->
-            <div class="d-inline-flex align-items-center rounded-4 liquid-glass-tag mb-3 shadow-sm border" style="background: rgba(255, 255, 255, 0.92); backdrop-filter: blur(12px); padding: 8px 18px 8px 10px; gap: 14px;">
-              <span class="badge rounded-pill bg-danger bg-opacity-10 text-danger border border-danger-subtle fw-bold flex-shrink-0" style="font-size: 0.7rem; letter-spacing: 0.05em; line-height: 1.2; padding: 6px 12px;">
-                CAMPUS PORTAL
+            <!-- Brand lockup: Pulse wordmark | SMU campus portal -->
+            <div class="landing-brand mb-4 reveal" style="--d: 0;">
+              <PulseWordmark class="landing-wordmark" />
+              <span class="landing-brand-divider" aria-hidden="true"></span>
+              <span class="landing-brand-org">
+                <span class="d-block">Singapore Management University</span>
+                <span class="d-block text-muted">Co-Curricular Facilities &amp; Operations</span>
               </span>
-              <div class="text-start pe-2" style="line-height: 1.3;">
-                <span class="d-block fw-bold text-dark" style="font-size: 0.83rem; letter-spacing: -0.01em;">
-                  Singapore Management University (SMU)
-                </span>
-                <span class="text-muted d-block" style="font-size: 0.71rem; font-weight: 500; margin-top: 2px;">
-                  Co-Curricular Facilities & Operations
-                </span>
-              </div>
             </div>
 
-            <h1 class="display-6 fw-bold tracking-tight mb-3" style="color: var(--pulse-ink); line-height: 1.15;">
-              Pulse:
-              <br>Centralised Facilities & Operations
+            <h1 class="landing-headline mb-3 reveal" style="--d: 1;">
+              Centralised Facilities &amp; Operations
             </h1>
 
-            <p class="text-muted mb-4" style="font-size: 0.95rem; line-height: 1.6;">
+            <p class="text-muted mb-4 reveal" style="--d: 2; font-size: 0.95rem; line-height: 1.6;">
               A centralised co-curricular management platform for <strong>SMU</strong> student clubs, performance groups, and Office of Student Life (OSL) administrators. Simplifies arts studio handovers, automates waitlists for in-demand venues, and streamlines rehearsal logistics across the city campus.
             </p>
 
-            <!-- Creative Glanceable Campus Operations Showcase (Instant 2-Second Preview) -->
-            <div class="pulse-card liquid-glass-card p-3 p-xl-3.5 border shadow-sm mb-4 glance-showcase-box">
-              
-              <!-- Showcase Header -->
-              <div class="d-flex align-items-center justify-content-between mb-3 pb-2 border-bottom flex-wrap gap-2">
-                <div class="d-flex align-items-center gap-2">
-                  <span class="glance-pulse-indicator"></span>
-                  <span class="text-uppercase fw-bold text-dark" style="font-size: 0.72rem; letter-spacing: 0.05em;">
-                    Live Campus Operations at a Glance
-                  </span>
-                </div>
-                <span class="badge bg-danger bg-opacity-10 text-danger border border-danger-subtle px-2 py-0.5 rounded-pill fw-bold" style="font-size: 0.65rem;">
-                  Real-Time Sync
-                </span>
-              </div>
-
-              <!-- 3 Sleek Glance Cards (Clean, instant comprehension at a glance) -->
-              <div class="d-flex flex-column gap-2.5">
-                
-                <!-- Glance Item 1: Smart Venue Booking & Waitlist -->
-                <div class="glance-item-card p-2.5 rounded-3 border bg-white shadow-2xs">
-                  <div class="d-flex align-items-center justify-content-between mb-1">
-                    <div class="d-flex align-items-center gap-2">
-                      <div class="glance-icon-circle bg-primary bg-opacity-10 text-primary">
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
-                          <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
-                          <line x1="16" y1="2" x2="16" y2="6"></line>
-                          <line x1="8" y1="2" x2="8" y2="6"></line>
-                          <line x1="3" y1="10" x2="21" y2="10"></line>
-                        </svg>
-                      </div>
-                      <strong class="text-dark small" style="font-size: 0.8rem;">Smart Booking & Instant Waitlist</strong>
-                    </div>
-                    <span class="badge bg-success bg-opacity-10 text-success border border-success-subtle px-2 py-0.5 rounded-pill" style="font-size: 0.64rem; font-weight: 700;">
-                      ● 6 Venues Live
-                    </span>
-                  </div>
-                  <p class="text-muted small mb-0 ps-4 ms-2" style="font-size: 0.72rem; line-height: 1.4;">
-                    Instant queue alerts & auto-promotion when popular campus studios (e.g. Connexion B1 & MPSH) are released.
-                  </p>
-                </div>
-
-                <!-- Glance Item 2: P2P Studio Handover Engine -->
-                <div class="glance-item-card p-2.5 rounded-3 border bg-white shadow-2xs">
-                  <div class="d-flex align-items-center justify-content-between mb-1">
-                    <div class="d-flex align-items-center gap-2">
-                      <div class="glance-icon-circle bg-danger bg-opacity-10 text-danger">
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
-                          <polyline points="17 1 21 5 17 9"></polyline>
-                          <path d="M3 11V9a4 4 0 0 1 4-4h14"></path>
-                          <polyline points="7 23 3 19 7 15"></polyline>
-                          <path d="M21 13v2a4 4 0 0 1-4 4H3"></path>
-                        </svg>
-                      </div>
-                      <strong class="text-dark small" style="font-size: 0.8rem;">Peer-to-Peer Studio Handover</strong>
-                    </div>
-                    <span class="badge bg-primary bg-opacity-10 text-primary border border-primary-subtle px-2 py-0.5 rounded-pill" style="font-size: 0.64rem; font-weight: 700;">
-                      OSL Clause 9.1(c)
-                    </span>
-                  </div>
-                  <p class="text-muted small mb-0 ps-4 ms-2" style="font-size: 0.72rem; line-height: 1.4;">
-                    Direct slot exchanges between CCAs (e.g. Eurhythmix ⇄ Samba Masala) with verified legal liability reassignment.
-                  </p>
-                </div>
-
-                <!-- Glance Item 3: Rehearsal Run-of-Show & Transit Buffer -->
-                <div class="glance-item-card p-2.5 rounded-3 border bg-white shadow-2xs">
-                  <div class="d-flex align-items-center justify-content-between mb-1">
-                    <div class="d-flex align-items-center gap-2">
-                      <div class="glance-icon-circle bg-success bg-opacity-10 text-success">
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
-                          <circle cx="12" cy="12" r="10"></circle>
-                          <polyline points="12 6 12 12 16 14"></polyline>
-                        </svg>
-                      </div>
-                      <strong class="text-dark small" style="font-size: 0.8rem;">Run-of-Show & OneMap Walking SLA</strong>
-                    </div>
-                    <span class="badge bg-secondary bg-opacity-10 text-secondary border px-2 py-0.5 rounded-pill" style="font-size: 0.64rem; font-weight: 700;">
-                      +15m Sheltered Buffer
-                    </span>
-                  </div>
-                  <p class="text-muted small mb-0 ps-4 ms-2" style="font-size: 0.72rem; line-height: 1.4;">
-                    Verified 650m walking routes (Connexion to Li Ka Shing Hall) auto-injected into cue sheets with Telegram bot alerts.
-                  </p>
-                </div>
-
-              </div>
-
-            </div>
+            <!-- Interactive feature preview: plays release -> claim -> approve on a mini calendar -->
+            <LandingFeatureDemo class="mb-4 reveal" style="--d: 3;" />
 
             <!-- Security Assurance Note -->
-            <div class="d-flex align-items-center gap-2 text-muted small" style="font-size: 0.775rem;">
+            <div class="d-flex align-items-center gap-2 text-muted small reveal" style="--d: 4; font-size: 0.775rem;">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
                 <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
@@ -462,7 +377,7 @@ async function handleManualLogin() {
 
         <!-- Right Column: Liquid Glass Sign-In Portal -->
         <div class="col-12 col-lg-6 col-xl-6 d-flex justify-content-center justify-content-lg-end">
-          <div class="pulse-card liquid-glass-card p-4 p-xl-4 shadow-lg border w-100 position-relative" style="max-width: 560px;">
+          <div class="pulse-card liquid-glass-card p-4 p-xl-4 shadow-lg border w-100 position-relative reveal" style="--d: 2; max-width: 560px;">
             
             <!-- Sleek Enterprise Header (Clean Dimensions, No Overlapping Pulsing Dots) -->
             <div class="d-flex align-items-center justify-content-between mb-3 pb-3 border-bottom flex-wrap gap-2">
@@ -524,12 +439,12 @@ async function handleManualLogin() {
             <div v-if="rememberedAccount && !isSwitchingAccount" class="p-3 rounded-3 bg-white border shadow-sm mb-3 remembered-session-card">
               <div class="d-flex align-items-center justify-content-between mb-2">
                 <span class="badge bg-danger bg-opacity-10 text-danger border border-danger-subtle px-2 py-0.5" style="font-size: 0.65rem; font-weight: 700;">
-                  ⚡ SESSION CACHED
+                  SESSION CACHED
                 </span>
                 <span class="text-muted" style="font-size: 0.68rem;">Last active: {{ rememberedAccount.lastLoginAt || 'Recent session' }}</span>
               </div>
 
-              <div class="d-flex align-items-center gap-2.5 mb-2.5">
+              <div class="d-flex align-items-center gap-3 mb-3">
                 <div class="remembered-avatar text-white fw-bold d-flex align-items-center justify-content-center shadow-xs">
                   {{ rememberedAccount.name ? rememberedAccount.name.charAt(0) : 'U' }}
                 </div>
@@ -546,7 +461,7 @@ async function handleManualLogin() {
               <div v-if="isRememberedDemo" class="d-flex gap-2">
                 <button 
                   type="button" 
-                  class="btn btn-sm btn-pulse-primary flex-grow-1 py-1.5 fw-bold text-white shadow-sm d-flex align-items-center justify-content-center gap-1.5"
+                  class="btn btn-sm btn-pulse-primary flex-grow-1 py-2 fw-bold text-white shadow-sm d-flex align-items-center justify-content-center gap-2"
                   :disabled="isSubmitting"
                   @click="resumeRememberedLogin"
                 >
@@ -555,7 +470,7 @@ async function handleManualLogin() {
                 </button>
                 <button 
                   type="button" 
-                  class="btn btn-sm btn-outline-secondary py-1.5 px-2.5" 
+                  class="btn btn-sm btn-outline-secondary py-2 px-3"
                   title="Switch to another SMU account" 
                   @click="switchAccount"
                 >
@@ -592,7 +507,7 @@ async function handleManualLogin() {
                 <div class="d-flex gap-2">
                   <button 
                     type="button" 
-                    class="btn btn-sm btn-pulse-primary flex-grow-1 py-1.5 fw-bold text-white shadow-sm d-flex align-items-center justify-content-center gap-1.5"
+                    class="btn btn-sm btn-pulse-primary flex-grow-1 py-2 fw-bold text-white shadow-sm d-flex align-items-center justify-content-center gap-2"
                     :disabled="isSubmitting || !rememberedPassword"
                     @click="handleResumeWithPassword"
                   >
@@ -601,7 +516,7 @@ async function handleManualLogin() {
                   </button>
                   <button 
                     type="button" 
-                    class="btn btn-sm btn-outline-secondary py-1.5 px-2.5" 
+                    class="btn btn-sm btn-outline-secondary py-2 px-3"
                     title="Switch to another SMU account" 
                     @click="switchAccount"
                   >
@@ -806,7 +721,7 @@ async function handleManualLogin() {
               >
                 <div class="d-flex align-items-center text-start flex-grow-1 min-w-0" style="gap: 12px;">
                   <span class="badge rounded-pill demo-badge flex-shrink-0" style="font-size: 0.72rem; font-weight: 700; padding: 5px 12px;">
-                    ⚡ 1-Click
+                    1-Click
                   </span>
                   <span class="fw-bold text-dark text-start" style="font-size: 0.82rem; letter-spacing: -0.01em; white-space: nowrap;">
                     Click here for 1-Click Login for different personas
@@ -997,7 +912,10 @@ async function handleManualLogin() {
    Liquid Glass & Mesh Aesthetic
    ========================================================================== */
 .pulse-login-canvas {
-  background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 45%, #e2e8f0 100%);
+  background:
+    radial-gradient(ellipse 60% 50% at 0% 0%, rgba(254, 205, 211, 0.55), transparent 70%),
+    radial-gradient(ellipse 50% 60% at 100% 100%, rgba(186, 230, 253, 0.5), transparent 70%),
+    linear-gradient(135deg, #fff7f8 0%, #f8fafc 50%, #eef2f7 100%);
   position: relative;
 }
 
@@ -1007,8 +925,8 @@ async function handleManualLogin() {
   border-radius: 50%;
   pointer-events: none;
   filter: blur(80px);
-  opacity: 0.65;
-  transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+  opacity: 0.8;
+  transition: translate 0.6s cubic-bezier(0.16, 1, 0.3, 1);
   z-index: 0;
 }
 
@@ -1018,7 +936,7 @@ async function handleManualLogin() {
   top: -80px;
   left: 5%;
   background: radial-gradient(circle, rgba(225, 29, 72, 0.22) 0%, rgba(225, 29, 72, 0.04) 65%, transparent 100%);
-  animation: floatOrb1 20s ease-in-out infinite alternate;
+  animation: floatOrb1 14s ease-in-out infinite alternate;
 }
 
 .liquid-orb-cyan {
@@ -1027,7 +945,7 @@ async function handleManualLogin() {
   top: 35%;
   right: -80px;
   background: radial-gradient(circle, rgba(14, 165, 233, 0.20) 0%, rgba(56, 189, 248, 0.03) 65%, transparent 100%);
-  animation: floatOrb2 25s ease-in-out infinite alternate;
+  animation: floatOrb2 18s ease-in-out infinite alternate;
 }
 
 .liquid-orb-purple {
@@ -1036,25 +954,25 @@ async function handleManualLogin() {
   bottom: -80px;
   left: 38%;
   background: radial-gradient(circle, rgba(168, 85, 247, 0.16) 0%, rgba(147, 51, 234, 0.03) 65%, transparent 100%);
-  animation: floatOrb3 22s ease-in-out infinite alternate;
+  animation: floatOrb3 16s ease-in-out infinite alternate;
 }
 
 @keyframes floatOrb1 {
   0% { transform: translate(0, 0) scale(1); }
-  50% { transform: translate(40px, 30px) scale(1.08); }
-  100% { transform: translate(-20px, 50px) scale(0.95); }
+  50% { transform: translate(160px, 90px) scale(1.15); }
+  100% { transform: translate(60px, 200px) scale(0.9); }
 }
 
 @keyframes floatOrb2 {
   0% { transform: translate(0, 0) scale(1); }
-  50% { transform: translate(-50px, -40px) scale(1.1); }
-  100% { transform: translate(30px, 30px) scale(0.92); }
+  50% { transform: translate(-180px, -120px) scale(1.2); }
+  100% { transform: translate(-60px, 110px) scale(0.9); }
 }
 
 @keyframes floatOrb3 {
   0% { transform: translate(0, 0) scale(1); }
-  50% { transform: translate(-30px, 40px) scale(1.05); }
-  100% { transform: translate(40px, -20px) scale(0.98); }
+  50% { transform: translate(-200px, -60px) scale(1.12); }
+  100% { transform: translate(140px, -140px) scale(0.95); }
 }
 
 /* Subtle architectural grid pattern overlay */
@@ -1066,9 +984,43 @@ async function handleManualLogin() {
   bottom: 0;
   background-image: radial-gradient(rgba(148, 163, 184, 0.22) 1px, transparent 1px);
   background-size: 28px 28px;
-  opacity: 0.6;
+  opacity: 0.9;
   pointer-events: none;
   z-index: 0;
+  -webkit-mask-image: radial-gradient(ellipse 70% 65% at 50% 50%, #000 30%, transparent 85%);
+  mask-image: radial-gradient(ellipse 70% 65% at 50% 50%, #000 30%, transparent 85%);
+}
+
+/* Radar rings centred behind the sign-in card (echo the Pulse beacon) */
+.pulse-bg-rings {
+  position: absolute;
+  top: 50%;
+  left: 75%;
+  width: 0;
+  height: 0;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.pulse-bg-rings span {
+  position: absolute;
+  left: -380px;
+  top: -380px;
+  width: 760px;
+  height: 760px;
+  border-radius: 50%;
+  border: 1.5px solid rgba(225, 29, 72, 0.22);
+  opacity: 0;
+  animation: bg-ring 9s cubic-bezier(0.2, 0.6, 0.3, 1) infinite;
+}
+
+.pulse-bg-rings span:nth-child(2) { animation-delay: 3s; }
+.pulse-bg-rings span:nth-child(3) { animation-delay: 6s; }
+
+@keyframes bg-ring {
+  0% { transform: scale(0.35); opacity: 0; }
+  15% { opacity: 1; }
+  100% { transform: scale(1.4); opacity: 0; }
 }
 
 /* Glassmorphism Container */
@@ -1102,51 +1054,87 @@ async function handleManualLogin() {
 }
 
 /* ==========================================================================
-   Glanceable Campus Operations Showcase
+   Landing Typography & Brand Lockup
+   Instrument Sans for text, Archivo Expanded for display (see index.html)
    ========================================================================== */
-.glance-showcase-box {
-  background: rgba(255, 255, 255, 0.88) !important;
-  border-radius: 1.25rem !important;
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
+.landing-type {
+  font-family: 'Instrument Sans', var(--pulse-font);
+  font-feature-settings: normal;
 }
 
-.glance-pulse-indicator {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: #22c55e;
-  box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.7);
-  animation: glance-pulse 2s infinite;
-  display: inline-block;
+.landing-type h1,
+.landing-type h4 {
+  font-family: 'Archivo', var(--pulse-font);
+  font-stretch: 125%;
 }
 
-@keyframes glance-pulse {
-  0% { box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.7); }
-  70% { box-shadow: 0 0 0 6px rgba(34, 197, 94, 0); }
-  100% { box-shadow: 0 0 0 0 rgba(34, 197, 94, 0); }
+.landing-type h4 {
+  font-weight: 800;
+  letter-spacing: -0.02em;
 }
 
-.glance-item-card {
-  transition: all 0.22s cubic-bezier(0.16, 1, 0.3, 1);
-  background: #ffffff;
-  border: 1px solid #e2e8f0;
-}
-
-.glance-item-card:hover {
-  transform: translateY(-2px);
-  border-color: rgba(225, 29, 72, 0.25) !important;
-  box-shadow: 0 6px 18px -4px rgba(15, 23, 42, 0.08) !important;
-}
-
-.glance-icon-circle {
-  width: 24px;
-  height: 24px;
-  border-radius: 50%;
+.landing-brand {
   display: flex;
   align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
+  gap: 18px;
+}
+
+.landing-wordmark {
+  font-size: 4.75rem;
+}
+
+.landing-brand-divider {
+  width: 1px;
+  align-self: stretch;
+  margin: 6px 0;
+  background: rgba(15, 23, 42, 0.18);
+}
+
+.landing-brand-org {
+  font-size: 0.8rem;
+  font-weight: 600;
+  line-height: 1.35;
+  color: var(--pulse-ink);
+}
+
+.landing-brand-org .text-muted { font-weight: 500; font-size: 0.74rem; }
+
+.landing-headline {
+  font-size: clamp(1.9rem, 3.1vw, 2.75rem);
+  font-weight: 900;
+  line-height: 0.95;
+  letter-spacing: -0.02em;
+  text-transform: uppercase;
+  color: var(--pulse-ink);
+}
+
+@media (max-width: 575.98px) {
+  .landing-brand { flex-direction: column; align-items: flex-start; gap: 10px; }
+  .landing-brand-divider { display: none; }
+  .landing-wordmark { font-size: 3.5rem; }
+  .landing-brand-org { font-size: 0.72rem; }
+  .landing-brand-org .text-muted { font-size: 0.66rem; }
+}
+
+/* ==========================================================================
+   Staggered Entrance (set --d on each element for its order)
+   Animates `translate` rather than `transform` so hover lifts keep working
+   ========================================================================== */
+.reveal {
+  animation: reveal-up 0.7s cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation-delay: calc(var(--d, 0) * 90ms);
+}
+
+@keyframes reveal-up {
+  from { opacity: 0; translate: 0 18px; }
+  to { opacity: 1; translate: 0 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .reveal,
+  .liquid-orb,
+  .pulse-bg-rings span { animation: none !important; }
+  .liquid-orb { translate: none !important; }
 }
 
 /* ==========================================================================
