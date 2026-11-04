@@ -339,7 +339,7 @@ async function handleManualLogin() {
 
 <template>
   <div 
-    class="min-vh-100 d-flex flex-column justify-content-center align-items-center position-relative py-5 px-3 pulse-login-canvas landing-type overflow-hidden"
+    class="min-vh-100 d-flex flex-column justify-content-center align-items-center position-relative py-3 py-lg-5 px-2 px-sm-3 pulse-login-canvas landing-type overflow-hidden"
     @mousemove="handleMouseMove"
   >
     <!-- Liquid Ambient Aura Orbs (Modern Glass Lighting) -->
@@ -717,11 +717,11 @@ async function handleManualLogin() {
             </form>
 
             <!-- Feature-Rich New ExCo Onboarding Button (Secondary Action with Generous Breathing Room) -->
-            <div class="mt-4 pt-1">
+            <div class="mt-2.5 pt-1">
               <button 
                 type="button" 
                 class="btn w-100 rounded-3 d-flex align-items-center justify-content-between new-exco-feature-btn shadow-2xs" 
-                style="padding: 10px 16px;"
+                style="padding: 8px 14px;"
                 @click="emit('signup')"
               >
                 <div class="d-flex align-items-center text-start" style="gap: 12px;">
@@ -754,16 +754,16 @@ async function handleManualLogin() {
 
 
             <!-- Collapsible 1-Click Persona Drawer -->
-            <div class="mt-4 pt-3 border-top">
+            <div class="mt-2.5 pt-2 border-top">
               <button 
                 type="button" 
                 class="btn w-100 rounded-3 d-flex align-items-center justify-content-between demo-toggle-bar text-start overflow-hidden"
                 :class="showDemoLogins ? 'demo-toggle-active' : 'demo-toggle-inactive'"
-                style="padding: 11px 16px; border-radius: 12px;"
+                style="padding: 9px 14px; border-radius: 10px;"
                 @click="showDemoLogins = !showDemoLogins"
               >
                 <div class="d-flex align-items-center text-start flex-grow-1 min-w-0" style="gap: 12px;">
-                  <span class="badge rounded-pill demo-badge flex-shrink-0" style="font-size: 0.72rem; font-weight: 700; padding: 5px 12px;">
+                  <span class="badge rounded-pill demo-badge flex-shrink-0" style="font-size: 0.72rem; font-weight: 700; padding: 4px 10px;">
                     1-Click
                   </span>
                   <span class="fw-bold text-dark text-start" style="font-size: 0.82rem; letter-spacing: -0.01em; line-height: 1.3;">
@@ -798,7 +798,7 @@ async function handleManualLogin() {
 
                   <div class="row g-2">
                     <!-- Persona 1: Rachel Tan -->
-                    <div class="col-12 col-sm-6">
+                    <div class="col-6">
                       <button 
                         type="button" 
                         class="btn btn-sm btn-outline-secondary w-100 text-start p-2 rounded-3 d-flex justify-content-between align-items-center bg-white persona-tile h-100"
@@ -807,14 +807,14 @@ async function handleManualLogin() {
                       >
                         <div class="me-1 text-truncate">
                           <strong class="d-block text-dark text-truncate" style="font-size: 0.76rem;">Rachel Tan</strong>
-                          <small class="text-muted d-block text-truncate" style="font-size: 0.66rem;">Eurhythmix ExCo</small>
+                          <small class="text-muted d-block text-truncate" style="font-size: 0.66rem;">Eurhythmix</small>
                         </div>
-                        <span class="badge bg-danger bg-opacity-10 text-danger border flex-shrink-0" style="font-size: 0.65rem;">Logistics</span>
+                        <span class="badge bg-danger bg-opacity-10 text-danger border flex-shrink-0" style="font-size: 0.62rem;">Logistics</span>
                       </button>
                     </div>
 
                     <!-- Persona 2: Darren Koh -->
-                    <div class="col-12 col-sm-6">
+                    <div class="col-6">
                       <button 
                         type="button" 
                         class="btn btn-sm btn-outline-secondary w-100 text-start p-2 rounded-3 d-flex justify-content-between align-items-center bg-white persona-tile h-100"
@@ -823,14 +823,14 @@ async function handleManualLogin() {
                       >
                         <div class="me-1 text-truncate">
                           <strong class="d-block text-dark text-truncate" style="font-size: 0.76rem;">Darren Koh</strong>
-                          <small class="text-muted d-block text-truncate" style="font-size: 0.66rem;">Samba Masala ExCo</small>
+                          <small class="text-muted d-block text-truncate" style="font-size: 0.66rem;">Samba Masala</small>
                         </div>
-                        <span class="badge bg-warning bg-opacity-25 text-dark border flex-shrink-0" style="font-size: 0.65rem;">Logistics</span>
+                        <span class="badge bg-warning bg-opacity-25 text-dark border flex-shrink-0" style="font-size: 0.62rem;">Logistics</span>
                       </button>
                     </div>
 
                     <!-- Persona 3: Marcus Lim -->
-                    <div class="col-12 col-sm-6">
+                    <div class="col-6">
                       <button 
                         type="button" 
                         class="btn btn-sm btn-outline-secondary w-100 text-start p-2 rounded-3 d-flex justify-content-between align-items-center bg-white persona-tile h-100"
@@ -839,14 +839,14 @@ async function handleManualLogin() {
                       >
                         <div class="me-1 text-truncate">
                           <strong class="d-block text-dark text-truncate" style="font-size: 0.76rem;">Marcus Lim</strong>
-                          <small class="text-muted d-block text-truncate" style="font-size: 0.66rem;">Symphonia ExCo</small>
+                          <small class="text-muted d-block text-truncate" style="font-size: 0.66rem;">Symphonia</small>
                         </div>
-                        <span class="badge bg-secondary bg-opacity-10 text-secondary border flex-shrink-0" style="font-size: 0.65rem;">View Only</span>
+                        <span class="badge bg-secondary bg-opacity-10 text-secondary border flex-shrink-0" style="font-size: 0.62rem;">Marketing</span>
                       </button>
                     </div>
 
                     <!-- Persona 4: Chloe Ang -->
-                    <div class="col-12 col-sm-6">
+                    <div class="col-6">
                       <button 
                         type="button" 
                         class="btn btn-sm btn-outline-secondary w-100 text-start p-2 rounded-3 d-flex justify-content-between align-items-center bg-white persona-tile h-100"
@@ -855,9 +855,9 @@ async function handleManualLogin() {
                       >
                         <div class="me-1 text-truncate">
                           <strong class="d-block text-dark text-truncate" style="font-size: 0.76rem;">Chloe Ang</strong>
-                          <small class="text-muted d-block text-truncate" style="font-size: 0.66rem;">OSL Facility Admin</small>
+                          <small class="text-muted d-block text-truncate" style="font-size: 0.66rem;">OSL Admin</small>
                         </div>
-                        <span class="badge bg-dark text-white flex-shrink-0" style="font-size: 0.65rem;">OSL Admin</span>
+                        <span class="badge bg-dark text-white flex-shrink-0" style="font-size: 0.62rem;">OSL Admin</span>
                       </button>
                     </div>
 
@@ -1173,8 +1173,8 @@ async function handleManualLogin() {
     display: none !important;
   }
   .pulse-login-canvas {
-    padding-top: 1.25rem !important;
-    padding-bottom: 2rem !important;
+    padding-top: 0.85rem !important;
+    padding-bottom: 1.5rem !important;
     padding-left: 0.5rem !important;
     padding-right: 0.5rem !important;
     justify-content: flex-start !important;
@@ -1183,13 +1183,13 @@ async function handleManualLogin() {
     width: 100% !important;
   }
   .liquid-glass-card {
-    padding: 1.25rem 1rem !important;
-    border-radius: 1.25rem !important;
+    padding: 1.1rem 0.9rem !important;
+    border-radius: 1.15rem !important;
     width: 100% !important;
     max-width: 100% !important;
   }
   .landing-wordmark-mobile {
-    font-size: 2.25rem;
+    font-size: 1.85rem;
     font-weight: 900;
     line-height: 1;
     letter-spacing: -0.02em;
