@@ -15,7 +15,7 @@ export const ALL_CLUBS = [
   'INDANCITY',
   'Ivory Keys',
   'Literati',
-  'Malay Language & Cultural Club',
+  'Rentak',
   'SMUSAIC',
   'Samba Masala',
   'SoundFoundry',

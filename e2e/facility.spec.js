@@ -32,11 +32,11 @@ test('Day-of Operations exposes the current three schedule views',async({page})=
 
 test('Dev Administrator can switch club context and open its personal schedule',async({page})=>{
  await signIn(page,'Dev Administrator')
- await page.locator('#clubSwitcher').selectOption('Malay Language & Cultural Club')
- await expect(page.locator('#clubSwitcher')).toHaveValue('Malay Language & Cultural Club')
+ await page.locator('#clubSwitcher').selectOption('Rentak')
+ await expect(page.locator('#clubSwitcher')).toHaveValue('Rentak')
  await expect(page.locator('.pulse-banner-view')).not.toBeVisible()
  await navigate(page,'Personal Schedule',/My Schedule/)
  await expect(page.getByRole('heading',{name:/here is your daily schedule/})).toBeVisible()
- await expect(page.getByText(/Malay Language & Cultural Club.*Academic Timetable/)).toBeVisible()
+ await expect(page.getByText(/Rentak.*Academic Timetable/)).toBeVisible()
  await fits(page,'Administrator schedule')
 })

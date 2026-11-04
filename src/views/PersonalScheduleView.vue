@@ -984,4 +984,11 @@ function exportCalendarICS() {
   color: #2563eb;
   border: 1px solid rgba(59, 130, 246, 0.25);
 }
+
+@media (max-width: 575.98px) {
+  h3 {
+    font-size: 1.25rem !important;
+    line-height: 1.25 !important;
+  }
+}
 </style>

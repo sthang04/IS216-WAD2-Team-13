@@ -775,8 +775,9 @@ onMounted(async () => {
           role="alert"
           style="border-radius: 0.85rem;"
         >
-          <div class="d-flex align-items-center gap-2">
-            <strong>Notice:</strong> {{ toast }}
+          <div class="d-flex align-items-start gap-2 pe-4">
+            <strong class="text-nowrap flex-shrink-0">Notice:</strong>
+            <span class="flex-grow-1">{{ toast }}</span>
           </div>
           <button type="button" class="btn-close" aria-label="Close notice" @click="toast = ''"></button>
         </div>
@@ -831,6 +832,7 @@ onMounted(async () => {
       <!-- Notifications Pip is shown outside risk planning; EventRiskView owns Simulation Pip. -->
       <PipMascot
         v-if="pipVisible && currentView !== 'risk'"
+        class="d-none d-lg-block"
         mode="notifications"
         :unanswered-count="unreadCount"
         :offer-seconds-left="soonestOfferSeconds"

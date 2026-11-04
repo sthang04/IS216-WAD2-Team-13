@@ -1004,27 +1004,14 @@ onUnmounted(() => {
 }
 
 /*
-  MOBILE
+  MOBILE & TABLET: Hide mascot on viewports <992px to prevent obscuring calendar chips, action buttons and form controls
 */
 
-@media (max-width: 600px) {
-  .pip-container {
-    right: 10px;
-    bottom: 10px;
-  }
-  .pip-button {
-    width: 72px;
-    height: 72px;
-  }
-  .pip-cat {
-    width: 72px;
-    height: 72px;
-  }
-  .pip-speech {
-    display: none !important;
-  }
+@media (max-width: 991.98px) {
+  .pip-container,
+  .pip-speech,
   .pip-panel {
-    bottom: 85px;
+    display: none !important;
   }
 }
 
