@@ -618,9 +618,9 @@ onMounted(async () => {
                 >
                   <div class="d-flex justify-content-between align-items-center">
                     <span>Marcus Lim</span>
-                    <span class="badge bg-danger bg-opacity-10 text-danger" style="font-size: 0.65rem;">Eurhythmix</span>
+                    <span class="badge bg-secondary bg-opacity-10 text-secondary" style="font-size: 0.65rem;">Symphonia</span>
                   </div>
-                  <small class="text-muted" style="font-size: 0.7rem;">Marketing Director / Arts studio access</small>
+                  <small class="text-muted" style="font-size: 0.7rem;">Symphonia ExCo / View Only</small>
                 </button>
  
                 <!-- Option 4: Chloe Ang -->

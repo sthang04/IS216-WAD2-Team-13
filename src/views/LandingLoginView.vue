@@ -837,9 +837,9 @@ async function handleManualLogin() {
                       >
                         <div class="me-1 text-truncate">
                           <strong class="d-block text-dark text-truncate" style="font-size: 0.76rem;">Marcus Lim</strong>
-                          <small class="text-muted d-block text-truncate" style="font-size: 0.66rem;">Eurhythmix Marketing</small>
+                          <small class="text-muted d-block text-truncate" style="font-size: 0.66rem;">Symphonia ExCo</small>
                         </div>
-                        <span class="badge bg-danger bg-opacity-10 text-danger border flex-shrink-0" style="font-size: 0.65rem;">Marketing</span>
+                        <span class="badge bg-secondary bg-opacity-10 text-secondary border flex-shrink-0" style="font-size: 0.65rem;">View Only</span>
                       </button>
                     </div>
 
