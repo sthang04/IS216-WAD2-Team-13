@@ -104,30 +104,30 @@ onUnmounted(() => {
     </div>
 
 
-    <div class="row g-3">
-      <div class="col-12 col-md-6 col-xl-3">
+    <div class="row g-2 g-md-3">
+      <div class="col-6 col-md-6 col-xl-3">
         <label class="form-label small fw-bold mb-1" for="f-type">Facility Type</label>
-        <select id="f-type" class="form-select" :value="filters.type" @change="update('type', $event.target.value)">
+        <select id="f-type" class="form-select form-select-sm" :value="filters.type" @change="update('type', $event.target.value)">
           <option value="All">All</option>
           <option v-for="type in typeOptions" :key="type" :value="type">{{ type }}</option>
         </select>
       </div>
-      <div class="col-12 col-md-6 col-xl-3">
+      <div class="col-6 col-md-6 col-xl-3">
         <label class="form-label small fw-bold mb-1" for="f-equipment">Equipment</label>
-        <select id="f-equipment" class="form-select" :value="filters.equipment" @change="update('equipment', $event.target.value)">
+        <select id="f-equipment" class="form-select form-select-sm" :value="filters.equipment" @change="update('equipment', $event.target.value)">
           <option value="All">All</option>
           <option v-for="item in equipmentOptions" :key="item" :value="item">{{ item }}</option>
         </select>
       </div>
-      <div class="col-12 col-md-6 col-xl-3">
+      <div class="col-6 col-md-6 col-xl-3">
         <label class="form-label small fw-bold mb-1" for="f-capacity">Capacity</label>
-        <select id="f-capacity" class="form-select" :value="filters.capacity" @change="update('capacity', $event.target.value)">
+        <select id="f-capacity" class="form-select form-select-sm" :value="filters.capacity" @change="update('capacity', $event.target.value)">
           <option v-for="opt in CAPACITY_OPTIONS" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
         </select>
       </div>
-      <div class="col-12 col-md-6 col-xl-3">
+      <div class="col-6 col-md-6 col-xl-3">
         <label class="form-label small fw-bold mb-1" for="f-availability">Availability</label>
-        <select id="f-availability" class="form-select" :value="filters.availability" @change="update('availability', $event.target.value)">
+        <select id="f-availability" class="form-select form-select-sm" :value="filters.availability" @change="update('availability', $event.target.value)">
           <option value="All">All bookings</option>
           <optgroup label="By status">
             <option v-for="opt in STATUS_OPTIONS" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
