@@ -1,0 +1,207 @@
+// Isolated simulator fixture for automated tests. The production loader never
+// imports this module and must not fall back to it after a live read failure.
+
+
+
+
+
+// 1. EVENTS
+// Stores the event being simulated.
+// For testing, we're using the same demo event that we previously created in Supabase.
+
+const events = [
+  {
+    id: 1,
+    name: "Eurhythmix Simulator Demo",
+    club_name: "Eurhythmix",
+    starts_at: "2027-10-16T18:00:00+08:00",
+    ends_at: "2027-10-16T21:00:00+08:00"
+  }
+];
+
+// 2. MEMBERS
+// Stores the performers and crew.
+// The simulator will use member IDs to find their assignments.
+// For example, member ID 2 is Angel Low. But the simulation logic must work with ANY member ID, not just Angel Low.
+
+const members = [
+  {
+    id: 1,
+    full_name: "Mei Chen",
+    club_name: "Eurhythmix"
+  },
+  {
+    id: 2,
+    full_name: "Angel Low",
+    club_name: "Eurhythmix"
+  },
+  {
+    id: 3,
+    full_name: "Marcus Tan",
+    club_name: "Eurhythmix"
+  },
+  {
+    id: 4,
+    full_name: "Darren Koh",
+    club_name: "Eurhythmix"
+  },
+  {
+    id: 5,
+    full_name: "Rachel Chua",
+    club_name: "Eurhythmix"
+  }
+];
+
+// 3. EVENT SEGMENTS
+// Stores activities within the event.
+// Each segment has:
+// - A unique ID
+// - The event it belongs to
+// - A title and activity type
+// - Start and end timings
+// These timings are needed to detect overlaps caused by disruptions.
+
+const event_segments = [
+  {
+    id: 1,
+    event_id: 1,
+    title: "Act 1: Soundcheck",
+    segment_type: "Soundcheck",
+    starts_at: "2027-10-16T18:00:00+08:00",
+    ends_at: "2027-10-16T18:30:00+08:00"
+  },
+  {
+    id: 2,
+    event_id: 1,
+    title: "Doors Open & FOH Handover",
+    segment_type: "Operations",
+    starts_at: "2027-10-16T19:15:00+08:00",
+    ends_at: "2027-10-16T19:30:00+08:00"
+  },
+  {
+    id: 3,
+    event_id: 1,
+    title: "Opening Night Performance",
+    segment_type: "Performance",
+    starts_at: "2027-10-16T19:30:00+08:00",
+    ends_at: "2027-10-16T21:00:00+08:00"
+  },
+  {
+    id: 4,
+    event_id: 1,
+    title: "Act 2: Tech Rehearsal",
+    segment_type: "Rehearsal",
+    starts_at: "2027-10-16T18:30:00+08:00",
+    ends_at: "2027-10-16T19:15:00+08:00"
+  }
+];
+
+// 4. MEMBER ASSIGNMENTS
+// Connects members to event segments.
+// Example:
+// member_id: 2 = Angel Low
+// segment_id: 4 = Act 2 Tech Rehearsal
+// This tells the simulator that Angel Low is required for that rehearsal.
+// If she becomes unavailable, the engine can identify this assignment automatically.
+
+const segment_assignments = [
+  { id: 1, segment_id: 1, member_id: 3, role_name: "Stage Manager", is_required: true },
+  { id: 2, segment_id: 1, member_id: 1, role_name: "Sound Technician", is_required: true },
+
+  { id: 3, segment_id: 2, member_id: 3, role_name: "Operations Coordinator", is_required: true },
+  { id: 4, segment_id: 2, member_id: 1, role_name: "FOH Lead", is_required: true },
+
+  { id: 5, segment_id: 3, member_id: 5, role_name: "Dance Captain", is_required: true },
+  { id: 6, segment_id: 3, member_id: 2, role_name: "Lead Dancer", is_required: true },
+  { id: 7, segment_id: 3, member_id: 4, role_name: "Technical Lead", is_required: true },
+
+  { id: 8, segment_id: 4, member_id: 2, role_name: "Lead Dancer", is_required: true },
+  { id: 9, segment_id: 4, member_id: 5, role_name: "Dance Captain", is_required: true },
+  { id: 10, segment_id: 4, member_id: 4, role_name: "Technical Lead", is_required: true }
+];
+
+// 5. FACILITY BOOKINGS
+// Represents existing facility reservations.
+// We use the booking from our test event.
+// If a facility becomes unavailable, the simulator checks which linked activities overlap with the disruption period.
+
+const facility_slots = [
+  {
+    id: 3,
+    venue_name: "Studio L7.2 (Dance)",
+    venue_type: "Dance Studio",
+    building_location: "Level 7",
+    event_date: "2027-10-16",
+    time_slot: "18:00 - 21:00",
+    owner_club: "Eurhythmix",
+    status: "Booked",
+    claiming_club: null,
+    audit_ticket_id: null,
+    notes: null
+  }
+];
+
+// 6. EVENT-FACILITY RELATIONSHIPS
+// Identifies which activities use a facility.
+// The three segments below use the booking with facility_slot_id = 3.
+// This allows the simulator to find affected activities when a facility is unavailable.
+
+const segment_facility_slots = [
+  { segment_id: 1, facility_slot_id: 3 },
+  { segment_id: 4, facility_slot_id: 3 },
+  { segment_id: 3, facility_slot_id: 3 }
+];
+
+// 7. EVENT DEPENDENCIES
+// Describes activities that depend on others.
+// Example:
+// Act 2 Tech Rehearsal must be completed before Opening Night Performance.
+// If the rehearsal is disrupted, the engine can flag the performance as potentially affected by that dependency.
+
+const segment_dependencies = [
+  {
+    prerequisite_segment_id: 1,
+    dependent_segment_id: 4
+  },
+  {
+    prerequisite_segment_id: 4,
+    dependent_segment_id: 3
+  },
+  {
+    prerequisite_segment_id: 2,
+    dependent_segment_id: 3
+  }
+];
+
+// 8. PROVIDE THE TEST DATA TO THE SIMULATOR
+// This function combines all the test data into one object.
+// structuredClone creates an independent copy so simulation changes cannot modify the original test dataset.
+// Later, eventDataService.js can return the same structure using Supabase records.
+
+export function getSimulationTestData() {
+  return structuredClone({
+    events: [...events.map(e => ({ ...e, club_id: 1 })), { id: 2, club_id: 1, name: 'Standby history' }],
+    members: [...members, ...[[6,'Exact standby'],[7,'Partial standby'],[8,'Nonmatching standby'],
+      [9,'Unassigned standby'],[10,'Busy dancer'],[11,'Inactive dancer'],[12,'Other club dancer'],
+      [13,'Unavailable dancer'],[14,'High workload dancer']].map(([id,full_name]) => ({id,full_name}))],
+    // Normalized test metadata, not live database columns or RLS guarantees.
+    replacement_memberships: Array.from({length:14},(_,i) => ({
+      memberId:i+1, clubId:i+1 === 12 ? 2 : 1, active:i+1 !== 11, verified:true
+    })),
+    member_replacement_coverage: {rosterVerified:true, scheduleVerified:true},
+    member_busy_periods: [10,13].map(memberId => ({memberId, start:'2027-10-16T19:00:00+08:00', end:'2027-10-16T20:00:00+08:00'})),
+    event_segments: [...event_segments,
+      {id:20,event_id:2,starts_at:'2027-10-15T10:00:00+08:00',ends_at:'2027-10-15T11:00:00+08:00'},
+      {id:21,event_id:2,starts_at:'2027-10-16T19:30:00+08:00',ends_at:'2027-10-16T20:00:00+08:00'}],
+    segment_assignments: [...segment_assignments.map(a =>
+      a.member_id === 2 && a.segment_id === 3 ? {...a, role_name:'Dance Captain'} : a),
+      ...[6,14].map(member_id => ({segment_id:20,member_id,role_name:'Dance Captain'})),
+      ...[6,7,10,11,12,13,14].map(member_id => ({segment_id:20,member_id,role_name:'Lead Dancer'})),
+      {segment_id:20,member_id:8,role_name:'Sound Technician'},
+      {segment_id:21,member_id:4,role_name:'Crew'},
+      ...[1,2].map(segment_id => ({segment_id,member_id:14,role_name:'Crew'}))],
+    facility_slots,
+    segment_facility_slots,
+    segment_dependencies
+  });
+}

@@ -187,7 +187,70 @@
   font-size: 0.72rem;
   color: var(--pf-muted);
 }
-.pulse-search { border-radius: 999px; background: var(--pf-bg); padding-left: 1rem; }
+.pulse-apple-search-box {
+  position: relative;
+}
+
+.pulse-search-icon {
+  left: 1rem;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--pf-muted);
+  pointer-events: none;
+  transition: color 0.2s ease;
+}
+
+.pulse-apple-search-box:focus-within .pulse-search-icon {
+  color: var(--pf-primary);
+}
+
+.pulse-search.pulse-apple-input,
+.pulse-search {
+  border-radius: 999px !important;
+  background: #ffffff !important;
+  border: 1.5px solid var(--pf-border) !important;
+  padding-left: 2.5rem !important;
+  padding-right: 2.2rem !important;
+  min-height: 42px !important;
+  font-size: 0.85rem !important;
+  color: var(--pf-text) !important;
+  caret-color: var(--pf-primary) !important;
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1) !important;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+}
+
+.pulse-search:hover {
+  border-color: #cbd5e1 !important;
+}
+
+.pulse-search:focus {
+  border-color: var(--pf-primary) !important;
+  box-shadow: 0 0 0 3.5px rgba(225, 29, 72, 0.15), 0 8px 20px -4px rgba(225, 29, 72, 0.12) !important;
+  outline: none !important;
+}
+
+.pulse-search-chip {
+  font-size: 0.72rem;
+  padding: 0.25rem 0.65rem;
+  border-radius: 999px;
+  background: var(--pf-bg);
+  border: 1px solid var(--pf-border);
+  color: var(--pf-muted);
+  font-weight: 600;
+  transition: all 0.2s ease;
+}
+
+.pulse-search-chip:hover {
+  background: #ffffff;
+  color: var(--pf-text);
+  border-color: #cbd5e1;
+}
+
+.pulse-search-chip.active {
+  background: var(--pf-primary-soft);
+  color: var(--pf-primary);
+  border-color: var(--pf-primary);
+}
 .pulse-round-btn {
   width: 36px; height: 36px; border-radius: 50%;
   border: 1px solid var(--pf-border);
