@@ -1,3 +1,7 @@
+// WHY THIS FILE IS RETAINED: Checks separation of tentative previews, persisted recovery preparation, and final Apply/Undo decisions.
+// These focused regression checks preserve edge cases that browser journeys may not isolate.
+// SCOPE: Non-browser checks using the Playwright test runner; excluded from browser E2E commands.
+// A passing result here does not prove a complete user journey or deployed backend enforcement.
 // Playwright contract checks; these do not launch a browser or prove live RLS.
 // Atomic Start payloads, idempotent retries/concurrent calls, independent approvals and
 // confirmation adapters. Browser overlap: recoveryConfirmation; concurrency assertions remain

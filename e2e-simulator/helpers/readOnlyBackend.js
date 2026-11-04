@@ -1,3 +1,5 @@
+// SUPPORT FILE PURPOSE: readOnlyBackend.js supplies shared setup or controlled data for the browser workflows.
+// Keep this support code: the Playwright tests depend on consistent setup and isolated state.
 // A request guard, not a mock: allowed requests reach the configured backend.
 // Read RPCs use POST in Supabase, so distinguish them from operational writes.
 export const READ_ONLY_RPCS=new Set([

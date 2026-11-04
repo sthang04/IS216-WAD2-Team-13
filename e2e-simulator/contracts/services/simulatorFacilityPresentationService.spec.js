@@ -1,3 +1,7 @@
+// WHY THIS FILE IS RETAINED: Checks that room alternatives and booking limitations are presented honestly and consistently.
+// These focused regression checks preserve edge cases that browser journeys may not isolate.
+// SCOPE: Non-browser checks using the Playwright test runner; excluded from browser E2E commands.
+// A passing result here does not prove a complete user journey or deployed backend enforcement.
 // Playwright contract checks; these do not launch a browser or prove live RLS.
 // Presentation retains evaluator rank/score, excludes room conflicts and preserves event scope.
 // Browser overlap: decisionWorkspace; exact evidence joins remain here.

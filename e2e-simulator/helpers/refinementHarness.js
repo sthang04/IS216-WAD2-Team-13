@@ -1,3 +1,5 @@
+// SUPPORT FILE PURPOSE: refinementHarness.js supplies shared setup or controlled data for the browser workflows.
+// Keep this support code: the Playwright tests depend on consistent setup and isolated state.
 import {openTimeline,openFacilityHeatmap} from './disclosures.js'
 import {expect} from '@playwright/test'
 // Serve synthetic records through the real loader contract. No production

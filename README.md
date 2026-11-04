@@ -99,21 +99,27 @@ The application will be accessible at `http://localhost:5173`.
 
 ## 5. Automated Testing
 
-Run the automated Playwright test suite to verify end-to-end functionality:
+Run the preserved browser suites with Playwright:
 
 ```bash
-# Run headless browser tests
-pnpm test:e2e
-
-# Run tests in interactive UI mode
-pnpm test:e2e --ui
+pnpm test:e2e # pnpm e2e is an equivalent alias
+pnpm test:e2e:report
 ```
 
-## Simulator checks
+The default command runs application fixtures, simulator/invitation fixtures and
+real-app/backend journeys. Configure the app's existing public Supabase URL/key
+in .env.local for live tests. Install Chromium with
+`pnpm exec playwright install chromium` if needed. The configurations share all
+six required viewport sizes through `playwright.viewports.js`.
 
-Use Node.js 24 (verified with 24.13.0); the contract checks use built-in TypeScript stripping.
-Run `pnpm test:e2e:simulator` after installing project dependencies and Playwright Chromium.
-The command runs isolated browser workflows at six desktop/mobile sizes and labeled
-Playwright contract checks once in the 1280x800 project. Contract checks preserve
-algorithm, security, concurrency and mocked backend assertions; they are not live
-Supabase or Telegram integration tests. No real invitations or messages are sent.
+Individual commands remain available: `pnpm test:e2e:application`,
+`pnpm test:e2e:simulator:fixtures`, and `pnpm test:e2e:simulator`.
+Fixture-based browser results do not prove deployed database or Telegram delivery.
+
+The two Node unit-test files and 28 non-browser Playwright contract files are kept,
+with comments explaining why they exist. They are excluded from browser E2E runs.
+No test files were deleted. See [the scope and preservation report](docs/testing-audit.md)
+for the retained-file inventory, coverage limits and configuration details.
+
+Verified: **1,242 browser checks passed**, with zero failures/skips/flaky results,
+across all six viewport sizes. The separate retained contract suite passed 263 checks.

@@ -1,3 +1,7 @@
+// WHY THIS FILE IS RETAINED: Checks whether saved recovery requirements are pending, ready, blocked, or complete.
+// These focused regression checks preserve edge cases that browser journeys may not isolate.
+// SCOPE: Non-browser checks using the Playwright test runner; excluded from browser E2E commands.
+// A passing result here does not prove a complete user journey or deployed backend enforcement.
 // Playwright contract checks; these do not launch a browser or prove live RLS.
 // Exact consent terms, independent facility approval and saved recovery status derivation.
 // Browser overlap: invitations/localApplyUndo; state combinations remain here.

@@ -1,3 +1,7 @@
+// WHY THIS FILE IS RETAINED: Checks calendar booking evidence and integration state independently of browser rendering.
+// These focused regression checks preserve edge cases that browser journeys may not isolate.
+// SCOPE: Non-browser checks using the Playwright test runner; excluded from browser E2E commands.
+// A passing result here does not prove a complete user journey or deployed backend enforcement.
 // Playwright contract checks; these do not launch a browser or prove live RLS.
 // Calendar permission/action mapping, approval evidence and in-flight club-change isolation.
 // Browser overlap: calendarNavigation; backend/async boundaries remain here.

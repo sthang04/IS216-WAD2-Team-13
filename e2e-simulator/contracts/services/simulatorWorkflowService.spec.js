@@ -1,3 +1,7 @@
+// WHY THIS FILE IS RETAINED: Checks recovery request payloads, revisions, state fingerprints, confirmation results, and error handling.
+// These focused regression checks preserve edge cases that browser journeys may not isolate.
+// SCOPE: Non-browser checks using the Playwright test runner; excluded from browser E2E commands.
+// A passing result here does not prove a complete user journey or deployed backend enforcement.
 // Playwright contract checks; these do not launch a browser or prove live RLS.
 // Consent snapshots, microsecond timestamps, revision checks, RPC authorization boundaries and
 // failure outcomes. Browser overlap: recovery workflows; malformed backend cases remain here.

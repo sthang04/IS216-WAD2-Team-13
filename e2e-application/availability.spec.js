@@ -1,71 +1,74 @@
-﻿import {test,expect} from './fixtures/app.js'
+// BROWSER TEST PURPOSE: availability user workflows and regression coverage.
+// Setup opens the real Vue UI; actions use its controls; assertions check visible results/state.
+// Uses isolated fixture responses; passing UI checks do not prove deployed database or delivery integration.
+// Meeting scheduler browser regressions: use real forms and controls with isolated API data.
+// Every case follows setup -> actions -> visible assertions; no service is called directly.
+import {test,expect} from './fixtures/app.js'
 import {downloadText,guest} from './fixtures/journeys.js'
+const open=async(page,app,options={})=>{
+ await app.open('/availability',{authenticated:true,meetings:true,...options})
+ await expect(page.getByRole('heading',{name:'Weekly Meeting Scheduler',exact:true})).toBeVisible()
+}
 
-test('heatmap toggles availability and changes the visible total reversibly',async({page,app})=>{
- await app.open('/availability',{authenticated:true})
- const cell=page.locator('.pulse-heat-cell').first()
- const before=await cell.getAttribute('title')
+test('heatmap toggles availability and restores the unselected state',async({page,app})=>{
+ await open(page,app)
+ const cell=page.locator('.scheduler-grid [role=button]').first()
+ await expect(cell).toHaveAttribute('aria-pressed','false')
  await cell.click()
- await expect(cell).toHaveClass(/pulse-heat-my-active/)
+ await expect(cell).toHaveAttribute('aria-pressed','true')
  await expect(cell.getByText('You',{exact:true})).toBeVisible()
- expect(await cell.getAttribute('title')).not.toBe(before)
  await cell.click()
- await expect(cell).not.toHaveClass(/pulse-heat-my-active/)
- await expect(cell).toHaveAttribute('title',before)
+ await expect(cell).toHaveAttribute('aria-pressed','false')
 })
 
-test('week navigation and class baseline toggle change the actual heatmap',async({page,app})=>{
- await app.open('/availability',{authenticated:true})
- await expect(page.locator('.pulse-class-pill').first()).toBeVisible()
- await page.getByRole('button',{name:/Show Class Baselines/}).click()
- await expect(page.locator('.pulse-class-pill')).toHaveCount(0)
+test('week navigation changes the visible week and returns to this week',async({page,app})=>{
+ await open(page,app)
  await page.getByRole('button',{name:'Next week',exact:true}).click()
- await expect(page.getByRole('columnheader',{name:'Mon 19 Oct',exact:true})).toBeVisible()
- await page.getByRole('button',{name:'Back to example week',exact:true}).click()
- await expect(page.getByRole('columnheader',{name:'Mon 12 Oct',exact:true})).toBeVisible()
+ await expect(page.getByRole('columnheader',{name:'Mon 9 Nov',exact:true})).toBeVisible()
+ await page.getByRole('button',{name:'This week',exact:true}).click()
+ await expect(page.getByRole('columnheader',{name:'Mon 2 Nov',exact:true})).toBeVisible()
 })
 
-test('select match, choose recipients and confirm a demo meeting with downloadable agenda',async({page,app})=>{
- await app.open('/availability',{authenticated:true})
- await page.locator('.match-card').first().click()
- await page.getByRole('button',{name:'Create Meeting & Broadcast Agenda',exact:true}).click()
- const modal=page.locator('.modal.show')
- await modal.getByPlaceholder('e.g. SMU Arts Festival Opening Night - Run of Show Alignment').fill('Fixture ExCo meeting')
- await modal.getByPlaceholder('List key agenda items...').fill('Review fixture rehearsal schedule')
- await modal.getByRole('button',{name:'Dancers (3)',exact:true}).click()
- await expect(modal.getByText('Telegram Broadcast Target (3 Selected)',{exact:true})).toBeVisible()
- const {text}=await downloadText(page,()=>modal.getByRole('button',{name:'Confirm Meeting & Dispatch Telegram Broadcast',exact:true}).click())
+test('create a meeting request, confirm its time and download its agenda',async({page,app})=>{
+ await open(page,app,{emptyMeeting:true})
+ await page.getByRole('button',{name:'Schedule Meeting',exact:true}).click()
+ await page.getByLabel('Title',{exact:true}).fill('Fixture ExCo meeting')
+ await page.getByLabel('Agenda (optional)',{exact:true}).fill('Review fixture rehearsal schedule')
+ await page.getByRole('button',{name:'Everyone',exact:true}).click()
+ await page.getByRole('button',{name:'Send Meeting Request',exact:true}).click()
+ await expect(page.getByText('Fixture ExCo meeting',{exact:true}).first()).toBeVisible()
+ await page.getByRole('button',{name:'Choose Meeting Day & Confirm',exact:true}).click()
+ await page.getByLabel('Day',{exact:true}).selectOption('2026-11-04')
+ await page.getByLabel('From',{exact:true}).selectOption('10')
+ await page.getByLabel('To',{exact:true}).selectOption('11')
+ await page.getByRole('button',{name:'Confirm & Notify Participants',exact:true}).click()
+ const {text}=await downloadText(page,()=>page.getByRole('button',{name:'Add to Calendar (.ics)',exact:true}).click())
  expect(text).toContain('Fixture ExCo meeting')
- await expect(page.getByText('Meeting Confirmed & Broadcasted!',{exact:true})).toBeVisible()
- await expect(page.getByRole('alert').filter({hasText:'Meeting scheduled!'}).first()).toBeVisible()
- // This page changes local state and downloads ICS; no Telegram transport exists here.
+ expect(text).toContain('Review fixture rehearsal schedule')
+ // This confirms only the synthetic API contract, not real Telegram delivery.
 })
 
-test('recipient search and Cancel leave the demo meeting unconfirmed',async({page,app})=>{
- await app.open('/availability',{authenticated:true})
- await page.getByRole('button',{name:'Create Meeting & Broadcast Agenda',exact:true}).click()
- const modal=page.locator('.modal.show')
- await modal.getByPlaceholder('Search member by name, handle (e.g. @angellow), or role...').fill('no fixture member')
- await expect(modal.getByRole('button',{name:/@angellow/})).toHaveCount(0)
- await modal.getByRole('button',{name:'Cancel',exact:true}).click()
- await expect(page.getByText('Meeting Confirmed & Broadcasted!',{exact:true})).toHaveCount(0)
+test('closing an unsent meeting form discards its title and selected participants',async({page,app})=>{
+ await open(page,app,{emptyMeeting:true})
+ await page.getByRole('button',{name:'Schedule Meeting',exact:true}).click()
+ await page.getByLabel('Title',{exact:true}).fill('Fixture discarded meeting')
+ await page.getByRole('button',{name:'Dancers',exact:true}).click()
+ await page.getByRole('button',{name:'Close',exact:true}).click()
+ await expect(page.getByLabel('Title',{exact:true})).toHaveCount(0)
+ await expect(page.getByText('Fixture discarded meeting',{exact:true})).toHaveCount(0)
 })
 
-test('refresh shows busy state then recalculated scheduling feedback',async({page,app})=>{
- await app.open('/availability',{authenticated:true})
- await page.getByRole('button',{name:'Refresh',exact:true}).click()
- await expect(page.getByRole('button',{name:'Refreshing',exact:true})).toBeDisabled()
- await expect(page.getByRole('alert')).toContainText('Scheduling engine refreshed')
- await expect(page.getByRole('button',{name:'Refresh',exact:true})).toBeEnabled()
+test('a none-work response updates visible scheduling feedback and survives reload',async({page,app})=>{
+ await open(page,app)
+ await page.getByRole('button',{name:'None of these times work',exact:true}).click()
+ await expect(page.getByRole('alert')).toContainText('Response saved: none of these times work for you.')
+ await page.reload()
+ await expect(page.getByText('None work',{exact:true})).toBeVisible()
 })
 
-test('guest availability and meeting actions stay read-only',async({page,app})=>{
+test('guest cannot vote or schedule a meeting',async({page,app})=>{
  await guest(page,app,'/availability')
- const cell=page.locator('.pulse-heat-cell').first()
- const before=await cell.getAttribute('title')
- await cell.click()
- await expect(page.getByRole('alert')).toContainText('Guest view is read-only')
- await expect(cell).toHaveAttribute('title',before)
- await page.getByRole('button',{name:'Create Meeting & Broadcast Agenda',exact:true}).click()
- await expect(page.locator('.modal.show')).toHaveCount(0)
+ await expect(page.getByText('Sign in as a CCA ExCo to schedule meetings.',{exact:true})).toBeVisible()
+ await expect(page.locator('.scheduler-grid [role=button]')).toHaveCount(0)
+ await expect(page.getByRole('button',{name:'Send Meeting Request',exact:true})).toHaveCount(0)
 })

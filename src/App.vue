@@ -666,6 +666,10 @@ onMounted(async () => {
           </div>
  
         </div>
+      </header>
+      <!-- A blurred header forms a containing block for fixed descendants. Keep
+           bottom navigation outside it so it cannot cover the account/bell controls. -->
+      <!-- Decorative icons are hidden from assistive technology so each control has its visible text name. -->
       <!-- Dynamic Mobile Feature Segmented Pill Navigation Bar -->
       <nav class="d-lg-none pulse-mobile-nav-container" aria-label="Mobile PULSE navigation">
         <!-- Case A: OSL Admin Mobile Navigation -->
@@ -676,7 +680,7 @@ onMounted(async () => {
             :class="{ active: currentView === 'facilities' && !isOslReviewRoute }"
             @click="router.push('/facilities')"
           >
-            <span class="pill-icon">🏛️</span>
+            <span class="pill-icon" aria-hidden="true">🏛️</span>
             <span>Facility Calendar</span>
           </button>
           <button
@@ -685,7 +689,7 @@ onMounted(async () => {
             :class="{ active: isOslReviewRoute }"
             @click="router.push('/facilities/admin')"
           >
-            <span class="pill-icon">⚖️</span>
+            <span class="pill-icon" aria-hidden="true">⚖️</span>
             <span>OSL Review</span>
           </button>
         </div>
@@ -698,7 +702,7 @@ onMounted(async () => {
             :class="{ active: currentView === 'facilities' }"
             @click="currentView = 'facilities'"
           >
-            <span class="pill-icon">🏛️</span>
+            <span class="pill-icon" aria-hidden="true">🏛️</span>
             <span>Facilities</span>
           </button>
           <button 
@@ -708,7 +712,7 @@ onMounted(async () => {
             :class="{ active: currentView === 'schedule' }"
             @click="currentView = 'schedule'"
           >
-            <span class="pill-icon">📋</span>
+            <span class="pill-icon" aria-hidden="true">📋</span>
             <span>My Schedule</span>
           </button>
           <button 
@@ -718,7 +722,7 @@ onMounted(async () => {
             :class="{ active: currentView === 'heatmap' }"
             @click="currentView = 'heatmap'"
           >
-            <span class="pill-icon">🟢</span>
+            <span class="pill-icon" aria-hidden="true">🟢</span>
             <span>Heatmap</span>
           </button>
           <button 
@@ -728,7 +732,7 @@ onMounted(async () => {
             :class="{ active: currentView === 'operations' }"
             @click="currentView = 'operations'"
           >
-            <span class="pill-icon">⚡</span>
+            <span class="pill-icon" aria-hidden="true">⚡</span>
             <span>Day-of Ops</span>
           </button>
           <button 
@@ -738,13 +742,12 @@ onMounted(async () => {
             :class="{ active: currentView === 'risk' }"
             @click="currentView = 'risk'"
           >
-            <span class="pill-icon">🛡️</span>
+            <span class="pill-icon" aria-hidden="true">🛡️</span>
             <span>Risk Sandbox</span>
           </button>
         </div>
       </nav>
-      </header>
- 
+
       <!-- Main Content Area -->
       <main class="container-xl py-4 flex-grow-1">
         <div :class="{ 'pulse-pip-gutter': pipVisible }">

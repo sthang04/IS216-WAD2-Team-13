@@ -1,3 +1,6 @@
+// BROWSER TEST PURPOSE: schedule user workflows and regression coverage.
+// Setup opens the real Vue UI; actions use its controls; assertions check visible results/state.
+// Uses isolated fixture responses; passing UI checks do not prove deployed database or delivery integration.
 ﻿import {test,expect} from './fixtures/app.js'
 import {openScheduleForm,scheduleCard,downloadText,guest} from './fixtures/journeys.js'
 
@@ -33,7 +36,7 @@ test('required title prevents empty schedule submission and Cancel discards edit
 
 test('category filter includes only academic entries and restores all events',async({page,app})=>{
  await app.open('/personal-schedule',{authenticated:true})
- await page.getByRole('button',{name:'Academic Classes',exact:true}).click()
+ await page.getByRole('button',{name:'Academic',exact:true}).click()
  await expect(page.getByRole('heading',{name:'IS216 Web Application Development II (G1)',exact:true})).toBeVisible()
  await expect(page.getByRole('heading',{name:'Act 2 Audio & Lighting Programming',exact:true})).toHaveCount(0)
  await page.getByRole('button',{name:/All Events/}).click()
@@ -48,7 +51,8 @@ test('calendar download contains custom title, venue and Singapore timestamps',a
  expect(name).toMatch(/\.ics$/)
  expect(text).toContain('BEGIN:VCALENDAR')
  expect(text).toContain('SUMMARY:Fixture exported event')
- expect(text).toContain('DTSTART;TZID=Asia/Singapore:20261023T171500')
+ // 17:15 Singapore is 09:15 UTC; the current exporter uses portable UTC timestamps.
+ expect(text).toContain('DTSTART:20261023T091500Z')
  expect(text).toContain('LOCATION:Studio L7.2')
 })
 
@@ -83,7 +87,7 @@ test('end time preceding start time is rejected by the schedule form',async({pag
  await modal.locator('input[type=time]').nth(0).fill('18:00')
  await modal.locator('input[type=time]').nth(1).fill('17:00')
  await modal.getByRole('button',{name:'Add to Schedule',exact:true}).click()
- // Keep a regression if the current form permits an invalid interval.
+ // Keep invalid intervals open for correction and never add them to the schedule.
  await expect(modal).toBeVisible()
  await expect(page.getByRole('heading',{name:'Fixture reversed interval',exact:true})).toHaveCount(0)
 })

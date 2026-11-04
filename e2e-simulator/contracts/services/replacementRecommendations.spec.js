@@ -1,3 +1,7 @@
+// WHY THIS FILE IS RETAINED: Checks replacement eligibility, ranking, conflicts, and cautious handling of incomplete evidence.
+// These focused regression checks preserve edge cases that browser journeys may not isolate.
+// SCOPE: Non-browser checks using the Playwright test runner; excluded from browser E2E commands.
+// A passing result here does not prove a complete user journey or deployed backend enforcement.
 // Playwright contract checks; these do not launch a browser or prove live RLS.
 // Exact replacement weights, interval boundaries, membership scope and missing-evidence ranking.
 // Browser overlap: candidate selection; no UI score substitutes for these calculations.

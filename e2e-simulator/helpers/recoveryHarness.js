@@ -1,3 +1,5 @@
+// SUPPORT FILE PURPOSE: recoveryHarness.js supplies shared setup or controlled data for the browser workflows.
+// Keep this support code: the Playwright tests depend on consistent setup and isolated state.
 export async function bootRecovery(page,{acknowledge=true,invitationsEnabled=false,otherEventBooking=false,lifecycle=''}={}){
  await page.route('https://**',route=>route.abort())
  await page.route('**/src/services/simulatorBookingBridge.js*',async route=>{const response=await route.fetch();let body=await response.text();body=body.replace('export async function readRecoveryBookings(', 'async function realReadRecoveryBookings(');body+='\nexport async function readRecoveryBookings(args){window.__bookingReads=(window.__bookingReads||0)+1;if(window.__bookingReadError)throw Error(window.__bookingReadError);return structuredClone(window.__localDb?.facility_bookings||[])}';await route.fulfill({response,body})})

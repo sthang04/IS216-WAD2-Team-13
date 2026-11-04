@@ -1,3 +1,7 @@
+// WHY THIS FILE IS RETAINED: Checks component state during account/event races, explicit confirmations, failed reads, and saved recovery transitions.
+// These focused regression checks preserve edge cases that browser journeys may not isolate.
+// SCOPE: Non-browser checks using the Playwright test runner; excluded from browser E2E commands.
+// A passing result here does not prove a complete user journey or deployed backend enforcement.
 // Playwright contract checks; these do not launch a browser or prove live RLS.
 // Compiled component contracts for account/event races, exact confirmations, stale reads and
 // saved-plan transitions. Browser overlap: localApplyUndo, recoveryConfirmation and invitations.

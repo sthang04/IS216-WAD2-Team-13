@@ -1,3 +1,7 @@
+// WHY THIS FILE IS RETAINED: Checks that simulator booking discovery remains connected to the calendar service and expected refresh events.
+// These focused regression checks preserve edge cases that browser journeys may not isolate.
+// SCOPE: Non-browser checks using the Playwright test runner; excluded from browser E2E commands.
+// A passing result here does not prove a complete user journey or deployed backend enforcement.
 import {test,expect} from '@playwright/test'
 import {readFileSync} from 'node:fs'
 const source=readFileSync(new URL('../../../src/services/simulatorBookingBridge.js',import.meta.url),'utf8').replace(/^import .*$/gm,'').replace(/export /g,'')

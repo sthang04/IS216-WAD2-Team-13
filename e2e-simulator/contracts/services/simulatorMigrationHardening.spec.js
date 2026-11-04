@@ -1,3 +1,7 @@
+// WHY THIS FILE IS RETAINED: Checks migration safeguards, timestamp precision, revisions, and exact-state comparisons.
+// These focused regression checks preserve edge cases that browser journeys may not isolate.
+// SCOPE: Non-browser checks using the Playwright test runner; excluded from browser E2E commands.
+// A passing result here does not prove a complete user journey or deployed backend enforcement.
 // Playwright contract checks; these do not launch a browser or prove live RLS.
 // Timestamp precision, source fingerprints, migration constraints and fail-closed RPC results.
 // Browser overlap: workflow errors; SQL inspections do not execute migrations.

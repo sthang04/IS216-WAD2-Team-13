@@ -9,7 +9,11 @@
     "preview": "vite preview",
     "test:e2e": "playwright test",
     "test:e2e:simulator": "playwright test --config playwright.simulator.config.js",
-    "test:e2e:simulator:fixtures": "playwright test --config playwright.simulator.fixtures.config.js"
+    "test:e2e:simulator:fixtures": "playwright test --config playwright.simulator.fixtures.config.js",
+    "test:e2e:application": "playwright test --config playwright.application.config.js",
+    "test:e2e:report": "playwright show-report playwright-report/all-browser",
+    "test:contracts": "playwright test --config playwright.contracts.config.js",
+    "e2e": "playwright test"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.117.3",

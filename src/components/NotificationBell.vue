@@ -110,13 +110,12 @@ async function openItem(item) {
 }
 
 async function markAll() {
-  notificationStore.value.items.forEach((item) => {
-    item.is_read = true
-  })
+  // Keep unread state until persistence succeeds, so a refused update stays visible.
   try {
     await markRead(null)
+    notificationStore.value.items.forEach(item => { item.is_read = true })
   } catch (error) {
-    console.log(error.message)
+    showToast(error.message, 'danger')
   }
 }
 

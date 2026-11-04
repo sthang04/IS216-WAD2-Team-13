@@ -1,3 +1,5 @@
+// SUPPORT FILE PURPOSE: app.js supplies shared setup or controlled data for the browser workflows.
+// Keep this support code: the Playwright tests depend on consistent setup and isolated state.
 ﻿import {test as base,expect} from '@playwright/test'
 import {readFileSync} from 'node:fs'
 
@@ -55,7 +57,7 @@ export const test=base.extend({
      // Current mobile navigation uses buttons with concise labels, while the
      // desktop bar retains the full feature names. Follow the visible control.
      const bar=page.getByRole('navigation',{name:'Mobile PULSE navigation',exact:true})
-     const mobileLabel={operations:/Day-of Ops/,risk:/Risk Sandbox/}[view]
+     const mobileLabel={facilities:/Facilities/,schedule:/My Schedule/,heatmap:/Heatmap/,operations:/Day-of Ops/,risk:/Risk Sandbox/}[view]
      if(mobileLabel && await bar.isVisible())await bar.getByRole('button',{name:mobileLabel}).click()
      else await page.getByRole('button',{name:label,exact:true}).click()
     }

@@ -1,3 +1,5 @@
+// SUPPORT FILE PURPOSE: memberClient.js supplies shared setup or controlled data for the browser workflows.
+// Keep this support code: the Playwright tests depend on consistent setup and isolated state.
 // Browser-test-only mock. Production entry points never import this module.
 const stored=()=>JSON.parse(sessionStorage.getItem('member-invitation-fixture')||'null')
 const term={assignment_id:11,segment_id:1,activity:'Opening rehearsal',role_name:'Stage crew',replaced_member_id:4,starts_at:'2099-11-02T02:00:00.000000Z',ends_at:'2099-11-02T03:00:00.000000Z'}

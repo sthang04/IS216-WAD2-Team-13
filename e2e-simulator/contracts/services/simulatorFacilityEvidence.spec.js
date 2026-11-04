@@ -1,3 +1,7 @@
+// WHY THIS FILE IS RETAINED: Checks room facts and booking periods used when explaining facility recommendations.
+// These focused regression checks preserve edge cases that browser journeys may not isolate.
+// SCOPE: Non-browser checks using the Playwright test runner; excluded from browser E2E commands.
+// A passing result here does not prove a complete user journey or deployed backend enforcement.
 // Playwright contract checks; these do not launch a browser or prove live RLS.
 // Capacity/booking evidence and adjacent versus overlapping intervals. Browser overlap:
 // facilityInventory; accessible records never prove global vacancy.

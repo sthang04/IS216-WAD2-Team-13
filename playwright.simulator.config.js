@@ -1,3 +1,4 @@
+import {viewportProjects} from './playwright.viewports.js'
 import {defineConfig} from '@playwright/test'
 import {loadEnv} from 'vite'
 import {existsSync} from 'node:fs'
@@ -15,10 +16,11 @@ export default defineConfig({
  // automatic waiting on observable state, with a realistic network budget.
  timeout:60000,expect:{timeout:15000},
  metadata:{backendOrigin},
- testDir:'./e2e-simulator/live',workers:2,retries:0,forbidOnly:!!process.env.CI,
+ testDir:'.',testMatch:['e2e-simulator/live/**/*.spec.js','e2e/**/*.spec.js'],workers:2,retries:0,forbidOnly:!!process.env.CI,
  outputDir:'test-results/real-backend/'+reportTarget,
  reporter:[['list'],['json',{outputFile:'test-results/real-backend/'+reportTarget+'/results.json'}],['html',{outputFolder:'playwright-report/real-backend/'+reportTarget,open:'never'}]],
- use:{baseURL,browserName:'chromium',storageState,timezoneId:'Asia/Singapore',serviceWorkers:'block',trace:'off',screenshot:'off',video:'off'},
+ use:{actionTimeout:15000,baseURL,browserName:'chromium',storageState,timezoneId:'Asia/Singapore',serviceWorkers:'block',trace:'off',screenshot:'off',video:'off'},
  webServer:process.env.PULSE_E2E_BASE_URL?undefined:{command:'pnpm dev --host 127.0.0.1 --port 5189 --strictPort',url:baseURL,reuseExistingServer:false,timeout:60000},
- projects:[...[[1280,800],[1440,900],[1920,1080],[390,844],[375,667],[320,568]].map(([width,height])=>({name:(width>=1024?'desktop-':'mobile-')+width+'x'+height,use:{viewport:{width,height},...(width<1024?{isMobile:true,hasTouch:true}:{})}}))],
+ // Six real-app layouts, with the shared dimensions used by fixture suites.
+ projects:viewportProjects(),
 })

@@ -1,26 +1,25 @@
-import { defineConfig, devices } from '@playwright/test';
+import {defineConfig} from '@playwright/test'
+import application from './playwright.application.config.js'
+import simulatorFixtures from './playwright.simulator.fixtures.config.js'
+import live from './playwright.simulator.config.js'
 
+// One default command discovers every preserved browser suite. Lower-level tests
+// remain in the repository and are intentionally excluded from browser E2E runs.
+const suites=[['application',application],['simulator-fixtures',simulatorFixtures],['live',live]]
 export default defineConfig({
-  testDir: './e2e',
-  fullyParallel: false,
-  forbidOnly: !!process.env.CI,
-  retries: 0,
-  workers: 1,
-  reporter: 'list',
-  use: {
-    baseURL: 'http://127.0.0.1:5173',
-    trace: 'on-first-retry',
-  },
-  webServer: {
-    command: 'npm run dev -- --host 127.0.0.1 --port 5173',
-    url: 'http://127.0.0.1:5173',
-    reuseExistingServer: true,
-    timeout: 60000,
-  },
-  projects: [
-    {
-      name: 'chromium',
-      use: { ...devices['Desktop Chrome'] },
-    },
-  ],
-});
+ // Contexts/data are isolated; four workers keep the full six-size matrix practical.
+ workers:4,retries:0,forbidOnly:!!process.env.CI,
+ metadata:live.metadata,
+ testIgnore:['**/contracts/**','tests/unit/**'],
+ outputDir:'test-results/all-browser',
+ reporter:[['list'],['html',{outputFolder:'playwright-report/all-browser',open:'never'}],
+  ['json',{outputFile:'test-results/all-browser/results.json'}]],
+ webServer:suites.map(([,suite])=>suite.webServer).filter(Boolean),
+ projects:suites.flatMap(([name,suite])=>suite.projects.map(project=>({
+  ...project,name:name+'-'+project.name,testDir:suite.testDir,
+  testMatch:project.testMatch||suite.testMatch,
+  testIgnore:[...(Array.isArray(project.testIgnore)?project.testIgnore:project.testIgnore?[project.testIgnore]:[]),'**/contracts/**'],
+  timeout:suite.timeout||45000,expect:suite.expect||{timeout:10000},
+  use:{...suite.use,...project.use},
+ }))),
+})

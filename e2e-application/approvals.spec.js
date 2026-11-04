@@ -1,3 +1,6 @@
+// BROWSER TEST PURPOSE: approvals user workflows and regression coverage.
+// Setup opens the real Vue UI; actions use its controls; assertions check visible results/state.
+// Uses isolated fixture responses; passing UI checks do not prove deployed database or delivery integration.
 ﻿import {test,expect} from './fixtures/app.js'
 
 test('OSL searches pending requests, inspects audit evidence and restores search',async({page,app})=>{

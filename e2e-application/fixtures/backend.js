@@ -1,7 +1,11 @@
+// SUPPORT FILE PURPOSE: backend.js supplies shared setup or controlled data for the browser workflows.
+// Keep this support code: the Playwright tests depend on consistent setup and isolated state.
+import {createMeetingBackend} from '/e2e-application/fixtures/meetingBackend.js'
 ﻿// Test-only database boundary. Browser tests still use production services/loader.
 import {campusConnectMultiEventFixture} from '/e2e-simulator/fixtures/campusConnect.js'
 
 export function createBackend(config,calls){
+ const meetingRpc=createMeetingBackend(config)
  const key='pulse-application-data'
  const simulation=campusConnectMultiEventFixture()
  simulation.events=simulation.events.filter(e=>e.id!==990002)
@@ -83,6 +87,7 @@ export function createBackend(config,calls){
    async then(resolve,reject){try{
     calls.push({name:'select',table})
     if(config().holdTable===table)await new Promise(done=>pendingReads.add(done))
+    if(table==='ops_events'&&config().opsSample)return resolve({data:null,error:{code:'42P01',message:'Intentional fixture: sample-plan fallback'}})
     if(config().tableError===table)return resolve({data:null,count:null,error:{message:'Fixture read denied: '+table}})
     let rows=tableRows(table).filter(r=>predicates.every(fn=>fn(r)))
     rows=[...rows].sort((a,b)=>{for(const [k,asc]of orders){const d=String(a[k]??'').localeCompare(String(b[k]??''),undefined,{numeric:true});if(d)return asc?d:-d}return 0})
@@ -95,8 +100,9 @@ export function createBackend(config,calls){
   if(config().rpcError===name)return {data:null,error:{message:'Fixture operation denied: '+name}}
   // App.vue mounts the meeting pane alongside the simulator. Supply its exact
   // empty read contracts without permitting any meeting mutations.
-  if(['rpc_club_roster','rpc_my_baseline','rpc_club_baselines'].includes(name))return ok([])
-  if(name==='rpc_meeting_snapshot')return ok({meeting:null,participants:[],availability:[]})
+  const meetingResult=await meetingRpc(name,args)
+  if(meetingResult!==undefined)return meetingResult
+
   if(name==='rpc_simulator_event_sources')return ok({contract_version:1,links:[]})
   if(name==='rpc_simulator_event_roster'){
    if(config().rosterError===args.p_event_id)return {data:null,error:{message:'Fixture roster denied'}}
@@ -106,6 +112,8 @@ export function createBackend(config,calls){
   if(name==='rpc_simulator_plan_history'&&config().savedHistory)return ok({plans:[{
    id:'fixture-saved-'+args.p_event_id,event_id:args.p_event_id,title:'Fixture saved recovery '+args.p_event_id,
    application_status:'Draft',lifecycle:'In Progress',workflow_status:'In Progress',changes:[],disruptions:[],version:1}],invitations:[],audit:[]})
+  // Scheduling alerts are recorded locally; this fixture never sends Telegram.
+  if(name==='rpc_notify_schedule_change')return ok({})
   if(name==='rpc_my_notifications')return ok(state.notifications)
   if(name==='rpc_mark_notifications_read'){for(const n of state.notifications)if(args.p_notification_id==null||n.id===args.p_notification_id)n.is_read=true;persist();return ok({})}
   if(name==='rpc_delete_notifications'){state.notifications=state.notifications.filter(n=>args.p_notification_id!=null&&n.id!==args.p_notification_id);persist();return ok({})}

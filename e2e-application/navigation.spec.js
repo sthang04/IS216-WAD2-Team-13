@@ -1,3 +1,6 @@
+// BROWSER TEST PURPOSE: navigation user workflows and regression coverage.
+// Setup opens the real Vue UI; actions use its controls; assertions check visible results/state.
+// Uses isolated fixture responses; passing UI checks do not prove deployed database or delivery integration.
 ﻿import {test,expect} from './fixtures/app.js'
 
 test('anonymous direct route returns to the requested page after login',async({page,app})=>{
@@ -13,13 +16,13 @@ test('club navigation supports history, refresh and account-menu Escape',async({
  await app.navigate('schedule','Personal Schedule')
  await expect(page.getByRole('heading',{name:/Hi Fixture Exco/})).toBeVisible()
  await app.navigate('heatmap','Availability Heatmap')
- await expect(page.getByRole('heading',{name:'Weekly ExCo Availability Finder',exact:true})).toBeVisible()
+ await expect(page.getByRole('heading',{name:'Weekly Meeting Scheduler',exact:true})).toBeVisible()
  await page.goBack()
  await expect(page).toHaveURL(/\/personal-schedule$/)
  await page.goForward()
  await expect(page).toHaveURL(/\/availability$/)
  await page.reload()
- await expect(page.getByRole('heading',{name:'Weekly ExCo Availability Finder',exact:true})).toBeVisible()
+ await expect(page.getByRole('heading',{name:'Weekly Meeting Scheduler',exact:true})).toBeVisible()
  await app.account()
  const account=page.getByRole('button',{name:'Account menu for Fixture Exco',exact:true})
  await expect(account).toHaveAttribute('aria-expanded','true')

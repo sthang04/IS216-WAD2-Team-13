@@ -1,3 +1,7 @@
+// WHY THIS FILE IS RETAINED: Checks that the live-test network guard permits reads/authentication and rejects operational writes.
+// These focused regression checks preserve edge cases that browser journeys may not isolate.
+// SCOPE: Non-browser checks using the Playwright test runner; excluded from browser E2E commands.
+// A passing result here does not prove a complete user journey or deployed backend enforcement.
 // Unit contracts for the real-backend request guard; these are not browser E2E.
 import {test,expect} from '@playwright/test'
 import {isReadOnlyBackendRequest} from '../../helpers/readOnlyBackend.js'
