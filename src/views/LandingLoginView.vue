@@ -37,42 +37,47 @@ const loadingStageText = ref('Verifying SMU ExCo Credentials & Whitelist...')
 
 // 12 Customizable Fun Fact Templates (Team can easily edit or add facts here)
 const FUN_FACT_TEMPLATES = [
-  // 1. Prof Kyong & Her Orange Cat
-  "🐱 Prof Kyong & Her Orange Cat: Legend says Prof Kyong's orange cat inspects every line of WAD2 frontend code from her desk!",
-  
-  // 2. Orange Cat Superpowers
-  "✨ Orange Cat Superpowers: Prof Kyong's orange cat is officially rated as the sweetest, most supreme debugging assistant.",
-  
-  // 3. Orange Cat & Live Demo Luck
-  "🐾 Orange Cat Charm: Rumour has it that mentioning an orange cat during a live demo grants +10 charisma on the rubric!",
-  
-  // 4. Jerica's Mascot Approval
-  "🐱 Jerica's Mascot Cat: Approved! Jerica's mascot has officially stamped your session as genuine and ready for the demo.",
-  
-  // 5. SMU Connexion to LKS Walk
-  "🏃 Campus Speedrun: A brisk walk from SMU Connexion to Li Ka Shing B1 is exactly 650m (~8 mins) — 85% sheltered via concourse!",
-  
-  // 6. ACF Handover Record
-  "🎭 ACF Handover Excellence: Eurhythmix and Samba Masala boast a 100% compliant handover rate under OSL Clause 9.1(c).",
-  
-  // 7. BOSS Credit Hack
-  "💡 BOSS Credit Preservation: Peer-to-peer studio handovers allow approved CCAs to trade slots without forfeiting bidding credits.",
-  
-  // 8. Acoustic Sound Isolation
-  "🎧 Soundproof Secrets: SOA Basement Acoustic Rooms are built with 48dB noise isolation — ideal for loud percussion rehearsals.",
-  
-  // 9. Late-Night Fuel
-  "☕ Connexion Project Fuel: Over 4,200 cups of iced latte are consumed at SMU Connexion during project crunch week.",
-  
-  // 10. Telegram Bot Speed
-  "🤖 Telegram @pulse_wad2_bot: Webhook notifications alert 40+ stage performers within 1.5 seconds of a venue slot release.",
-    
-  // 11. Liquid Glass & Zero Dark Mode
-  "👑 Supreme Emixers Lore: Group 13 designed Pulse with zero dark mode and 100% pure liquid glass aesthetics!",
-  
-  // 12. 12-Minute Demo Pro-Tip
-  "🎯 12-Min Presentation Pro-Tip: 1-click persona switching saves precious minutes during the live finals presentation!"
+  // 1. Prof K Catchphrase: BOOYAH!
+  "🎉 Prof K Catchphrase: 'BOOYAH!' — That iconic shout of victory Prof Kyong unleashes whenever your full-stack Vue components mount with 0 errors!",
+
+  // 2. Prof K Vibes: Korean Acknowledgement
+  "✨ Prof K Vibes: 'Ye~' (예~ yeish!) — Prof Kyong's signature Korean acknowledgement of pure wisdom: 'Ye~ exactly, you got it right on the spot!'",
+
+  // 3. Section G4 Supremacy
+  "👑 G4 Supremacy: It's an undisputed SMU campus fact that Section G4 is officially Prof Kyong's absolute favourite WAD2 class of all time!",
+
+  // 4. Subscribe to Prof K's YouTube Channel
+  "🎬 Subscribe to Prof K: Don't forget to like and subscribe to Prof Kyong's YouTube channel: https://www.youtube.com/@realkrazywoman for supreme coding energy!",
+
+  // 5. Group 13 Lore
+  "🍀 Group 13 Best Group: 'WAD2 grp 13 luckiest grp best grp🍀' — Sarah, Chloe, Alicia, Angel, Jerica & Giselle built Pulse with 0 dark mode and 100% liquid glass!",
+
+  // 6. Show Kyong an Orange Cat
+  "🐱 Show Kyong an Orange Cat: Legend has it that showing Prof Kyong an orange cat during presentations grants an automatic +100 charisma on the rubric!",
+
+  // 7. Orange Cat Debugging Superpowers
+  "🐾 Orange Cat Superpowers: Prof Kyong's orange cat is universally rated as the fluffiest, most insightful senior software architect at SMU SCIS.",
+
+  // 8. Pip the Mascot & Telegram Speed
+  "🤖 Pip the Telegram Guardian: Pip alerts 40+ stage performers on Telegram within 1.5 seconds of a venue slot release so no studio sits empty.",
+
+  // 9. Campus Speedrun (SCIS1 to LKS)
+  "🏃 Campus Speedrun: A brisk walk from SCIS1 Seminar Room 2.1 to Li Ka Shing B1 is exactly 650m (~8 mins) — 85% sheltered via the concourse!",
+
+  // 10. 12-Minute Presentation Pro-Tip
+  "🎯 12-Min Presentation Pro-Tip: 1-click persona switching lets Sarah & team demo Eurhythmix, Samba, Symphonia, and OSL in seconds without typing passwords!",
+
+  // 11. Late-Night SCIS Crunch Fuel
+  "☕ Connexion Crunch Fuel: Over 4,200 cups of iced latte were consumed at SMU Connexion while Group 13 perfected Pulse's 5 core operational modules.",
+
+  // 12. Safe Peer Venue Transfers
+  "🏛️ Safe Peer Transfers: Pulse completely eliminates informal Telegram black markets with verified OSL transfer vouchers (#SMU-2026-VOUCHER)!"
 ];
+
+function formatTip(text) {
+  if (!text) return 'Loading SMU & Prof K facts...'
+  return text.replace(/(https?:\/\/[^\s]+)/g, '<a href="$1" target="_blank" rel="noopener noreferrer" class="text-danger fw-bold text-decoration-underline" style="word-break: break-all;">$1</a>')
+}
 
 async function handleQuickLogin(personaKey) {
   const p = DEMO_PERSONAS[personaKey];
@@ -245,16 +250,16 @@ async function completeLogin(loginEmail, loginPassword) {
   try {
     const authPromise = signIn(loginEmail, loginPassword)
     
-    // Trigger fun loading screen (Sims 4 style: 3 rounds over snappy 3.0s)
+    // Trigger fun loading screen with a comfortable breather (~2.4s) so students & evaluators can enjoy the trivia
     isAuthenticating.value = true
-    authProgress.value = 10
+    authProgress.value = 15
 
-    // Smooth progress bar update over 3.0s
+    // Smooth progress bar update over ~2.4s
     progressInterval = setInterval(() => {
-      if (authProgress.value < 95) {
+      if (authProgress.value < 94) {
         authProgress.value += 1
       }
-    }, 31)
+    }, 28)
 
     // Round 2 rotation at 1.0s
     roundTimer1 = setTimeout(() => {
@@ -262,20 +267,23 @@ async function completeLogin(loginEmail, loginPassword) {
       loadingStageText.value = 'Syncing Studio Schedules & OneMap Transit SLA...'
     }, 1000)
 
-    // Round 3 rotation at 2.0s
+    // Round 3 rotation at 1.8s
     roundTimer2 = setTimeout(() => {
       currentRound.value = 3
       loadingStageText.value = 'Preparing Real-Time CCA Operations Dashboard...'
-    }, 2000)
+    }, 1800)
 
-    // Await authentication result directly without artificial delay
-    const persona = await authPromise
+    // Parallel wait: await authentication AND a minimum breather delay (~2.4s)
+    const [persona] = await Promise.all([
+      authPromise,
+      new Promise((resolve) => setTimeout(resolve, 2400))
+    ])
 
     if (progressInterval) clearInterval(progressInterval)
     if (roundTimer1) clearTimeout(roundTimer1)
     if (roundTimer2) clearTimeout(roundTimer2)
     authProgress.value = 100
-    loadingStageText.value = 'Authentication Complete ✓'
+    loadingStageText.value = 'Authentication Complete ✓ Booyah!'
 
     // Store in Session Cache for repeated visits
     if (persona) {
@@ -918,18 +926,13 @@ async function handleManualLogin() {
                   <div class="progress-bar progress-bar-striped progress-bar-animated bg-danger" :style="{ width: `${authProgress}%`, transition: 'width 0.15s ease-out' }"></div>
                 </div>
 
-                <!-- Sims 4 Style 3-Round Rotating Trivia Card -->
+                <!-- Sims 4 Style Rotating Trivia Card -->
                 <div class="p-3 rounded-3 bg-white border shadow-sm w-100 text-start sims-tip-card position-relative overflow-hidden" style="max-width: 440px;">
                   <div class="d-flex align-items-center justify-content-between mb-2">
-                    <div class="d-flex align-items-center gap-1.5">
-                      <span class="badge bg-danger bg-opacity-10 text-danger border border-danger-subtle px-2 py-0.5" style="font-size: 0.65rem; font-weight: 700;">
-                        💡 CAMPUS TRIVIA
-                      </span>
-                      <span class="badge bg-light text-dark border px-2 py-0.5 ms-1" style="font-size: 0.65rem; font-weight: 600;">
-                        Round {{ currentRound }} of 3
-                      </span>
-                    </div>
-                    <!-- 3 Round Indicator Dots -->
+                    <span class="badge bg-danger bg-opacity-10 text-danger border border-danger-subtle px-2 py-0.5" style="font-size: 0.65rem; font-weight: 700;">
+                      💡 CAMPUS & PROF K TRIVIA
+                    </span>
+                    <!-- 3 Fact Indicator Dots -->
                     <div class="d-flex align-items-center gap-1">
                       <span class="sims-tip-dot" :class="{ active: currentRound === 1 }"></span>
                       <span class="sims-tip-dot" :class="{ active: currentRound === 2 }"></span>
@@ -938,8 +941,7 @@ async function handleManualLogin() {
                   </div>
 
                   <transition name="sims-tip-swap" mode="out-in">
-                    <p :key="currentRound" class="text-dark small mb-0 fw-medium sims-tip-text" style="font-size: 0.77rem; line-height: 1.5; min-height: 48px;">
-                      {{ activeRoundFacts[currentRound - 1] || 'Loading SMU facts...' }}
+                    <p :key="currentRound" class="text-dark small mb-0 fw-medium sims-tip-text" style="font-size: 0.77rem; line-height: 1.5; min-height: 48px;" v-html="formatTip(activeRoundFacts[currentRound - 1])">
                     </p>
                   </transition>
                 </div>
