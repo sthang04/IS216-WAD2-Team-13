@@ -38,10 +38,10 @@ const loadingStageText = ref('Verifying SMU ExCo Credentials & Whitelist...')
 // 12 Customizable Fun Fact Templates (Team can easily edit or add facts here)
 const FUN_FACT_TEMPLATES = [
   // 1. Prof K Catchphrase: BOOYAH!
-  "🎉 Prof K Catchphrase: 'BOOYAH!' — That iconic shout of victory Prof Kyong unleashes whenever your full-stack Vue components mount with 0 errors!",
+  "🎉 Prof K Catchphrase: 'BOOYAH!' — That iconic shout of victory Prof Kyong unleashes whenever there's no errors!",
 
   // 2. Prof K Vibes: Korean Acknowledgement
-  "✨ Prof K Vibes: 'Ye~' (예~ yeish!) — Prof Kyong's signature Korean acknowledgement of pure wisdom: 'Ye~ exactly, you got it right on the spot!'",
+  "✨ Prof K Vibes: 'Ye~' (예~ yeish!) to make sure we're paying attention in class!",
 
   // 3. Section G4 Supremacy
   "👑 G4 Supremacy: It's an undisputed SMU campus fact that Section G4 is officially Prof Kyong's absolute favourite WAD2 class of all time!",
@@ -50,10 +50,10 @@ const FUN_FACT_TEMPLATES = [
   "🎬 Subscribe to Prof K: Don't forget to like and subscribe to Prof Kyong's YouTube channel: https://www.youtube.com/@realkrazywoman for supreme coding energy!",
 
   // 5. Group 13 Lore
-  "🍀 Group 13 Best Group: 'WAD2 grp 13 luckiest grp best grp🍀' — Sarah, Chloe, Alicia, Angel, Jerica & Giselle built Pulse with 0 dark mode and 100% liquid glass!",
+  "💖 Group 13 Lore: 'Supreme Emixers' love all things vibrant pink, liquid glass, and peak operational efficiency! 🍀",
 
   // 6. Show Kyong an Orange Cat
-  "🐱 Show Kyong an Orange Cat: Legend has it that showing Prof Kyong an orange cat during presentations grants an automatic +100 charisma on the rubric!",
+  "🐱 Show Kyong an Orange Cat: pspsps did you know Prof has 5 cats?!",
 
   // 7. Orange Cat Debugging Superpowers
   "🐾 Orange Cat Superpowers: Prof Kyong's orange cat is universally rated as the fluffiest, most insightful senior software architect at SMU SCIS.",
