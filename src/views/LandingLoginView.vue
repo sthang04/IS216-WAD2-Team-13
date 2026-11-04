@@ -65,8 +65,8 @@ const FUN_FACT_TEMPLATES = [
   "☕ Connexion Project Fuel: Over 4,200 cups of iced latte are consumed at SMU Connexion during project crunch week.",
   
   // 10. Telegram Bot Speed
-  "🤖 Telegram @SMUPulseBot: Webhook notifications alert 40+ stage performers within 1.5 seconds of a venue slot release.",
-  
+  "🤖 Telegram @pulse_wad2_bot: Webhook notifications alert 40+ stage performers within 1.5 seconds of a venue slot release.",
+    
   // 11. Liquid Glass & Zero Dark Mode
   "👑 Supreme Emixers Lore: Group 13 designed Pulse with zero dark mode and 100% pure liquid glass aesthetics!",
   
