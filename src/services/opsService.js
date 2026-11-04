@@ -1,5 +1,6 @@
 // Day-of Operations: reading and saving a CCA's events, crew and tasks.
-// Tables: ops_events, ops_event_crew, ops_tasks (supabase/migrations/20261104000100_pulse_ops_events.sql).
+// Tables: ops_events, ops_event_crew, ops_tasks (supabase/migrations/20261104000100_pulse_ops_events.sql,
+// event start/end times in 20261104000200_pulse_ops_event_times.sql).
 // The database only lets active ExCos of the event's CCA read or change them.
 
 import { supabase } from '../supabase'
@@ -47,20 +48,40 @@ export async function loadClubExcos(clubId) {
     }))
 }
 
+// False until 20261104000200 has been run (ops_events has no start/end time yet)
+let hasEventTimes = true
+
+// '42703' / 'PGRST204': the column doesn't exist
+function isMissingColumnError(error) {
+  return error?.code === '42703' || error?.code === 'PGRST204'
+}
+
+function selectEvents(clubId) {
+  // The !name picks which link to follow (tasks also link to crew, so there's more than one path)
+  const eventColumns = hasEventTimes ? 'id, name, event_date, venue, start_time, end_time' : 'id, name, event_date, venue'
+  return supabase
+    .from('ops_events')
+    .select(`${eventColumns}, ops_event_crew!ops_event_crew_event_id_fkey(member_id, checked_in_at, late), ops_tasks!ops_tasks_event_id_fkey(id, member_id, title, task_type, start_time, end_time, venue, is_fixed)`)
+    .eq('club_id', clubId)
+    .order('event_date')
+}
+
 // All of a CCA's events, in the shape the page uses (times in minutes)
 export async function loadEvents(clubId, excos) {
-  const rows = unwrap(await supabase
-    .from('ops_events')
-    // The !name picks which link to follow (tasks also link to crew, so there's more than one path)
-    .select('id, name, event_date, venue, ops_event_crew!ops_event_crew_event_id_fkey(member_id, checked_in_at, late), ops_tasks!ops_tasks_event_id_fkey(id, member_id, title, task_type, start_time, end_time, venue, is_fixed)')
-    .eq('club_id', clubId)
-    .order('event_date'))
+  let response = await selectEvents(clubId)
+  if (hasEventTimes && isMissingColumnError(response.error)) {
+    hasEventTimes = false
+    response = await selectEvents(clubId)
+  }
+  const rows = unwrap(response)
 
   return rows.map((row) => ({
     id: row.id,
     name: row.name,
     date: row.event_date,
     venue: row.venue || '',
+    start: row.start_time ? timeToMinutes(row.start_time) : null,
+    end: row.end_time ? timeToMinutes(row.end_time) : null,
     crew: row.ops_event_crew.map((c) => {
       const exco = excos.find((e) => e.memberId === Number(c.member_id))
       return {
@@ -90,7 +111,17 @@ export async function loadEvents(clubId, excos) {
 // Crew or tasks no longer on the page are removed.
 // createdBy is only passed the first time, so later saves keep the original creator.
 export async function saveEvent(clubId, event, createdBy = null) {
-  const details = { id: event.id, club_id: clubId, name: event.name, event_date: event.date, venue: event.venue || null }
+  const details = {
+    id: event.id,
+    club_id: clubId,
+    name: event.name,
+    event_date: event.date,
+    venue: event.venue || null
+  }
+  if (hasEventTimes) {
+    details.start_time = event.start == null ? null : minutesToTime(event.start)
+    details.end_time = event.end == null ? null : minutesToTime(event.end)
+  }
   if (createdBy !== null) details.created_by = createdBy
   unwrap(await supabase.from('ops_events').upsert(details))
 
