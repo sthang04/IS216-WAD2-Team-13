@@ -18,7 +18,7 @@ import NotificationSwipeItem from './NotificationSwipeItem.vue'
 const router = useRouter()
 const ringing = ref(false)
 const root = ref(null)
-const botName = import.meta.env.VITE_TELEGRAM_BOT_USERNAME
+const botName = import.meta.env.VITE_TELEGRAM_BOT_USERNAME || 'pulse_wad2_bot'
 let ringTimer = null
 
 // Shake the bell for 1.2 seconds (motion only, no sound)
