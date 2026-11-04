@@ -28,11 +28,11 @@ async function boot(page,canManage=true){
   };`}))
  await page.goto('/e2e-simulator/harness.html')
  await page.getByLabel('Disruption type',{exact:true}).selectOption('FACILITY_UNAVAILABLE')
- await page.getByLabel('Unavailable from (Singapore)',{exact:true}).fill('2026-11-02T10:00')
- await page.getByLabel('Unavailable until (Singapore)',{exact:true}).fill('2026-11-02T10:30')
- await page.getByRole('button',{name:'Run combined simulation (1)',exact:true}).click()
+ await page.getByLabel('Unavailable from (Singapore)',{exact:true}).selectOption('2026-11-02T10:00')
+ await page.getByLabel('Unavailable until (Singapore)',{exact:true}).selectOption('2026-11-02T10:30')
+ await page.getByRole('button',{name:'Run simulation (1)',exact:true}).click()
  page.once('dialog',dialog=>dialog.accept())
- await page.getByTestId('facility-alternative').getByRole('link',{name:'View / Request this facility',exact:true}).click()
+ await page.getByTestId('facility-alternative').getByRole('link',{name:'View / Request facility',exact:true}).click()
 }
 test('recommendation opens the real calendar at facility/time; claim still requires normal confirmation',async({page})=>{
  await boot(page)
@@ -42,6 +42,7 @@ test('recommendation opens the real calendar at facility/time; claim still requi
  await expect(page.getByRole('heading',{name:'Other fixture room',exact:true})).toHaveCount(0)
  await expect(page.getByRole('heading',{name:'Fixture Alternative Room',exact:true})).toBeVisible()
  await expect(page.getByRole('button',{name:'Claim',exact:true})).toHaveCount(1)
+ await page.evaluate(async()=>{window.__claimReceipts=[];window.addEventListener('pulse:recovery-booking-claimed',e=>window.__claimReceipts.push(e.detail));const router=window.__simRouter;await router.replace({path:'/facilities',query:{...router.currentRoute.value.query,simRecoveryToken:'fixture-exact-context'}})})
  expect(await page.evaluate(()=>window.__calendarWrites)).toEqual([])
  await page.getByRole('button',{name:'Claim',exact:true}).click()
  await expect(page.getByText('Claim this slot?',{exact:true})).toBeVisible()
@@ -50,6 +51,7 @@ test('recommendation opens the real calendar at facility/time; claim still requi
  await expect.poll(()=>page.evaluate(()=>window.__calendarWrites.filter(c=>c.name==='rpc_claim_booking').length)).toBe(1)
  const call=await page.evaluate(()=>window.__calendarWrites.find(c=>c.name==='rpc_claim_booking'))
  expect(call.args.p_booking_id).toBe(2);expect(call.args.p_club_id).toBe(1)
+ await expect.poll(()=>page.evaluate(()=>window.__claimReceipts)).toEqual([{token:'fixture-exact-context',bookingId:2,clubId:1}])
 })
 test('focused calendar cannot grant claim permission and clearing focus restores other rooms',async({page})=>{
  await boot(page,false)
@@ -70,9 +72,10 @@ test('combined member/facility recommendations retain the relevant roster warnin
  await page.getByLabel('Disruption type',{exact:true}).nth(1).selectOption('FACILITY_UNAVAILABLE')
  for(const label of ['Unavailable from (Singapore)','Unavailable until (Singapore)']){
   const value=label.startsWith('Unavailable from')?'2026-11-02T10:00':'2026-11-02T10:30'
-  await page.getByLabel(label,{exact:true}).nth(0).fill(value);await page.getByLabel(label,{exact:true}).nth(1).fill(value)
+  await page.getByLabel(label,{exact:true}).nth(0).selectOption(value);await page.getByLabel(label,{exact:true}).nth(1).selectOption(value)
  }
- await page.getByRole('button',{name:'Run combined simulation (2)',exact:true}).click()
+ await page.getByRole('button',{name:'Run simulation (2)',exact:true}).click()
+ await page.getByText('Member availability limits',{exact:true}).click()
  await expect(page.getByText('Candidate availability has not been confirmed. Check with your selected replacement before proceeding.',{exact:true})).toBeVisible()
  await expect(page.getByTestId('facility-alternative')).toHaveCount(1)
 })

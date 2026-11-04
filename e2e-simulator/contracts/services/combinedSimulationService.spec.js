@@ -74,6 +74,7 @@ test('multiple unavailable members retain distinguishable groups and exclude eac
 })
 test('member targeting uses delayed timing rather than original timing',()=>{
   const data=fixture()
+  data.events[0].ends_at=t('21:00') // Keep the delayed-overlap assertion inside the event window.
   const {assessment}=run(data,[delay('a',1,120),unavailable('b',1,t('20:00'),t('21:00'))])
   assert.equal(assessment.memberGroups[0].affectedAssignments.length,1)
   assert.equal(assessment.memberGroups[0].segments[0].starts_at,new Date(t('20:00')).toISOString())

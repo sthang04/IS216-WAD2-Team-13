@@ -34,7 +34,7 @@ async function boot(page){
 test('Start explicitly confirms one action and retries lost response with the same captured UUID',async({page})=>{
  await boot(page)
  await page.getByLabel('Disruption type',{exact:true}).selectOption('SCHEDULE_DELAY')
- await page.getByRole('button',{name:'Run combined simulation (1)',exact:true}).click()
+ await page.getByRole('button',{name:'Run simulation (1)',exact:true}).click()
  await page.locator('.recovery-choice').first().getByRole('button',{name:'Select this plan',exact:true}).click()
  await page.getByRole('button',{name:'Prepare recovery requests',exact:true}).click()
  const dialog=page.getByLabel('Action confirmation',{exact:true})

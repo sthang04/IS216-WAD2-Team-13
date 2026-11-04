@@ -1,5 +1,6 @@
-export async function bootRecovery(page){
+export async function bootRecovery(page,{acknowledge=true,invitationsEnabled=false,otherEventBooking=false,lifecycle=''}={}){
  await page.route('https://**',route=>route.abort())
+ await page.route('**/src/services/simulatorBookingBridge.js*',async route=>{const response=await route.fetch();let body=await response.text();body=body.replace('export async function readRecoveryBookings(', 'async function realReadRecoveryBookings(');body+='\nexport async function readRecoveryBookings(args){window.__bookingReads=(window.__bookingReads||0)+1;if(window.__bookingReadError)throw Error(window.__bookingReadError);return structuredClone(window.__localDb?.facility_bookings||[])}';await route.fulfill({response,body})})
  await page.route('**/src/services/simulatorWorkflowService.js*',async route=>{
   const response=await route.fetch()
   await route.fulfill({response,body:(await response.text()).replace(/export const SIMULATOR_WORKFLOW_VERIFIED = [^\n]+/,'export const SIMULATOR_WORKFLOW_VERIFIED = true')})
@@ -14,6 +15,7 @@ export async function bootRecovery(page){
   d.events[0].ends_at=first.ends_at;d.segment_dependencies=[];
   d.segment_assignments=d.segment_assignments.filter(a=>!Array.from({length:7},(_,i)=>i+2).includes(a.segment_id));
   d.segment_facility_bookings=[{segment_id:1,booking_id:1}];d.segment_facility_slots=[{segment_id:1,facility_slot_id:1}];
+  if(${otherEventBooking}){d.facility_bookings.push({...d.facility_bookings[0],id:705});d.event_segments.push({id:888,event_id:999});d.segment_facility_bookings.push({segment_id:888,booking_id:705})}
   window.__localDb=d;window.__localCalls=[];window.__localLoads=0;window.__resolved=false;window.__audit=[];
   const before=captureSimulatorState(d,990001);
   const plan={id:'00000000-0000-4000-8000-000000000777',event_id:990001,title:'ISOLATED accepted recovery fixture',
@@ -37,12 +39,13 @@ export async function bootRecovery(page){
   export const isSupabaseConfigured=()=>true;
   export const supabase={auth:{onAuthStateChange(){return {data:{subscription:{unsubscribe(){}}}}}},async rpc(name,args){
    window.__localCalls.push({name,args:structuredClone(args)});
-   if(name==='rpc_simulator_workflow_capabilities')return result({contract_version:4,application_enabled:true,invitations_enabled:false});
+   if(name==='rpc_simulator_workflow_capabilities')return result({contract_version:4,application_enabled:true,invitations_enabled:${invitationsEnabled}});
    if(name==='rpc_simulator_my_invitations')return result({invitations:[]});
-   if(name==='rpc_simulator_plan_history')return result({plans:[plan],invitations:[invitation],audit:window.__audit});
+   if(name==='rpc_simulator_plan_history')return window.__denyHistory?{error:{message:'Event management permission required'}}:result({plans:[plan],invitations:[invitation],audit:window.__audit});
    if(window.__denyOperation)return {error:{message:'Event management permission required'}};
    if(args.p_plan_id!==plan.id)return {error:{message:'Wrong selected plan'}};
    if(args.p_expected_version!==plan.version)return {error:{message:'Plan revision changed; refresh history'}};
+   if(name==='rpc_simulator_attach_booking'){for(const c of plan.changes)if(String(c.segmentId)===String(args.p_segment_id)&&c.venueName)c.facilityBookingId=args.p_booking_id;plan.version++;return result(plan)}
    if(name==='rpc_simulator_apply_plan'){
     if(window.__holdApply)await new Promise(resolve=>{window.__releaseApply=resolve});
     const after=projectRecoveryPreview(before,plan.changes);restore(after);
@@ -63,11 +66,11 @@ export async function bootRecovery(page){
    return {error:{message:'Unexpected isolated RPC: '+name}};
   }};
  `}))
- await page.goto('/e2e-simulator/harness.html')
+ await page.goto('/e2e-simulator/harness.html'+(lifecycle?'?lifecycle='+lifecycle:''))
  await page.getByRole('region',{name:'Persisted recovery workflow',exact:true}).scrollIntoViewIfNeeded()
  await page.locator('[data-saved-plan-id="00000000-0000-4000-8000-000000000777"]').click()
  const panel=page.getByRole('region',{name:'Persisted recovery workflow',exact:true})
- await panel.getByLabel('I manually checked personal availability, qualifications and facility suitability; incomplete data is not proof of availability.',{exact:true}).check()
+ if(acknowledge){await panel.getByRole('tab',{name:/Organiser review/}).click();await panel.getByLabel('I manually checked personal availability, qualifications and facility suitability; incomplete data is not proof of availability.',{exact:true}).check();await panel.getByRole('tab',{name:/Apply \/ Undo/}).click()}
  return panel
 }
 export async function confirmRecovery(panel){

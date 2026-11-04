@@ -1,3 +1,4 @@
+import {setRawInterval} from './fixtures/disruptionInputs.js'
 import {test,expect} from '@playwright/test'
 async function boot(page,mode='route'){
  await page.route('https://**',r=>r.abort())
@@ -9,15 +10,17 @@ async function boot(page,mode='route'){
 }
 async function clean(page){
  await expect(page.getByRole('region',{name:'Start a simulation',exact:true})).toBeVisible()
- await expect(page.getByRole('button',{name:'Run combined simulation (1)',exact:true})).toBeDisabled()
- await expect(page.getByLabel('Unavailable from (Singapore)',{exact:true})).toHaveValue('')
+ await expect(page.getByRole('button',{name:'Run simulation (1)',exact:true})).toBeEnabled()
+ // Clean entry now initializes valid bounds from the selected event.
+ const eventId=await page.getByLabel('Event',{exact:true}).inputValue()
+ await expect(page.getByLabel('Unavailable from (Singapore)',{exact:true})).toHaveValue(eventId==='990003'?'2026-11-03T10:00':'2026-11-02T10:00')
  await expect(page.locator('.sim-impact-workspace,.recovery-choice,#simulator-comparison')).toHaveCount(0)
  await expect(page.getByRole('region',{name:'Saved Recoveries',exact:true})).toContainText('Persisted fixture recovery')
 }
 async function run(page){
- await page.getByLabel('Unavailable from (Singapore)',{exact:true}).fill('2026-11-02T10:00')
- await page.getByLabel('Unavailable until (Singapore)',{exact:true}).fill('2026-11-02T10:30')
- await page.getByRole('button',{name:'Run combined simulation (1)',exact:true}).click()
+ await page.getByLabel('Unavailable until (Singapore)',{exact:true}).selectOption('2026-11-02T10:30')
+ await page.getByLabel('Unavailable from (Singapore)',{exact:true}).selectOption('2026-11-02T10:00')
+ await page.getByRole('button',{name:'Run simulation (1)',exact:true}).click()
  await expect(page.getByText('Simulation complete',{exact:true})).toBeVisible()
 }
 async function onlyReads(page){
@@ -27,9 +30,9 @@ async function onlyReads(page){
 }
 test('clean entry, validation, local reset and saved history use only reads',async({page})=>{
  await boot(page);await clean(page)
- await page.getByLabel('Unavailable from (Singapore)',{exact:true}).fill('2026-11-02T10:00')
- await page.getByLabel('Unavailable until (Singapore)',{exact:true}).fill('2026-11-02T09:00')
- await expect(page.getByRole('button',{name:'Run combined simulation (1)',exact:true})).toBeDisabled()
+ await page.getByLabel('Unavailable from (Singapore)',{exact:true}).selectOption('2026-11-02T10:00')
+ await setRawInterval(page,{end:'2026-11-02T09:00'})
+ await expect(page.getByRole('button',{name:'Run simulation (1)',exact:true})).toBeDisabled()
  await run(page)
  await page.locator('.recovery-choice').first().getByRole('button',{name:'Select this plan',exact:true}).click()
  const saved=await page.evaluate(()=>JSON.stringify(window.__saved))
@@ -62,7 +65,7 @@ test('event switch and browser refresh clear hypothetical work; navigation event
  await expect(page.getByLabel('Event',{exact:true})).toHaveValue('990003')
  await clean(page)
  await page.getByLabel('Disruption type',{exact:true}).selectOption('SCHEDULE_DELAY')
- await page.getByRole('button',{name:'Run combined simulation (1)',exact:true}).click()
+ await page.getByRole('button',{name:'Run simulation (1)',exact:true}).click()
  page.once('dialog',d=>d.accept())
  await page.reload();await clean(page);await onlyReads(page)
  await page.goto('/e2e-simulator/harness.html?eventId=990003')

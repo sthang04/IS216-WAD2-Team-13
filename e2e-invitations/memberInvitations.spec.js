@@ -62,7 +62,7 @@ test('expired and cancelled invitations cannot be answered',async({page})=>{
 test('deep link scrolls and focuses the visible inbox; layout fits desktop and mobile',async({page})=>{
  await boot(page,'/personal-schedule#simulator-invitation-inbox')
  const inbox=page.locator('#simulator-invitation-inbox');await expect(inbox).toBeFocused()
- const box=await inbox.boundingBox(),header=await page.locator('header').boundingBox();expect(box.y).toBeGreaterThanOrEqual(header.y+header.height);expect(box.y).toBeLessThan(header.height+40)
+ const box=await inbox.boundingBox(),header=await page.getByRole('banner').boundingBox();expect(box.y).toBeGreaterThanOrEqual(header.y+header.height);expect(box.y).toBeLessThan(header.height+40)
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true)
  await page.screenshot({path:test.info().outputPath('member-invitations.png')})
 })

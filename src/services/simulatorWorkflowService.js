@@ -1,3 +1,4 @@
+import {opsPeriodOnEventDate} from './simulatorOpsDataService.js'
 import {simulatorFacilityFacts} from './simulatorFacilityEvidence.js'
 import {simulatorWorkflowActivation} from './simulatorWorkflowActivation.js'
 // Defaults OFF. Environment activation never changes a database release gate.
@@ -51,6 +52,7 @@ export function validateSimulatorRevision(version) {
 export function captureSimulatorState(data,eventId) {
   const event=data?.events?.find(e=>same(e.id,eventId))
   if (!event) throw new Error('Select a loaded event before preparing a plan.')
+  if(event.source_table==='ops_events' && !event.recovery_integration_ready) throw new Error('Live Day Ops preview is available. Saving and applying recovery requires the operations integration migration.')
   const segments=(data.event_segments || []).filter(s=>same(s.event_id,eventId)).map(s=>({
     id:s.id,event_id:s.event_id,title:s.title,segment_type:s.segment_type,starts_at:iso(s.starts_at),ends_at:iso(s.ends_at)
   })).sort((a,b)=>order(a.id,b.id))
@@ -73,6 +75,12 @@ export function prepareRecoveryDraft(data,eventId,option,disruptions,bookingSele
   const changes=option.changes.map(change=>{
     const segment=expected.segments.find(s=>same(s.id,change.segmentId))
     if (!segment) throw new Error('Recovery option refers to an unrelated activity.')
+    const liveSegment=data.event_segments.find(s=>same(s.id,segment.id))
+    if(liveSegment?.is_fixed && ((change.starts_at && simulatorTimestampMicros(change.starts_at)!==simulatorTimestampMicros(segment.starts_at)) || (change.ends_at && simulatorTimestampMicros(change.ends_at)!==simulatorTimestampMicros(segment.ends_at)))) throw new Error('Fixed Day Ops task times cannot be moved.')
+    const event=data.events.find(e=>same(e.id,eventId))
+    if(event.source_table==='ops_events'){
+      if(!opsPeriodOnEventDate(event.event_date,change.starts_at ?? segment.starts_at,change.ends_at ?? segment.ends_at)) throw new Error('Day Ops task times must remain on the event date.')
+    }
     const result={...change,segmentId:segment.id}
     if (change.replacementMemberId != null) {
       const assignments=expected.assignments.filter(a=>same(a.segment_id,segment.id)&&same(a.member_id,change.replacedMemberId)&&
@@ -131,13 +139,15 @@ function selectedPlanId(plan) {
 /** Thin RPC adapter, using the shared authenticated Supabase client. The caller
  * ID is never passed as proof of identity. Disabled means ZERO network requests.
  * All real mutations require explicit confirmation from the UI. */
-export function createSimulatorWorkflow(client,{enabled=false,allowReadOnly=false}={}) {
+export function createSimulatorWorkflow(client,{enabled=false,allowReadOnly=false,eventContext=()=>null}={}) {
   // Share the captured payload between concurrent Start calls and retries;
   // each reviewed UUID must describe one immutable request.
   const startRequests=new Map()
   const call=async(name,args,confirmed=false,write=false)=>{
     if(!enabled && !(allowReadOnly && !write)) throw new Error('Live simulator workflow has not been deployed and verified.')
     if(write&&!confirmed) throw new Error('Confirm the real database operation first.')
+    const context=eventContext()
+    if(context?.source_table==='ops_events' && !context.recovery_integration_ready) throw new Error('Day Ops recovery integration has not been deployed and verified.')
     if(!client) throw new Error('Supabase is unavailable.')
     const {data,error}=await client.rpc(name,args)
     if(error) throw new Error(error.message)
@@ -163,6 +173,7 @@ export function createSimulatorWorkflow(client,{enabled=false,allowReadOnly=fals
       const result=await call('rpc_simulator_workflow_capabilities',{p_event_id:eventId})
       if(result.contract_version!==4||typeof result.application_enabled!=='boolean'||typeof result.invitations_enabled!=='boolean')
         throw new Error('Reviewed recovery capabilities are unavailable; backend verification is required.')
+      if(eventContext()?.source_table==='ops_events' && result.ops_integration_version!==1) throw new Error('Day Ops recovery integration has not been deployed and verified.')
       return result
     },
     history:async eventId=>{

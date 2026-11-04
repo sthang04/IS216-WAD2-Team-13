@@ -1,3 +1,4 @@
+import {opsPeriodOnEventDate} from './simulatorOpsDataService.js'
 import {simulatorBookingPeriod} from './simulatorFacilityEvidence.js'
 import { recommendMemberReplacements } from './recoveryRecommendationService.js'
 
@@ -293,6 +294,13 @@ function buildProposedPlan(data, eventId, option) {
       continue
     }
 
+    // Ops task constraints apply to every ranked proposal, not only the delay
+    // input. A room recovery must not quietly move a fixed performance block.
+    if(segment.is_fixed && ((change.starts_at!==undefined && timestamp(change.starts_at)!==timestamp(segment.starts_at)) || (change.ends_at!==undefined && timestamp(change.ends_at)!==timestamp(segment.ends_at)))) errors.push('Fixed Day Ops task times cannot be moved')
+    const event=list(data.events).find(e=>sameId(e.id,eventId))
+    if(event?.source_table==='ops_events'){
+      if(!opsPeriodOnEventDate(event.event_date,change.starts_at ?? segment.starts_at,change.ends_at ?? segment.ends_at)) errors.push('Day Ops task times must remain on the event date')
+    }
     if (change.starts_at !== undefined) {
       segment.starts_at = change.starts_at
     }
@@ -367,6 +375,7 @@ function buildProposedPlan(data, eventId, option) {
     segments: [...segmentMap.values()],
     assignments,
     venueOverrides,
+    facilityChanges: new Set(list(option.changes).filter(c=>c.venueName!==undefined || c.facilityBookingId!==undefined).map(c=>String(c.segmentId))),
     errors
   }
 }
@@ -635,6 +644,14 @@ function checkFacilityConflicts(data, plan, disruptions) {
     const venues = override
       ? [override]
       : unique(linkedSlots.map(slot => slot.venue_name).filter(Boolean))
+
+    // Ops task-only recovery does not claim a room. Keep missing-facility
+    // evidence visible without suggesting that every meal/movement needs a
+    // booking. Explicit room changes and existing links use all checks below.
+    if(segment.source_table==='ops_tasks' && !plan.facilityChanges.has(key) && !links.length){
+      warnings.push('Unlinked Day Ops task venues are not verified reservations; task-only updates do not reserve facilities')
+      continue
+    }
 
     // An unlinked activity has no provable booking entitlement.
     // We do not invent a venue or treat another CCA's booking as ours.

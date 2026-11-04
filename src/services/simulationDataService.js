@@ -20,7 +20,7 @@
 */
 
 import { supabase, isSupabaseConfigured } from '../supabase'
-import { loadEventReplacementRosters } from './simulatorRosterService.js'
+import { readOpsSimulationData } from './simulatorOpsDataService.js'
 import { readSimulatorRows } from './simulatorPaginationService.js'
 
 
@@ -77,80 +77,12 @@ export async function loadLiveSimulationData() {
     )
   }
 
-  // RLS is responsible for restricting events to authorised CCAs.
-  // We do not trust a client-side club name as an access-control check.
-  const events = await readRows('events')
-
-  if (events.length === 0) {
-    throw new Error(
-      'No events are accessible to this account. Check the event SELECT policies and CCA membership.'
-    )
-  }
-
-  const eventIds = events.map(event => event.id)
-
-  const eventSegments = await readRows(
-    'event_segments',
-    query => query.in('event_id', eventIds)
-  )
-
-  if (eventSegments.length === 0) {
-    throw new Error(
-      'No event activities are accessible. Check event_segments SELECT permissions or event data.'
-    )
-  }
-
-  const segmentIds = eventSegments.map(segment => segment.id)
-
-  // ==========================================
-  // STEP 2: LOAD RELATED EVENT INFORMATION
-  // ==========================================
-
-  // Retrieve assignments, dependencies and facility links
-  // belonging to the accessible event activities.
-  const [assignments, dependencies, facilityLinks] =
-    await Promise.all([
-
-      readRows(
-        'segment_assignments',
-        query => query.in('segment_id', segmentIds)
-      ),
-
-      readRows(
-        'segment_dependencies',
-        query => query.in(
-          'prerequisite_segment_id',
-          segmentIds
-        )
-      ),
-
-      readRows(
-        'segment_facility_bookings',
-        query => query.in('segment_id', segmentIds)
-      )
-
-    ])
-
-  // The RPC checks the authenticated caller and resolves each event's club.
-  // It starts from active membership, so no existing assignment is required.
-  // A failed request is a real loading error; never fall back to fake members.
-  const roster = await loadEventReplacementRosters(supabase, events)
-
-  // Keep assigned members for impact analysis, including records outside the
-  // replacement pool. Only RPC membership evidence makes a candidate eligible.
-  const memberIds = [
-    ...new Set(assignments.map(row => row.member_id))
-  ]
-
-  const assignedMembers = memberIds.length
-    ? await readRows(
-        'members',
-        query => query.in('id', memberIds),
-        'id, full_name'
-      )
-    : []
-  const members = [...new Map([...assignedMembers, ...roster.members]
-    .map(member => [String(member.id), member])).values()]
+  // Steps 1 and 2: Day Ops owns event, crew and task records. The adapter keeps
+  // UUID provenance and accepts only persisted dependency/booking mappings.
+  const operational = await readOpsSimulationData(supabase)
+  const events = operational.events
+  const eventSegments = operational.event_segments
+  const facilityLinks = operational.segment_facility_bookings
 
   // ==========================================
   // STEP 3: LOAD FACILITY BOOKINGS
@@ -236,16 +168,10 @@ export async function loadLiveSimulationData() {
 
   // Normalize live records into the shared simulation engine input shape.
   // This allows simulationService.js to work with either
-  // local test data or authorised Supabase data.
+  // authorized operations records without importing test fixtures.
 
   return {
-    events: roster.events,
-    members,
-    replacement_memberships: roster.replacement_memberships,
-    member_replacement_coverage: roster.member_replacement_coverage,
-    event_segments: eventSegments,
-    segment_assignments: assignments,
-    segment_dependencies: dependencies,
+    ...operational,
     segment_facility_slots: normalizedFacilityLinks,
     facility_slots: facilitySlots,
     facilities,

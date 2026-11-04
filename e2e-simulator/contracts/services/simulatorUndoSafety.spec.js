@@ -4,7 +4,9 @@
 import {test} from '@playwright/test'
 import assert from 'node:assert/strict'
 import {readFileSync} from 'node:fs'
-const read=name=>readFileSync(new URL('../../../supabase/migrations/'+name,import.meta.url),'utf8')
+// PostgreSQL source equivalence must ignore OS checkout line endings only;
+// the exact transition-body equality assertion below remains unchanged.
+const read=name=>readFileSync(new URL('../../../supabase/migrations/'+name,import.meta.url),'utf8').replace(/\r\n/g,'\n')
 const previous=read('202610310002_simulator_recovery_workflow.sql')
 const correction=read('202610310005_simulator_safe_undo.sql')
 function transition(sql){const at=sql.indexOf('FUNCTION simulator_private.transition_plan(');return sql.slice(at,sql.indexOf('END $$;',at)+7)}

@@ -26,7 +26,7 @@ async function mount(name,api,enabled=true,initial={}){
  assert.deepEqual(template.errors,[])
  const code=script.content.replace(/import[\s\S]*?from ['"][^'"]+['"];?/g,'').replace('export default','return')
  let auth
- const deps={...Vue,...workflow,buildRecoveryTracker,simulatorWorkflowError,SIMULATOR_WORKFLOW_VERIFIED:enabled,createSimulatorWorkflow:()=>({capabilities:async()=>({contract_version:4,application_enabled:enabled,invitations_enabled:enabled}),...api}),
+ const deps={...Vue,...workflow,readRecoveryBookings:async()=>[],RECOVERY_BOOKING_EVENT:'pulse:recovery-booking-claimed',currentSessionPersona:Vue.ref(null),canOpenView:()=>true,buildRecoveryTracker,simulatorWorkflowError,SIMULATOR_WORKFLOW_VERIFIED:enabled,createSimulatorWorkflow:()=>({capabilities:async()=>({contract_version:4,application_enabled:enabled,invitations_enabled:enabled}),...api}),
   supabase:{auth:{onAuthStateChange(callback){auth=callback;return {data:{subscription:{unsubscribe(){}}}}}}},
   SimulatorCalendarActions:{render:()=>null}}
  const entries=Object.entries(deps).filter(([key])=>/^[A-Za-z_$][A-Za-z0-9_$]*$/.test(key));
