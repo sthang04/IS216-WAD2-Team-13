@@ -49,8 +49,8 @@ test('multi-day selector lives in Time Machine; modes, playback and scrubbing re
 })
 test('responsive hierarchy, map/sidebar split, 65/35 panels and safe floating controls',async({page})=>{
  await bootRefinement(page);await runScenario(page,'FACILITY_UNAVAILABLE')
- for(const width of [1440,1280,1024,768,390,360]){
-  await page.setViewportSize({width,height:900});await expect.poll(()=>page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true)
+ for(const [width,height] of [[1280,800],[1440,900],[1920,1080],[390,844],[375,667],[320,568]]){
+  await page.setViewportSize({width,height});await expect.poll(()=>page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true)
   const t=await page.locator('#impact-timeline').boundingBox(),h=await page.locator('#impact-facilities').boundingBox()
   if(width>=1024){expect(Math.abs(t.y-h.y)).toBeLessThan(2);expect(Math.abs(t.height-h.height)).toBeLessThan(2);expect(t.width/(t.width+h.width)).toBeCloseTo(.65,1);const map=await page.locator('.village-map-panel').boundingBox(),side=await page.locator('.impact-sidebar').boundingBox();expect(map.width/(map.width+side.width)).toBeCloseTo(.75,1)}else expect(h.y).toBeGreaterThan(t.y)
   await page.screenshot({path:test.info().outputPath('refined-'+width+'.png'),fullPage:true,animations:'disabled'})

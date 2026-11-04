@@ -40,7 +40,6 @@ import SimulatorDisruptionInterval from '../components/SimulatorDisruptionInterv
 import SimulatorImpactWorkspace from '../components/SimulatorImpactWorkspace.vue'
 import SimulatorRecoveryWorkflow from '../components/SimulatorRecoveryWorkflow.vue'
 import {projectRecoveryPreview} from '../services/simulatorWorkflowService.js'
-import SimulatorCalendarActions from '../components/SimulatorCalendarActions.vue'
 import SimulatorFacilitySetup from '../components/SimulatorFacilitySetup.vue'
 import SimulatorCandidateChooser from '../components/SimulatorCandidateChooser.vue'
 import SimulatorFacilityChoices from '../components/SimulatorFacilityChoices.vue'
@@ -66,8 +65,9 @@ This page connects four parts:
    recoveryPlanEvaluationService.js
 
 IMPORTANT:
-- This page does not update Supabase.
-- Telegram messages are previews only.
+- Scenario calculations never update Supabase. Child workflow panels make
+  separately confirmed requests only when the reviewed backend gates permit.
+- Candidate previews never send Telegram messages.
 - A disrupted schedule is NOT automatically a recovery.
 - A recovery must be evaluated before it can be
   displayed as the recommended plan.
@@ -103,7 +103,6 @@ const initialized = ref(false)
 const sessionVersion = ref(0)
 const invitationRefreshVersion = ref(0)
 
-const activeComparison = ref('original')
 const selectedRecoveryId = ref('')
 const selectedSavedRecovery=shallowRef(null),workflowStage=ref('Draft')
 const comparedRecovery=computed(()=>{
@@ -115,7 +114,7 @@ const comparedRecovery=computed(()=>{
  }catch{return null}
 })
 const impactData=computed(()=>selectedSavedRecovery.value?.before_state?{...data.value,event_segments:[...(data.value?.event_segments || []).filter(s=>String(s.event_id)!==String(selectedEventId.value)),...selectedSavedRecovery.value.before_state.segments]}:data.value)
-function reviewSavedRecovery(saved){const changed=selectedSavedRecovery.value?.id!==saved?.id || selectedSavedRecovery.value?.application_status!==saved?.application_status;selectedSavedRecovery.value=saved;if(saved && changed)activeComparison.value=saved.application_status==='Undone'?'original':'recovery'}
+function reviewSavedRecovery(saved){selectedSavedRecovery.value=saved}
 const currentStage=computed(()=>['Applied','Undone'].includes(workflowStage.value)?7:workflowStage.value==='Ready to apply'?6:!['Draft',''].includes(workflowStage.value)?5:selectedRecoveryId.value?4:result.value?3:0)
 const stages=[{label:'Configure',target:'simulator-scenarios'},{label:'Run simulation',target:'simulator-scenarios'},{label:'Understand impact',target:'simulator-impact'},{label:'Explore recovery',target:'simulator-recovery'},{label:'Compare plans',target:'simulator-comparison'},{label:'Track requirements',target:'simulator-recovery-workflow'},{label:'Apply',target:'simulator-recovery-workflow'},{label:'Review / Undo',target:'simulator-recovery-workflow'}]
 // Continue editing the selected ranked plan rather than accidentally combining
@@ -137,12 +136,9 @@ async function selectCandidate(assessment,candidate){
 }
 function setOutageWindow(card,mode){card.intervalMode=mode;if(mode==='event'){card.start=toSingaporeLocal(selectedEvent.value?.starts_at);card.end=toSingaporeLocal(selectedEvent.value?.ends_at)}}
 const selectedRecoveryPlan = computed(() => rankedRecoveryPlans.value.find(p => p.id === selectedRecoveryId.value) || null)
-const displayScore=value=>typeof value==='number'&&Number.isFinite(value)?value+'/100':'Score unavailable'
-function openPlanEvidence(id){const details=document.getElementById('plan-evidence-'+id);if(details)details.open=true}
 function selectRecoveryPlan(id) {
   selectedSavedRecovery.value=null
   selectedRecoveryId.value = id
-  activeComparison.value = id ? 'recovery' : 'original'
 }
 
 
@@ -171,9 +167,6 @@ async function chooseFacility(id){
  selectRecoveryPlan(option?.id || '')
 }
 
-
-
-const toastMsg = ref('')
 
 // ========================================================
 // DATA HELPERS
@@ -315,7 +308,6 @@ function resetSelections(resetWorkflow = true) {
   replacementSelections.value = {}
   selectedFacilityOptions.value = []
   result.value = null
-  activeComparison.value = 'original'
   pristineDisruptions.value = JSON.stringify(disruptionCards.value)
 }
 function buildDisruptions() {
@@ -387,10 +379,6 @@ function runSimulation() {
       buildDisruptions()
     )
 
-    console.log(
-      '[Event Risk] Simulation:',
-      result.value
-    )
   } catch (e) {
     error.value =
       e?.message || String(e)
@@ -424,7 +412,6 @@ watch(disruptionCards, () => {
   if (!initialized.value) return
   result.value = null
   error.value = ''
-  activeComparison.value = 'original'
   replacementSelections.value = {}
   selectedFacilityOptions.value = []
   selectedRecoveryId.value = ''
@@ -506,11 +493,6 @@ const assignmentCount = computed(() => {
   ).length
 })
 
-const conflictCount = computed(() =>
-  result.value
-    ? result.value.conflictCounts?.total ?? 0
-    : null
-)
 
 // ========================================================
 // MEMBER REPLACEMENT RECOMMENDATIONS
@@ -518,7 +500,6 @@ const conflictCount = computed(() =>
 
 // All recommendation services receive the complete combined simulation. Repeated
 // periods for one member share one group; different members never share a list.
-const showAllCandidates = ref(false)
 const combinedAssessment = computed(() => {
   if (!result.value || !data.value) return { memberGroups: [], facilityRecovery: [], facilityOptions: [], delayedChanges: [] }
   return assessCombinedRecovery(data.value, selectedEventId.value, result.value, buildDisruptions())
@@ -526,18 +507,9 @@ const combinedAssessment = computed(() => {
 const memberAssessments = computed(() => combinedAssessment.value.memberGroups)
 const facilityRecovery = computed(() => presentSimulatorFacilities({data:data.value || {},recommendations:combinedAssessment.value.facilityRecovery,options:combinedAssessment.value.facilityOptions,rankedPlans:rankedRecoveryPlans.value,simulatedSegments:result.value?.simulatedSegments || []}))
 const hasFacilityDisruptions = computed(() => disruptionCards.value.some(d => d.type !== 'MEMBER_UNAVAILABLE'))
-const replacementCoverage = computed(() =>
-  data.value?.member_replacement_coverage?.byEvent?.[String(selectedEventId.value)] ?? data.value?.member_replacement_coverage)
 // Coverage warnings belong to affected staffing, not every facility disruption.
 const showMemberAvailabilityWarning=computed(()=>!!result.value&&(memberAssessments.value.some(g=>g.segments?.length>0)||
  (result.value.conflictCounts?.member ?? 0)>0||(result.value.conflictCounts?.memberDoubleBooking ?? 0)>0))
-function candidateGroups(assessment) {
-  const shown = showAllCandidates.value ? assessment.eligible : assessment.eligible.slice(0,5)
-  return [
-    { title: 'Exact-role matches', members: shown.filter(c => !c.requiresManualReview) },
-    { title: 'Needs Manual Review', members: shown.filter(c => c.requiresManualReview) }
-  ].filter(group => group.members.length)
-}
 const recoveryOptions = computed(() => buildCombinedRecoveryOptions(combinedAssessment.value,
   replacementSelections.value, selectedFacilityOptions.value))
 
@@ -610,36 +582,10 @@ const displayedRankedPlans = computed(() => {
   const selected = plans.find(plan => plan.id === selectedRecoveryId.value)
   return selected && !visible.some(plan => plan.id === selected.id) ? [...visible, selected] : visible
 })
-function changeSummary(plan, field) {
-  return [...new Set(plan.changes.filter(c => c[field] != null).map(c => field === 'venueName'
-    ? 'move to ' + c.venueName
-    : 'replace ' + (data.value.members.find(m => String(m.id) === String(c.replacedMemberId))?.full_name || 'assigned member') + ' with ' + (data.value.members.find(m => String(m.id) === String(c.replacementMemberId))?.full_name || 'replacement member')))].join('; ')
-}
 
 watch(() => recoveryOptions.value, options => {
   if (!options.some(o => o.id === selectedRecoveryId.value)) selectedRecoveryId.value = ''
 })
-
-// Booking outcomes come from the evaluator; the view never decides
-// whether a reservation is confirmed or whether a venue is free.
-function isBookingMessage(message) {
-  return /booking|reservation|facility|venue|slot|room/i.test(String(message || ''))
-}
-
-function bookingConflicts(plan) {
-  return (plan.conflicts || []).filter(item =>
-    isBookingMessage(item.message) ||
-    ['FACILITY_DOUBLE_BOOKING', 'FACILITY_UNAVAILABLE'].includes(item.type)
-  )
-}
-
-function bookingWarnings(plan) {
-  return (plan.warnings || []).filter(isBookingMessage)
-}
-
-function otherWarnings(plan) {
-  return (plan.warnings || []).filter(item => !isBookingMessage(item))
-}
 
 const bookingDataCoverage = computed(() =>
   data.value?.facility_booking_coverage || null
@@ -671,122 +617,11 @@ const recoveryStatus = computed(() => {
 // DYNAMIC RECOMMENDATION LABELS
 // ========================================================
 
-const recommendationTitle = computed(() => 'Combined Recovery Recommendations')
 const recommendationLabel = computed(() => 'COMBINED CONTINGENCY PLANNING')
 const recommendationBadge = computed(() => 'All Selected Disruptions')
 
-// ========================================================
-// PLAN COMPARISON
-// ========================================================
-
-/*
-Three comparison states:
-
-ORIGINAL:
-The confirmed schedule loaded from Supabase.
-
-DISRUPTED:
-The schedule after the what-if disruption.
-
-RECOVERY:
-The highest-ranked feasible recovery option.
-
-If there is no feasible evaluated option,
-the recovery view must NOT pretend that the
-disrupted schedule is a recovered schedule.
-*/
-
-const comparisonSegments = computed(() => {
-  if (!result.value && !selectedSavedRecovery.value) {
-    return []
-  }
-
-  if (
-    activeComparison.value === 'original'
-  ) {
-    return selectedSavedRecovery.value?.before_state?.segments || eventSegments.value
-  }
-
-  if (
-    activeComparison.value === 'disrupted'
-  ) {
-    return (
-      result.value.simulatedSegments || []
-    )
-  }
-
-  if (
-    activeComparison.value === 'recovery'
-  ) {
-    return (
-      comparedRecovery.value
-        ?.proposedSegments || []
-    )
-  }
-
-  return []
-})
-
-const comparisonTitle = computed(() => {
-  switch (activeComparison.value) {
-    case 'original':
-      return 'Original Schedule'
-
-    case 'disrupted':
-      return 'Simulated Disrupted Plan'
-
-    case 'recovery':
-      return 'Evaluated Recovery Plan'
-
-    default:
-      return 'Plan Comparison'
-  }
-})
-
-function isSegmentChanged(segment) {
-  if (
-    activeComparison.value === 'original'
-  ) {
-    return false
-  }
-
-  const original =
-    eventSegments.value.find(
-      item =>
-        String(item.id) ===
-        String(segment.id)
-    )
-
-  if (!original) {
-    return false
-  }
-
-  return (
-    Date.parse(original.starts_at) !==
-      Date.parse(segment.starts_at) ||
-
-    Date.parse(original.ends_at) !==
-      Date.parse(segment.ends_at)
-  )
-}
-
-function proposedVenueFor(segment) {
-  if (
-    activeComparison.value !== 'recovery' ||
-    !comparedRecovery.value
-  ) {
-    return null
-  }
-
-  return comparedRecovery.value
-    .proposedVenues?.[String(segment.id)] ||
-    null
-}
-
-// ========================================================
-// TELEGRAM DISPATCH PREVIEW
-// ========================================================
-
+// Comparison rendering belongs to SimulatorPlanComparison; this view passes
+// the selected evaluated or saved proposal without recomputing its score.
 
 </script>
 
@@ -837,12 +672,6 @@ function proposedVenueFor(segment) {
 
     <!-- STATUS MESSAGES -->
 
-    <div
-      v-if="toastMsg"
-      class="alert alert-info mb-3"
-    >
-      {{ toastMsg }}
-    </div>
 
     <div
       v-if="loading"
@@ -1106,7 +935,7 @@ function proposedVenueFor(segment) {
 
     <!-- Review the comparison before confirming database recovery. -->
     <section aria-label="Recovery Workflow and Saved Recoveries" class="mt-4">
-    <SimulatorRecoveryWorkflow :active="props.active" :session-version="sessionVersion" @operation-complete="activeComparison=$event==='Undone'?'original':'recovery'" @stage-change="workflowStage=$event" @review-saved="reviewSavedRecovery" :selected-recovery-id="selectedRecoveryId" @select-option="selectRecoveryPlan" :refresh-event="refreshSimulator" :refresh-version="invitationRefreshVersion" @invitations-changed="invitationRefreshVersion++" :data="data" :event-id="selectedEventId" :options="recoveryOptions"
+    <SimulatorRecoveryWorkflow :active="props.active" :session-version="sessionVersion" @stage-change="workflowStage=$event" @review-saved="reviewSavedRecovery" :selected-recovery-id="selectedRecoveryId" @select-option="selectRecoveryPlan" :refresh-event="refreshSimulator" :refresh-version="invitationRefreshVersion" @invitations-changed="invitationRefreshVersion++" :data="data" :event-id="selectedEventId" :options="recoveryOptions"
       :disruptions="result ? buildDisruptions() : []" />
     </section>
 
@@ -1124,7 +953,6 @@ function proposedVenueFor(segment) {
   </div>
   
 </template>
-
 
 
 <style scoped>

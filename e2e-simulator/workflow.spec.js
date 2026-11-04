@@ -18,12 +18,17 @@ test('combined cards, one Pip and real workflow safety gates',async({page})=>{
  await page.getByRole('button',{name:'Run simulation (3)',exact:true}).click()
  await expect(page.getByText('Simulation complete',{exact:true})).toBeVisible()
  await expect(page.locator('.pip-container')).toHaveCount(1)
- await expect(page.getByRole('button',{name:'Prepare recovery requests',exact:true})).toBeDisabled()
+ // Actions: selecting a proposal reveals preparation, but cannot enable live writes.
+ await page.getByRole('article',{name:'Recovery plan 1',exact:true}).getByRole('button',{name:'Select this plan',exact:true}).click()
+ // Assert: every preparation action remains gated off.
+ const prepare=page.getByRole('button',{name:'Prepare recovery requests',exact:true});
+ expect(await prepare.count()).toBeGreaterThan(0)
+ for(const button of await prepare.all())await expect(button).toBeDisabled()
  await expect(page.getByRole('button',{name:'Cancel Recovery Plan',exact:true})).toHaveCount(0)
  await expect(page.getByRole('button',{name:'Apply selected recovery',exact:true})).toHaveCount(0)
  await expect(page.getByRole('button',{name:'Undo Recovery Plan',exact:true})).toHaveCount(0)
- await expect(page.locator('.recovery-notice')).toBeVisible()
- await expect(page.locator('.recovery-notice')).toHaveCount(1)
+ await expect(page.locator('.workflow-availability')).toBeVisible()
+ await expect(page.locator('.workflow-availability')).toHaveCount(1)
  await expect(page.getByRole('button',{name:'Manage bookings',exact:true})).toBeVisible()
 })
 test('invalid input disables simulation and reset does not reload records',async({page})=>{

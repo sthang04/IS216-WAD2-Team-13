@@ -4,6 +4,12 @@ export const RECOVERY_BOOKING_EVENT='pulse:recovery-booking-claimed'
 // The calendar reports an exact successful claim, never a guessed room/time match.
 export function reportRecoveryBookingClaim(query,bookingId,clubId){if(typeof query.simRecoveryToken==='string')window.dispatchEvent(new CustomEvent(RECOVERY_BOOKING_EVENT,{detail:{token:query.simRecoveryToken,bookingId,clubId}}))}
 const day=value=>new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Singapore'}).format(new Date(value))
+/** Read visible booking and transfer evidence, including exact saved IDs that
+ * may fall outside the current activity date range. This does not claim or
+ * associate a booking; the confirmed workflow performs that separate action.
+ * @param {{ranges: object[], ids?: (string|number)[], clubId: string|number}} input
+ * @returns {Promise<object[]>} Deduplicated bookings with visible transfer decisions.
+ */
 export async function readRecoveryBookings({ranges,ids=[],clubId}){
  const dates=ranges.flatMap(r=>[r.starts_at,r.ends_at]).filter(v=>Number.isFinite(Date.parse(v))).map(day).sort()
  const groups=await Promise.all([dates.length?readSimulatorRows(supabase,'facility_bookings',q=>q.gte('booking_date',dates[0]).lte('booking_date',dates[dates.length-1])):[],ids.length?readSimulatorRows(supabase,'facility_bookings',q=>q.in('id',ids)):[]])

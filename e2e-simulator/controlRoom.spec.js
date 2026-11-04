@@ -76,6 +76,7 @@ test('mobile layout stays within viewport and comparison remains ahead of real r
 
 
 test('ranked plan selection changes comparison, preparation and recovery inspection; playback shares heatmap time',async({page})=>{
+ await page.clock.install()
  await boot(page)
  const cards=page.locator('.recovery-choice')
  expect(await cards.count()).toBeGreaterThan(1)
@@ -99,7 +100,7 @@ test('ranked plan selection changes comparison, preparation and recovery inspect
  await impact.getByRole('button',{name:'Play timeline',exact:true}).click()
  await expect.poll(async()=>Number(await slider.inputValue())).toBeGreaterThan(15)
  await impact.getByRole('button',{name:'Pause timeline',exact:true}).click()
- const stopped=await slider.inputValue();await page.waitForTimeout(400);await expect(slider).toHaveValue(stopped)
+ const stopped=await slider.inputValue();await page.clock.runFor(400);await expect(slider).toHaveValue(stopped)
  if(await impact.getByRole('button',{name:'Show heatmap',exact:true}).isVisible())await impact.getByRole('button',{name:'Show heatmap',exact:true}).click()
  await impact.locator('.sim-heat-cell').last().click()
  await expect(impact.locator('.sim-heat-cell.current')).toHaveCount(1)
@@ -159,13 +160,13 @@ test('mixed member and room disruptions select one complete recovery across comp
  expect(await cards.count()).toBeGreaterThan(1)
  const ids=[]
  for(const card of [cards.nth(0),cards.nth(1)]){
-  await expect(card).toContainText('replace Fixture affected member with')
+  await expect(card).toContainText('Fixture affected member \u2192')
   await expect(card).toContainText('move to Fixture Alternative Room')
   const id=await card.getAttribute('data-plan-id');ids.push(id)
   await card.getByRole('button',{name:'Select this plan',exact:true}).click()
   await expect(page.getByRole('region',{name:'Persisted recovery workflow',exact:true})).toHaveAttribute('data-selected-recovery',id)
   const title=await card.getAttribute('data-plan-title')
-  const expectedMember=(await card.textContent()).includes('with Fixture exact standby')?'Fixture exact standby':'Fixture review standby'
+  const expectedMember=(await card.textContent()).includes('Fixture affected member \u2192 Fixture exact standby')?'Fixture exact standby':'Fixture review standby'
   await expect(page.getByRole('region',{name:'Candidate details',exact:true})).toContainText(expectedMember)
   await expect(page.locator('[data-facility-option].chosen')).toHaveCount(1)
   await expect(page.getByRole('region',{name:'Build your recovery',exact:true})).toContainText(title)
@@ -184,7 +185,7 @@ test('mixed member and room disruptions select one complete recovery across comp
 })
 
 
-test('ranking disclosure preserves selection and full page fits desktop, tablet and mobile',async({page})=>{
+test('ranking disclosure preserves selection and full page fits desktop and mobile',async({page})=>{
  await boot(page,'many-plans')
  await page.getByRole('button',{name:'Add disruption',exact:true}).click()
  await page.getByLabel('Disruption type',{exact:true}).nth(1).selectOption('FACILITY_UNAVAILABLE')
@@ -213,10 +214,10 @@ test('ranking disclosure preserves selection and full page fits desktop, tablet 
   await expect.poll(()=>page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true)
   const dimensions=await page.locator('.sim-visual-grid>section').evaluateAll(nodes=>nodes.map(n=>({height:n.getBoundingClientRect().height,content:n.scrollHeight})))
   expect(dimensions.every(d=>d.content<=d.height+1)).toBe(true)
-  const details=ranking.locator('.recovery-choice').first().getByText('Plan details',{exact:true}).locator('..')
-  await details.locator('summary').click()
-  await expect(details.getByRole('heading',{name:'Full activity changes'})).toBeVisible()
+  const details=ranking.locator('.recovery-choice').first().getByTestId('follow-up-actions')
+  await details.locator(':scope > summary').click()
+  await expect(details.getByText('Full activity changes',{exact:true})).toBeVisible()
   await expect.poll(()=>page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true)
-  await details.locator('summary').click()
+  await details.locator(':scope > summary').click()
  }
 })

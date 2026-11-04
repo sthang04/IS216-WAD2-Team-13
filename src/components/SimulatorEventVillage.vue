@@ -27,6 +27,12 @@ const nodes=computed(()=>{
 })
 // Orthogonal A* routes run through corridors around full booth/label bounds.
 // Routing changes geometry only: recorded endpoints and arrow direction stay exact.
+/** Route a recorded dependency around complete booth and label bounds.
+ * @param {object} a Source booth in graph coordinates.
+ * @param {object} b Destination booth; arrow direction follows the recorded edge.
+ * @param {object[]} obstacles Occupied rectangles, including long labels.
+ * @returns {string} SVG path; geometry never changes cascade or dependency data.
+ */
 function routeEdge(a,b,obstacles){
  const sign=b.x>a.x?1:b.x<a.x?-1:(a.x>bounds(nodes.value).x+bounds(nodes.value).width/2?1:-1),endSign=b.x===a.x?sign:-sign,start={x:a.x+sign*124,y:a.y+18},end={x:b.x+endSign*124,y:b.y+18}
  const xs=[...new Set([start.x,end.x,...obstacles.flatMap(r=>[r.left-16,r.right+16])])].sort((a,b)=>a-b),ys=[...new Set([start.y,end.y,...obstacles.flatMap(r=>[r.top-16,r.bottom+16])])].sort((a,b)=>a-b)
@@ -48,6 +54,8 @@ const graphOffset=computed(()=>{const b=graphBounds.value,k=fit.value?fitScale.v
 const graphTransform=computed(()=>'translate('+graphOffset.value.x+' '+graphOffset.value.y+') scale('+(fit.value?fitScale.value:1)+')'),minimumZoom=computed(()=>Math.min(.25,fitScale.value/4)),zoomPercent=computed(()=>Math.round((fit.value?fitScale.value:zoom.value)*1000)/10)
 function centerOnActivity(id=props.selectedId){const n=nodes.value.find(n=>String(n.id)===String(id))||nodes.value[0];if(n&&viewport.value){viewport.value.scrollLeft=(n.x+graphOffset.value.x)*zoom.value-viewportWidth.value/2;viewport.value.scrollTop=(n.y+20+graphOffset.value.y)*zoom.value-viewportHeight.value/2}}
 function setMode(mode){fit.value=mode==='fit';if(!fit.value)zoom.value=1;nextTick(()=>{if(fit.value){viewport.value.scrollLeft=0;viewport.value.scrollTop=0}else centerOnActivity()})}
+// Keep the viewport centre stable during manual zoom. Leaving Fit changes
+// coordinate systems, so first centre the selected booth in the explore scene.
 function adjustZoom(delta){const current=fit.value?fitScale.value:zoom.value,wasFit=fit.value,center={x:(viewport.value.scrollLeft+viewportWidth.value/2)/current,y:(viewport.value.scrollTop+viewportHeight.value/2)/current};zoom.value=Math.max(minimumZoom.value,Math.min(2,current*(delta>0?1.15:1/1.15)));fit.value=false;nextTick(()=>{if(wasFit)centerOnActivity();else{viewport.value.scrollLeft=center.x*zoom.value-viewportWidth.value/2;viewport.value.scrollTop=center.y*zoom.value-viewportHeight.value/2}})}
 function focusActivity(id){view.value='village';nextTick(()=>{if(!fit.value)centerOnActivity(id);[...viewport.value.querySelectorAll('[data-activity-id]')].find(n=>n.dataset.activityId===String(id))?.focus({preventScroll:true})})}
 let resizeObserver

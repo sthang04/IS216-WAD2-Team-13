@@ -30,8 +30,8 @@ for(const shape of ['branch','linear','independent','shortcut'])test('village re
 test('redesign fits all requested widths and keeps recovery ranking below choices',async({page})=>{
  await boot(page)
  await page.getByRole('button',{name:'Show heatmap',exact:true}).click()
- for(const width of [1440,1280,1024,768,390,360]){
-  await page.setViewportSize({width,height:900})
+ for(const [width,height] of [[1280,800],[1440,900],[1920,1080],[390,844],[375,667],[320,568]]){
+  await page.setViewportSize({width,height})
   await expect.poll(()=>page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true)
   const build=await page.locator('.recovery-build').boundingBox(),rank=await page.locator('.recovery-ranking').boundingBox()
   expect(rank.y).toBeGreaterThanOrEqual(build.y+build.height)
@@ -45,8 +45,8 @@ test('redesign fits all requested widths and keeps recovery ranking below choice
  await page.getByRole('button',{name:'Use in recovery preview',exact:true}).click()
  await expect(page.locator('#simulator-comparison table')).toContainText('Member')
  await expect(page.locator('#simulator-comparison')).toContainText('changed activities')
- await expect(page.getByRole('navigation',{name:'Recovery stages'})).toContainText('Local review required')
- await expect(page.getByRole('navigation',{name:'Recovery stages'})).toContainText('Not prepared')
+ await expect(page.getByRole('tablist',{name:'Recovery stages'})).toContainText('Local review required')
+ await expect(page.getByRole('tablist',{name:'Recovery stages'})).toContainText('Not prepared')
  await page.getByRole('button',{name:'Back to top',exact:true}).click()
  await expect.poll(()=>page.evaluate(()=>scrollY)).toBe(0)
 })

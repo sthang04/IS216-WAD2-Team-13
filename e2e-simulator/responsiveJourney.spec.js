@@ -17,6 +17,7 @@ async function bootSimulation(page){
 // Projects supply the viewport; avoid multiplying a second device matrix.
 test.describe('responsive workflow',()=>{
  test('simulation, impact, touch selection, facilities and comparison',async({page})=>{
+  // Setup: project viewport and isolated fixture data define this journey.
   const {width}=page.viewportSize()
   await bootSimulation(page);await fits(page)
   const build=page.getByRole('region',{name:'Build your recovery',exact:true}),ranking=page.getByRole('region',{name:'Combined recovery ranking',exact:true})
@@ -26,14 +27,16 @@ test.describe('responsive workflow',()=>{
 
   const builder=await page.getByRole('region',{name:'Scenario builder',exact:true}).boundingBox(),impact=await page.getByRole('region',{name:'Event impact workspace',exact:true}).boundingBox()
   expect(impact.y).toBeGreaterThanOrEqual(builder.y+builder.height)
+  // Actions: inspect the map, scrub playback, then choose recovery resources.
   const graph=page.getByRole('region',{name:'Scrollable Event Village',exact:true})
   await graph.scrollIntoViewIfNeeded();await act(page,graph.locator('.sim-graph-node').last())
+  // Assert: selection is shared with the calculated activity model.
   await expect(graph.locator('.sim-graph-node').last()).toHaveAttribute('aria-pressed','true')
   await fits(page)
   await page.getByRole('button',{name:'Show heatmap',exact:true}).click()
   const timeline=page.locator('#impact-timeline'),heatmap=page.locator('#impact-facilities')
   const tl=await timeline.boundingBox(),hm=await heatmap.boundingBox()
-  if(width>=1280){expect(Math.abs(tl.y-hm.y)).toBeLessThan(2);expect(hm.x).toBeGreaterThan(tl.x)}
+  if(width>=1024){expect(Math.abs(tl.y-hm.y)).toBeLessThan(2);expect(hm.x).toBeGreaterThan(tl.x)}
   else expect(hm.y).toBeGreaterThan(tl.y)
   await timeline.scrollIntoViewIfNeeded()
   await act(page,timeline.getByRole('button',{name:/^original$/i}));await expect(timeline.locator('.sim-time-bar.simulated')).toHaveCount(0)

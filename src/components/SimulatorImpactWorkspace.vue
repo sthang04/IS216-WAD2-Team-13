@@ -7,7 +7,7 @@ import {buildControlRoomModel,controlRoomTime,recoveryControlRoomResult} from '.
 const props=defineProps({data:Object,eventId:[String,Number],result:Object,disruptions:{type:Array,default:()=>[]},loading:Boolean,recovery:Object})
 // Selection, disclosure and playback are shared across the three views; none
 // of these controls changes the scenario or persisted event schedule.
-const timelineView=ref('overlay'),selectedId=ref(null),expanded=ref([]),selectedCell=ref(null)
+const timelineView=ref('overlay'),selectedId=ref(null),selectedCell=ref(null)
 const selectedDay=ref(''),village=ref(null),dependencyDialog=ref(null),selectedEdge=ref(null)
 const previewMode=ref('disrupted'),playhead=ref(0),playing=ref(false),cascadeKey=ref(0)
 let playback
@@ -35,12 +35,10 @@ watch(()=>props.recovery,plan=>{if(!plan)previewMode.value='disrupted';else if(p
 onUnmounted(stopPlayback)
 const selected=computed(()=>model.value.activities.find(a=>String(a.id)===String(selectedId.value)))
 const statusLabel=status=>status==='direct'?'Direct impact':status==='downstream'?'Downstream risk':'No detected impact'
-function selectActivity(activity,preservePlayback=false){selectedId.value=activity.id;const ms=Date.parse(activity.simulated.starts_at);if(!preservePlayback && Number.isFinite(ms)){const day=new Date(ms+8*3600000).toISOString().slice(0,10);if(day!==model.value.day)selectedDay.value=day;}if(!expanded.value.includes(String(activity.id)))expanded.value.push(String(activity.id))}
-function toggleActivity(id){const value=String(id);expanded.value=expanded.value.includes(value)?expanded.value.filter(x=>x!==value):[...expanded.value,value]}
-function expandAll(){expanded.value=expanded.value.length===model.value.affected.length?[]:model.value.affected.map(a=>String(a.id))}
+function selectActivity(activity,preservePlayback=false){selectedId.value=activity.id;const ms=Date.parse(activity.simulated.starts_at);if(!preservePlayback && Number.isFinite(ms)){const day=new Date(ms+8*3600000).toISOString().slice(0,10);if(day!==model.value.day)selectedDay.value=day;}}
 function barStyle(bar){return bar?{left:bar.left+'%',width:Math.max(bar.width,0.25)+'%'}:{}}
-watch(()=>props.eventId,()=>{selectedEdge.value=null;selectedDay.value='';selectedId.value=null;expanded.value=[];selectedCell.value=null})
-watch(()=>props.result,()=>{selectedEdge.value=null;selectedId.value=null;expanded.value=[];selectedCell.value=null})
+watch(()=>props.eventId,()=>{selectedEdge.value=null;selectedDay.value='';selectedId.value=null;selectedCell.value=null})
+watch(()=>props.result,()=>{selectedEdge.value=null;selectedId.value=null;selectedCell.value=null})
 
 // This disclosure changes presentation only. A quiet heatmap is not evidence
 // of vacancy. Existing calculated timing, outage and room-conflict evidence

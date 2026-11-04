@@ -44,8 +44,12 @@ test('timeline header, impact legend, active selection and labelled heatmap pres
 test('compact alternatives separate preview from calendar actions and preserve original timings',async({page})=>{
  await bootRefinement(page,{many:true});await runScenario(page,'FACILITY_UNAVAILABLE')
  const id=await page.getByTestId('facility-alternative').first().getAttribute('data-facility-option');const card=page.locator('[data-facility-option="'+id+'"]');await expect(card).toContainText('Schedule unchanged');await expect(card.getByLabel('Overall recovery score')).toContainText(/100|unavailable/)
- const preview=card.getByRole('button',{name:'Use this alternative',exact:true});await expect(preview).toBeVisible();await expect(card.getByRole('link',{name:'View / Request this facility',exact:true})).toBeHidden();await expect(card.getByRole('button',{name:'Check / refresh actual slot status',exact:true})).toBeHidden()
- await card.getByText('View details',{exact:true}).click();await expect(card.getByRole('link',{name:'View / Request this facility',exact:true})).toBeVisible();await expect(card.getByRole('button',{name:'Check / refresh actual slot status',exact:true})).toBeVisible();await expect(card).toContainText('Equipment and facilities');await expect(card).toContainText('do not confirm availability')
+ // Actions: the current design opens verification by default; closing it hides calendar actions.
+ const preview=card.getByRole('button',{name:'Use this alternative',exact:true});await expect(preview).toBeVisible()
+ const disclosure=card.locator('.facility-verification'),request=card.getByRole('link',{name:'View / Request facility',exact:true})
+ await expect(request).toBeVisible();await disclosure.locator(':scope > summary').click();await expect(request).toBeHidden()
+ await disclosure.locator(':scope > summary').click();await expect(request).toBeVisible()
+ await expect(card.getByRole('button',{name:'Refresh booking status',exact:true})).toBeVisible();await expect(card).toContainText('Equipment');await expect(card).toContainText('does not confirm room availability or approval')
  await preview.click();await expect(card.getByRole('button',{name:'Selected alternative',exact:true})).toHaveAttribute('aria-pressed','true')
  const bookings=page.getByRole('region',{name:'Facility Bookings',exact:true});await expect(bookings).toContainText('8 of 8 linked');const gap=await bookings.evaluate(e=>parseFloat(getComputedStyle(e).marginTop));expect(gap).toBeGreaterThanOrEqual(16);expect(gap).toBeLessThanOrEqual(24)
 })
@@ -54,7 +58,7 @@ test('empty saved recoveries hide filters; candidate inspection is pink without 
  await bootRefinement(page,{many:true});await runScenario(page)
  const workflow=page.getByRole('region',{name:'Persisted recovery workflow',exact:true});await expect(workflow.getByRole('group',{name:'Saved recovery views'})).toHaveCount(0);await expect(workflow).toContainText('No saved recoveries')
  const row=page.locator('.candidate-row').nth(1);await row.click();await expect(row).toHaveCSS('background-color','rgb(255, 241, 242)');await expect(workflow).toHaveAttribute('data-selected-recovery','')
- const first=page.getByRole('article',{name:'Recovery plan 1',exact:true});await first.getByText('Scoring evidence',{exact:true}).click();await expect(first.locator('pre')).toHaveCount(0)
+ const first=page.getByRole('article',{name:'Recovery plan 1',exact:true});await first.getByTestId('follow-up-actions').locator(':scope > summary').click();await first.getByText('Scoring evidence',{exact:true}).click();await expect(first.locator('pre')).toHaveCount(0)
 })
 
 test('saved summary groups repeated replacements and permission failure remains actionable',async({page})=>{

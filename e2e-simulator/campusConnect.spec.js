@@ -3,6 +3,7 @@ import {test,expect} from '@playwright/test'
 // No production fallback/test mode is added. External requests are blocked.
 for(const scenario of ['verified','manual','none','no-facility','facility-manual','delay','unlinked','blocked']){
  test('isolated eight-activity demonstration: '+scenario,async({page})=>{
+  // Setup: use synthetic event records and block external side effects.
   const mode=['delay','facility-manual'].includes(scenario)?'manual':scenario
   await page.route('**/src/services/simulationDataService.js*',route=>route.fulfill({
    contentType:'application/javascript',body:"import {campusConnectFixture} from '/e2e-simulator/fixtures/campusConnect.js'; export async function loadSimulationData(){return campusConnectFixture('"+mode+"')}"}))
@@ -19,6 +20,7 @@ for(const scenario of ['verified','manual','none','no-facility','facility-manual
    await page.getByLabel('Unavailable from (Singapore)',{exact:true}).selectOption('2026-11-02T10:00')
    await page.getByLabel('Unavailable until (Singapore)',{exact:true}).selectOption('2026-11-02T10:30')
   }
+  // Actions: configure and run the scenario through the visible controls.
   if(scenario!=='unlinked') await page.getByRole('button',{name:'Run simulation (1)',exact:true}).click()
   if(scenario==='unlinked'){
    await page.getByRole('button',{name:'Manage bookings',exact:true}).click()
@@ -30,13 +32,14 @@ for(const scenario of ['verified','manual','none','no-facility','facility-manual
    await expect(page.getByRole('button',{name:'Run simulation (1)',exact:true})).toBeDisabled()
    return
   }
+  // Assert: check actual evidence and keep live recovery writes unavailable.
   await expect(page.getByText('Simulation complete',{exact:true})).toBeVisible()
-  if(scenario==='verified')await expect(page.getByText('Exact-role matches',{exact:true})).toBeVisible()
-  if(scenario==='manual'){await page.getByText('Member availability limits',{exact:true}).click();await expect(page.getByText('Needs Manual Review',{exact:true})).toBeVisible();await expect(page.getByText('Candidate availability has not been confirmed. Check with your selected replacement before proceeding.',{exact:true})).toBeVisible()}
+  if(scenario==='verified')await expect(page.getByRole('region',{name:'Candidate details',exact:true}).getByText('Recorded role match',{exact:true})).toBeVisible()
+  if(scenario==='manual'){await page.getByText('Member availability limits',{exact:true}).click();await expect(page.getByRole('region',{name:'Candidate details',exact:true}).getByText('Needs verification',{exact:true})).toBeVisible();await expect(page.getByText('Candidate availability has not been confirmed. Check with your selected replacement before proceeding.',{exact:true})).toBeVisible()}
   if(scenario==='none')await expect(page.getByText(/No eligible replacement was found among/)).toBeVisible()
   if(['facility-manual','no-facility','blocked'].includes(scenario))await expect(page.getByText('Candidate availability has not been confirmed. Check with your selected replacement before proceeding.',{exact:true})).toHaveCount(0)
   if(scenario==='facility-manual'){
-   const alternative=page.getByTestId('facility-alternative');await expect(alternative.getByText('Approval required',{exact:true})).toBeVisible();await alternative.getByText('View details',{exact:true}).click()
+   const alternative=page.getByTestId('facility-alternative');await expect(alternative.getByText('Approval required',{exact:true})).toBeVisible();await alternative.getByText('Recorded suitability and scheduling evidence',{exact:true}).click()
    await expect(alternative.getByText('Requires owner approval / booking verification',{exact:true})).toBeVisible()
    await page.getByRole('button',{name:'Manage bookings',exact:true}).click()
    await page.getByText('Inspect linked records for Fixture activity 1 (1)',{exact:true}).click()
@@ -49,7 +52,9 @@ for(const scenario of ['verified','manual','none','no-facility','facility-manual
    await expect(page.getByTestId('facility-recovery').getByText(/Fixture Alternative Room: .*confirmed reservation/)).toBeVisible()
   }
   if(scenario==='no-facility')await expect(page.getByText(/No confirmed alternative in accessible records/)).toBeVisible()
-  await expect(page.getByRole('button',{name:'Prepare recovery requests',exact:true})).toBeDisabled()
+  // With no selected proposal, the workflow has no preparation action.
+  await expect(page.getByRole('region',{name:'Persisted recovery workflow',exact:true})).toContainText('Select a ranked proposal or review a saved recovery below.')
+  await expect(page.getByRole('button',{name:'Prepare recovery requests',exact:true})).toHaveCount(0)
   await expect(page.getByRole('button',{name:'Apply selected recovery',exact:true})).toHaveCount(0)
   await expect(page.locator('.pip-container')).toHaveCount(1)
  })
@@ -77,8 +82,8 @@ test('facility recommendations follow two selected events and actual linked book
   await expect(card).toContainText('/100')
   await expect(card).toContainText('Capacity: 50')
   await expect(card).toContainText('booking verification')
-  await card.getByText('View details',{exact:true}).click()
-  const href=await card.getByRole('link',{name:'View / Request this facility',exact:true}).getAttribute('href')
+  await card.getByText('Recorded suitability and scheduling evidence',{exact:true}).click()
+  const href=await card.getByRole('link',{name:'View / Request facility',exact:true}).getAttribute('href')
   const request=new URL(href,'http://localhost')
   expect(request.searchParams.get('simFacilityId')).toBe('2')
   expect(request.searchParams.get('simStart')).toBe(new Date(date+'T10:00:00+08:00').toISOString())

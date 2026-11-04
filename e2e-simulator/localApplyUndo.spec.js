@@ -54,6 +54,7 @@ test('authorization failure leaves local records unchanged and reports the backe
 
 
 test('pending acceptance and facility approval block Apply until authoritative fixture statuses refresh',async({page})=>{
+ await page.clock.install()
  const panel=await boot(page)
  await page.evaluate(()=>{window.__localInvitation.status='Pending';window.__localPlan.actions[0].status='Pending'})
  await panel.getByRole('button',{name:'Refresh statuses',exact:true}).click()
@@ -70,7 +71,7 @@ test('pending acceptance and facility approval block Apply until authoritative f
  await expect(panel.getByRole('button',{name:'Apply selected recovery',exact:true})).toBeEnabled()
  expect(await page.evaluate(()=>window.__localCalls.filter(c=>c.name==='rpc_simulator_apply_plan').length)).toBe(0)
  await expect(page.locator('#simulator-comparison th').filter({hasText:'Original'})).toBeVisible()
- await page.waitForTimeout(1200)
+ await page.clock.runFor(1200)
  await expect(panel.getByRole('button',{name:'Apply selected recovery',exact:true})).toBeEnabled()
 })
 
