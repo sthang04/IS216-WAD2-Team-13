@@ -35,10 +35,10 @@ const currentRound = ref(1) // Round 1, 2, or 3
 const activeRoundFacts = ref([])
 const loadingStageText = ref('Verifying SMU ExCo Credentials & Whitelist...')
 
-// 12 Customizable Fun Fact Templates (Team can easily edit or add facts here)
+// 11 Customizable Fun Fact Templates (No emdashes, pure Group 13 & Prof K lore)
 const FUN_FACT_TEMPLATES = [
   // 1. Prof K Catchphrase: BOOYAH!
-  "🎉 Prof K Catchphrase: 'BOOYAH!' — That iconic shout of victory Prof Kyong unleashes whenever there's no errors!",
+  "🎉 Prof K Catchphrase: 'BOOYAH!' - That iconic shout of victory Prof Kyong unleashes whenever there's no errors!",
 
   // 2. Prof K Vibes: Korean Acknowledgement
   "✨ Prof K Vibes: 'Ye~' (예~ yeish!) to make sure we're paying attention in class!",
@@ -49,8 +49,8 @@ const FUN_FACT_TEMPLATES = [
   // 4. Subscribe to Prof K's YouTube Channel
   "🎬 Subscribe to Prof K: Don't forget to like and subscribe to Prof Kyong's YouTube channel: https://www.youtube.com/@realkrazywoman for supreme coding energy!",
 
-  // 5. Group 13 Lore
-  "💖 Group 13 Lore: 'Supreme Emixers' love all things vibrant pink, liquid glass, and peak operational efficiency! 🍀",
+  // 5. Group 13 Lore (Elevated with Pink & Liquid Glass Aesthetic)
+  "💖 Group 13 Lore: We love all things pink, fun UI, and peak efficiency! 🍀",
 
   // 6. Show Kyong an Orange Cat
   "🐱 Show Kyong an Orange Cat: pspsps did you know Prof has 5 cats?!",
@@ -62,15 +62,12 @@ const FUN_FACT_TEMPLATES = [
   "🤖 Pip the Telegram Guardian: Pip alerts 40+ stage performers on Telegram within 1.5 seconds of a venue slot release so no studio sits empty.",
 
   // 9. Campus Speedrun (SCIS1 to LKS)
-  "🏃 Campus Speedrun: A brisk walk from SCIS1 Seminar Room 2.1 to Li Ka Shing B1 is exactly 650m (~8 mins) — 85% sheltered via the concourse!",
+  "🏃 Campus Speedrun: A brisk walk from SCIS1 Seminar Room 2.1 to Li Ka Shing B1 is exactly 650m (~8 mins) - 85% sheltered via the concourse!",
 
-  // 10. 12-Minute Presentation Pro-Tip
-  "🎯 12-Min Presentation Pro-Tip: 1-click persona switching lets Sarah & team demo Eurhythmix, Samba, Symphonia, and OSL in seconds without typing passwords!",
-
-  // 11. Late-Night SCIS Crunch Fuel
+  // 10. Late-Night SCIS Crunch Fuel
   "☕ Connexion Crunch Fuel: Over 4,200 cups of iced latte were consumed at SMU Connexion while Group 13 perfected Pulse's 5 core operational modules.",
 
-  // 12. Safe Peer Venue Transfers
+  // 11. Safe Peer Venue Transfers
   "🏛️ Safe Peer Transfers: Pulse completely eliminates informal Telegram black markets with verified OSL transfer vouchers (#SMU-2026-VOUCHER)!"
 ];
 
@@ -250,33 +247,33 @@ async function completeLogin(loginEmail, loginPassword) {
   try {
     const authPromise = signIn(loginEmail, loginPassword)
     
-    // Trigger fun loading screen with a comfortable breather (~2.4s) so students & evaluators can enjoy the trivia
+    // Trigger fun loading screen with a comfortable breather (~4.6s) so students & evaluators have enough time to read the facts
     isAuthenticating.value = true
     authProgress.value = 15
 
-    // Smooth progress bar update over ~2.4s
+    // Smooth progress bar update over ~4.6s
     progressInterval = setInterval(() => {
       if (authProgress.value < 94) {
         authProgress.value += 1
       }
-    }, 28)
+    }, 48)
 
-    // Round 2 rotation at 1.0s
+    // Round 2 rotation at 2.2s (gives 2.2s to comfortably read fact 1)
     roundTimer1 = setTimeout(() => {
       currentRound.value = 2
       loadingStageText.value = 'Syncing Studio Schedules & OneMap Transit SLA...'
-    }, 1000)
+    }, 2200)
 
-    // Round 3 rotation at 1.8s
+    // Round 3 rotation at 4.4s (gives 2.2s to comfortably read fact 2)
     roundTimer2 = setTimeout(() => {
       currentRound.value = 3
       loadingStageText.value = 'Preparing Real-Time CCA Operations Dashboard...'
-    }, 1800)
+    }, 4400)
 
-    // Parallel wait: await authentication AND a minimum breather delay (~2.4s)
+    // Parallel wait: await authentication AND a minimum breather delay (~4.6s)
     const [persona] = await Promise.all([
       authPromise,
-      new Promise((resolve) => setTimeout(resolve, 2400))
+      new Promise((resolve) => setTimeout(resolve, 4600))
     ])
 
     if (progressInterval) clearInterval(progressInterval)
@@ -935,11 +932,18 @@ async function handleManualLogin() {
                     <span class="badge bg-danger bg-opacity-10 text-danger border border-danger-subtle px-2 py-0.5" style="font-size: 0.65rem; font-weight: 700;">
                       💡 CAMPUS & PROF K TRIVIA
                     </span>
-                    <!-- 3 Fact Indicator Dots -->
+                    <!-- 3 Fact Indicator Dots (Clickable to browse facts at user's pace) -->
                     <div class="d-flex align-items-center gap-1">
-                      <span class="sims-tip-dot" :class="{ active: currentRound === 1 }"></span>
-                      <span class="sims-tip-dot" :class="{ active: currentRound === 2 }"></span>
-                      <span class="sims-tip-dot" :class="{ active: currentRound === 3 }"></span>
+                      <button 
+                        v-for="n in 3" 
+                        :key="n" 
+                        type="button" 
+                        class="p-0 border-0 bg-transparent d-flex align-items-center"
+                        :aria-label="`View trivia fact ${n}`"
+                        @click="currentRound = n"
+                      >
+                        <span class="sims-tip-dot" :class="{ active: currentRound === n }"></span>
+                      </button>
                     </div>
                   </div>
 
