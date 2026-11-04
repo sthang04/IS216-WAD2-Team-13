@@ -407,10 +407,13 @@ const eventDay = computed(() => {
 const isEventDay = computed(() => eventDay.value === 'today')
 
 const daysAway = computed(() => {
-  if (!event.value) return 0
-  const [y, m, d] = event.value.date.split('-').map(Number)
-  const [ty, tm, td] = today.value.split('-').map(Number)
-  return Math.round((new Date(y, m - 1, d) - new Date(ty, tm - 1, td)) / 86400000)
+  if (!event.value || !event.value.date) return 0
+  const rawDate = event.value.date.includes('T') ? event.value.date.split('T')[0] : event.value.date
+  const [y, m, d] = rawDate.split('-').map(Number)
+  const [ty, tm, td] = (today.value || todayIso()).split('-').map(Number)
+  if (!y || !m || !d || !ty || !tm || !td) return 0
+  const diff = Math.round((new Date(y, m - 1, d) - new Date(ty, tm - 1, td)) / 86400000)
+  return isNaN(diff) ? 0 : Math.max(0, diff)
 })
 
 // Event day: the real time. Otherwise: a preview a bit into the day.
@@ -1008,7 +1011,7 @@ function clearLate(person) {
 
     <!-- Before / after the event day -->
     <div v-if="event && eventDay === 'upcoming'" class="alert alert-info border-0 shadow-sm mb-3 small" role="status">
-      <strong>Planning ahead:</strong> {{ event.name }} is {{ daysAway === 1 ? 'tomorrow' : `in ${daysAway} days` }}.
+      <strong>Planning ahead:</strong> {{ event.name }} is {{ daysAway === 1 ? 'tomorrow' : `in ${daysAway || 1} days` }}.
       The time below is a preview. Check-in and delays start on the day.
     </div>
     <div v-else-if="event && eventDay === 'past'" class="alert alert-secondary border-0 shadow-sm mb-3 small" role="status">

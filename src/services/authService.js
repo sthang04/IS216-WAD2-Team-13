@@ -9,6 +9,7 @@
  
 import { supabase, isSupabaseConfigured } from '../supabase'
 import { DEMO_PERSONAS, GUEST_PERSONA, DEMO_PASSWORD } from './authProfiles'
+import { resolveClubId, resolveClubName } from './sessionState'
  
 // Used for guest mode, and for the whole session when Supabase isn't configured
 const LOCAL_SESSION_KEY = 'pulse_session'
@@ -104,11 +105,21 @@ function personaFromRows(rows, email) {
   })
  
   // CCAs and the role title held in each, e.g. { Symphonia: 'President' }
+  // Deduplicate and canonicalize club names so "Eurhythmix" and "SMU Eurhythmix" never duplicate
   const ccas = []
+  const seenIds = new Set()
   const positions = {}
   rows.forEach((row) => {
-    ccas.push(row.club_name)
-    positions[row.club_name] = row.role_name
+    const rawName = row.club_name || ''
+    const cid = resolveClubId(rawName)
+    const canonicalName = cid ? (resolveClubName(cid) || rawName) : rawName
+    if (cid && !seenIds.has(cid)) {
+      seenIds.add(cid)
+      ccas.push(canonicalName)
+    } else if (!cid && !ccas.includes(canonicalName)) {
+      ccas.push(canonicalName)
+    }
+    positions[canonicalName] = row.role_name
   })
  
   // Label shown under the name, e.g. 'Eurhythmix Logistics Director'
@@ -118,7 +129,7 @@ function personaFromRows(rows, email) {
   } else if (ccas.length > 1) {
     roleLabel = 'ExCo (' + ccas.join(' & ') + ')'
   } else {
-    roleLabel = first.club_name + ' ' + first.role_name
+    roleLabel = (ccas[0] || first.club_name) + ' ' + first.role_name
   }
  
   let role = 'club'
@@ -137,12 +148,21 @@ function personaFromRows(rows, email) {
     if (demo.roleLabel) {
       roleLabel = demo.roleLabel
     }
-    if (demo.cca && !ccas.includes(demo.cca)) {
-      ccas.unshift(demo.cca)
+    if (demo.cca) {
+      const demoCid = resolveClubId(demo.cca)
+      const canonicalDemoCca = demoCid ? (resolveClubName(demoCid) || demo.cca) : demo.cca
+      if (demoCid && !seenIds.has(demoCid)) {
+        seenIds.add(demoCid)
+        ccas.unshift(canonicalDemoCca)
+      } else if (!demoCid && !ccas.includes(canonicalDemoCca)) {
+        ccas.unshift(canonicalDemoCca)
+      }
     }
   }
 
-  const primaryCca = (demo && demo.cca) ? demo.cca : first.club_name
+  const primaryCca = (demo && demo.cca)
+    ? (resolveClubId(demo.cca) ? resolveClubName(resolveClubId(demo.cca)) || demo.cca : demo.cca)
+    : (ccas[0] || first.club_name)
   const finalClubs = ccas.length > 0 ? ccas : (demo ? demo.allowedClubs : [primaryCca])
 
   return {

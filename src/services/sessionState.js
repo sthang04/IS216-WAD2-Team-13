@@ -98,7 +98,7 @@ export function resolveClubId(nameOrId) {
 export function resolveClubName(clubId) {
   const id = Number(clubId)
   for (const [name, cId] of Object.entries(KNOWN_CLUB_IDS)) {
-    if (cId === id && !name.startsWith('smu ') && name !== 'osl' && name !== 'mlcc' && name !== 'acf' && name !== 'rotaract' && name !== 'red cross') {
+    if (cId === id && !name.startsWith('smu ') && name !== 'osl' && name !== 'mlcc' && name !== 'acf' && name !== 'rotaract' && name !== 'red cross' && name !== 'malay language & cultural club' && name !== 'smu malay language & cultural club') {
       const match = ALL_CLUBS.find((c) => c.toLowerCase() === name)
       if (match) return match
       return name.split(' ').map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')

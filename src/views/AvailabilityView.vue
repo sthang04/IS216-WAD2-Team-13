@@ -246,6 +246,7 @@ onMounted(() => {
   window.addEventListener('scroll', closeMenu, true)
   window.addEventListener('resize', closeMenu)
   window.addEventListener('keydown', closeMenuOnEscape)
+  window.addEventListener('pointerup', onGlobalPointerUp)
 })
 
 onBeforeUnmount(() => {
@@ -257,6 +258,7 @@ onBeforeUnmount(() => {
   window.removeEventListener('scroll', closeMenu, true)
   window.removeEventListener('resize', closeMenu)
   window.removeEventListener('keydown', closeMenuOnEscape)
+  window.removeEventListener('pointerup', onGlobalPointerUp)
 })
 
 /* ================================================================== */
@@ -435,24 +437,51 @@ function cellTitle(cell) {
   return parts.join('\n')
 }
 
+const isDraggingAvailability = ref(false)
+const dragTargetFree = ref(true)
+
+function onGlobalPointerUp() {
+  isDraggingAvailability.value = false
+}
+
+async function applyCellAvailability(cell, targetFree) {
+  if (!canVote.value || cell.isPast || cell.myClass) return
+  if (cell.mine === targetFree) return
+
+  const before = snapshot.value.availability
+  snapshot.value.availability = targetFree
+    ? [...before, { member_id: myId.value, slot_date: cell.iso, hour: cell.hour }]
+    : before.filter((a) => !(a.member_id === myId.value && a.slot_date === cell.iso && a.hour === cell.hour))
+  try {
+    await setAvailability(meeting.value.id, cell.iso, cell.hour, targetFree)
+  } catch (err) {
+    snapshot.value.availability = before
+    showToast(err.message, 'danger')
+    loadMeeting()
+  }
+}
+
 async function toggleCell(cell) {
   if (!canVote.value) return
   if (cell.isPast) {
     showToast('Cannot vote on past time slots.', 'warning')
     return
   }
-  const nowFree = !cell.mine
-  // Show the change straight away; the realtime update / reload confirms it
-  const before = snapshot.value.availability
-  snapshot.value.availability = nowFree
-    ? [...before, { member_id: myId.value, slot_date: cell.iso, hour: cell.hour }]
-    : before.filter((a) => !(a.member_id === myId.value && a.slot_date === cell.iso && a.hour === cell.hour))
-  try {
-    await setAvailability(meeting.value.id, cell.iso, cell.hour, nowFree)
-  } catch (err) {
-    snapshot.value.availability = before
-    showToast(err.message, 'danger')
-    loadMeeting()
+  await applyCellAvailability(cell, !cell.mine)
+}
+
+function onSlotPointerDown(cell, e) {
+  if (!canVote.value || cell.isPast || cell.myClass) return
+  isDraggingAvailability.value = true
+  dragTargetFree.value = !cell.mine
+  applyCellAvailability(cell, dragTargetFree.value)
+}
+
+function onSlotPointerEnter(cell, e) {
+  if (!isDraggingAvailability.value) return
+  if (!canVote.value || cell.isPast || cell.myClass) return
+  if (cell.mine !== dragTargetFree.value) {
+    applyCellAvailability(cell, dragTargetFree.value)
   }
 }
 
@@ -899,6 +928,8 @@ function exportConfirmed() {
                       :aria-pressed="canVote && !cell.isPast ? cell.mine : null"
                       :aria-disabled="cell.isPast ? 'true' : null"
                       @click="toggleCell(cell)"
+                      @pointerdown="onSlotPointerDown(cell, $event)"
+                      @pointerenter="onSlotPointerEnter(cell, $event)"
                     >
                       <span v-if="heatClass(cell)" class="slot-count">{{ cell.free.length }}/{{ totalParticipants }}</span>
                       <span v-else-if="cell.othersInClass.length" class="slot-baseline-text">

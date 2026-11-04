@@ -259,6 +259,40 @@ export async function undoRelease(bookingId, clubId) {
 // The OSL request email is sent automatically.
 export async function claimBooking(bookingId, clubId) {
   requireSupabase()
+
+  if (clubId) {
+    // Double-booking safeguard: ensure the CCA does not hold an overlapping booking on this date
+    try {
+      const { data: targetBooking } = await supabase
+        .from('facility_bookings')
+        .select('booking_date, start_time, end_time')
+        .eq('id', bookingId)
+        .single()
+
+      if (targetBooking) {
+        const { data: existingBookings } = await supabase
+          .from('facility_bookings')
+          .select('id, start_time, end_time, facilities(name)')
+          .eq('owner_club_id', clubId)
+          .eq('booking_date', targetBooking.booking_date)
+          .in('status', ['Booked', 'Officially Confirmed Booking', 'Pending Admin Sign-off'])
+          .neq('id', bookingId)
+
+        const conflict = (existingBookings || []).find((b) =>
+          b.start_time < targetBooking.end_time && b.end_time > targetBooking.start_time
+        )
+        if (conflict) {
+          const facName = conflict.facilities?.name || 'another facility'
+          throw new Error(`Double booking is not permitted: your CCA already holds ${facName} during this time (${conflict.start_time.slice(0, 5)}–${conflict.end_time.slice(0, 5)}).`)
+        }
+      }
+    } catch (err) {
+      if (err.message && err.message.includes('Double booking')) {
+        throw err
+      }
+    }
+  }
+
   return unwrap(await supabase.rpc('rpc_claim_booking', {
     p_booking_id: bookingId,
     p_club_id: clubId,

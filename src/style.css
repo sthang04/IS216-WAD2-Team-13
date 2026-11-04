@@ -1073,15 +1073,19 @@ body {
   }
 }
 
-/* Keep Pip (fixed, bottom-right, ~115px wide) off the page content: reserve a right
+/* Keep Pip (fixed, bottom-right, ~115px wide) off desktop page content: reserve a right
    gutter when the screen margin beside the container is too narrow, and room at
-   the bottom so the last rows can scroll clear of it. */
-.pulse-pip-gutter {
-  padding-bottom: 120px;
+   the bottom so the last rows can scroll clear of it. Mobile view hides Pip entirely. */
+@media (min-width: 992px) {
+  .pulse-pip-gutter {
+    padding-bottom: 120px;
+    padding-right: max(0px, calc(125px - (100vw - 100%) / 2));
+  }
 }
 
-@media (min-width: 768px) {
+@media (max-width: 991.98px) {
   .pulse-pip-gutter {
-    padding-right: max(0px, calc(125px - (100vw - 100%) / 2));
+    padding-bottom: 0 !important;
+    padding-right: 0 !important;
   }
 }

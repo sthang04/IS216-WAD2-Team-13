@@ -182,7 +182,13 @@ function loadSavedEvents() {
 }
 
 function sampleEvents() {
-  return JSON.parse(JSON.stringify(defaultEvents)) // a fresh copy of the sample data
+  const events = JSON.parse(JSON.stringify(defaultEvents))
+  const clubName = props.activePersona?.cca || 'CCA'
+  if (events[4]) {
+    events[4].title = `${clubName} ExCo Debrief & Safety Check`
+    events[4].role = `${clubName} ExCo`
+  }
+  return events
 }
 
 // Start from the saved schedule if there is one, otherwise the sample data

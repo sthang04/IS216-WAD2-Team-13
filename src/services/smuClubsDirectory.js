@@ -30,7 +30,7 @@ export const SMU_CLUBS_DIRECTORY = [
   { name: 'SMU Ivory Keys', email: 'ivorykeys@sa.smu.edu.sg', cluster: 'Arts & Cultural Fraternity (ACF)', type: 'Piano Ensemble' },
   { name: 'SMU Komunitas Indonesia', email: 'smuki@sa.smu.edu.sg', cluster: 'Arts & Cultural Fraternity (ACF)', type: 'Indonesian Arts & Culture' },
   { name: 'SMU Literati', email: 'literati@sa.smu.edu.sg', cluster: 'Arts & Cultural Fraternity (ACF)', type: 'Literary Arts' },
-  { name: 'SMU Malay Language & Cultural Club', email: 'mlcc@sa.smu.edu.sg', cluster: 'Arts & Cultural Fraternity (ACF)', type: 'Malay Drama & Music' },
+  { name: 'SMU Rentak', email: 'mlcc@sa.smu.edu.sg', cluster: 'Arts & Cultural Fraternity (ACF)', type: 'Malay Drama & Music (Rentak / MLCC)' },
   { name: 'SMUSAIC', email: 'smusaic@sa.smu.edu.sg', cluster: 'Arts & Cultural Fraternity (ACF)', type: 'Photography' },
   { name: 'SMU Samba Masala', email: 'samba@sa.smu.edu.sg', cluster: 'Arts & Cultural Fraternity (ACF)', type: 'Afro-Brazilian Percussion' },
   { name: 'SMU SoundFoundry', email: 'soundfoundry@sa.smu.edu.sg', cluster: 'Arts & Cultural Fraternity (ACF)', type: 'Pop Bands & Live Music' },
