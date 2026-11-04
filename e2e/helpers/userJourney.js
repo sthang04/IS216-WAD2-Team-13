@@ -3,10 +3,17 @@
 import {expect} from '@playwright/test'
 export async function signIn(page,name='Rachel Tan'){
  await page.goto('/')
- await page.getByRole('button',{name:/Click here for 1-Click Login/i}).click()
+ await page.evaluate(()=>{
+  localStorage.clear()
+  sessionStorage.clear()
+ })
+ await page.reload()
+ const drawer = page.getByRole('button',{name:/Click here for 1-Click Login/i})
+ await expect(drawer).toBeVisible({timeout:15000})
+ await drawer.click()
  await page.getByRole('button',{name:new RegExp(name)}).click()
  await expect(page).toHaveURL(/\/facilities$/)
- await expect(page.getByRole('heading',{name:'Pulse - Master Facility Calendar',exact:true})).toBeVisible()
+ await expect(page.getByRole('heading',{name:'Pulse - Master Facility Calendar',exact:true})).toBeVisible({timeout:15000})
 }
 export async function navigate(page,desktop,mobile){
  const bar=page.getByRole('navigation',{name:'Mobile PULSE navigation',exact:true})

@@ -1054,6 +1054,21 @@ body {
     max-width: 100% !important;
   }
 
+  /* Fluid typography scaling on phones and tablets */
+  h1, .h1 {
+    font-size: clamp(1.35rem, 5vw, 1.85rem) !important;
+    line-height: 1.25 !important;
+  }
+  h2, .h2 {
+    font-size: clamp(1.15rem, 4vw, 1.45rem) !important;
+  }
+  h3, .h3 {
+    font-size: clamp(1.05rem, 3.5vw, 1.25rem) !important;
+  }
+  .landing-wordmark {
+    font-size: clamp(1.8rem, 7vw, 2.75rem) !important;
+  }
+
   .card, .pulse-case-card, .alert, .pulse-card {
     word-break: break-word;
     max-width: 100% !important;

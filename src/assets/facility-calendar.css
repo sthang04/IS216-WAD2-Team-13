@@ -539,6 +539,11 @@
 /* ---------- My Club stats + sections ---------- */
 .pulse-stat-grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: .75rem; }
 @media (max-width: 991.98px) { .pulse-stat-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 575.98px) {
+  .pulse-stat-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.5rem; }
+  .pulse-stat-card { padding: 0.75rem 0.85rem; border-radius: 0.85rem; }
+  .pulse-stat-card-num { font-size: 1.5rem; }
+}
 .pulse-stat-card {
   --tone: var(--pf-muted);
   display: flex; flex-direction: column; align-items: flex-start; gap: .1rem;
@@ -725,8 +730,47 @@
 .pulse-cal-foot { display: flex; flex-wrap: wrap; align-items: center; gap: .6rem; padding: .2rem 1.25rem 1rem; }
  
 @media (max-width: 767.98px) {
-  .pulse-cal-grid { grid-template-columns: repeat(7, 74px); overflow-x: auto; }
-  .pulse-cal-head { padding: 1.3rem 1rem 1rem; }
+  .pulse-hero {
+    padding: 1.25rem 1rem !important;
+    border-radius: 1.15rem !important;
+    margin-bottom: 1.25rem !important;
+  }
+  .pulse-hero-title {
+    font-size: clamp(1.25rem, 5vw, 1.75rem) !important;
+    line-height: 1.25 !important;
+  }
+  .pulse-hero-sub {
+    font-size: 0.82rem !important;
+  }
+  .pulse-cal-grid {
+    grid-template-columns: repeat(7, minmax(44px, 1fr)) !important;
+    gap: 0.25rem !important;
+    padding: 0.45rem 0.25rem 0.75rem !important;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  .pulse-cal-day {
+    padding: 0.45rem 0.2rem !important;
+    min-height: 58px !important;
+    border-radius: 0.65rem !important;
+  }
+  .pulse-cal-num {
+    font-size: 1.1rem !important;
+  }
+  .pulse-cal-weekday {
+    font-size: 0.62rem !important;
+    letter-spacing: 0 !important;
+  }
+  .pulse-cal-pill {
+    font-size: 0.55rem !important;
+    padding: 0.02rem 0.25rem !important;
+  }
+  .pulse-cal-ring {
+    display: none !important;
+  }
+  .pulse-cal-head {
+    padding: 0.85rem 0.75rem 0.65rem !important;
+  }
 }
  
 /* Tear-off pad: next week rips the page off from right to left; previous week sticks it back on */
