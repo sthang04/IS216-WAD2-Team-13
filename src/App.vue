@@ -9,7 +9,7 @@ import {
   enterGuest, restoreSession, signOut,
   canOpenView, canResetDemo as canResetDemoFor, homeView,
 } from './services/authService';
-import { session as facilitySession, initSession, setActiveClub } from './services/sessionState';
+import { session as facilitySession, initSession, setActiveClub, resolveClubId } from './services/sessionState';
 import {
   notificationStore, unreadCount, soonestOfferSeconds,
   startNotifications, reloadAll, setPipStatic, setPipQuiet
@@ -88,9 +88,19 @@ const canResetDemo = computed(() => canResetDemoFor(sessionPersona.value))
  
 // The facility pages act for the club picked in this header (their own navbar is gone)
 watch([selectedClub, () => facilitySession.value.memberships], ([club]) => {
-  const membership = facilitySession.value.memberships.find((m) => m.club_name === club)
-  if (membership && membership.club_id !== facilitySession.value.activeClubId) {
-    setActiveClub(membership.club_id)
+  if (!club) return
+  if (activePersona.value && activePersona.value.cca !== club) {
+    activePersona.value = { ...activePersona.value, cca: club }
+  }
+  const normalized = club.replace(/^SMU\s+/i, '').trim().toLowerCase()
+  const membership = facilitySession.value.memberships.find((m) => {
+    const mName = (m.club_name || '').replace(/^SMU\s+/i, '').trim().toLowerCase()
+    const mShort = (m.short_name || '').trim().toLowerCase()
+    return mName === normalized || mShort === normalized || m.club_name === club
+  })
+  const targetId = membership ? membership.club_id : resolveClubId(club)
+  if (targetId !== facilitySession.value.activeClubId) {
+    setActiveClub(targetId)
     startNotifications()
   }
 })
@@ -117,6 +127,9 @@ function switchPersona(personaKey) {
   activePersona.value = p
   selectedClub.value = p.cca
   profileMenuOpen.value = false
+  if (p.cca) {
+    setActiveClub(resolveClubId(p.cca))
+  }
   
   if (p.role === 'admin' || !canOpenView(p, currentView.value)) {
     currentView.value = homeView(p)
@@ -247,6 +260,9 @@ function applySession(persona, { stayOnLanding = false } = {}) {
   sessionPersona.value = persona
   activePersona.value = persona
   selectedClub.value = persona.cca
+  if (persona.cca) {
+    setActiveClub(resolveClubId(persona.cca))
+  }
   isLoggedIn.value = true
   loadNotificationSession()
   if (stayOnLanding) {

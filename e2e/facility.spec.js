@@ -129,5 +129,21 @@ test('Dev Administrator logs in with Super-Admin privileges and loads Master Cal
   await expect(
     page.locator('.pulse-facility')
   ).toHaveCount(7, { timeout: 15000 });
+
+  // Test Dev Scope club switching: select Malay Language & Cultural Club
+  const clubSelect = page.locator('#clubSwitcher');
+  await expect(clubSelect).toBeVisible({ timeout: 10000 });
+  await clubSelect.selectOption('Malay Language & Cultural Club');
+  await expect(clubSelect).toHaveValue('Malay Language & Cultural Club');
+
+  // Verify that the view-only Eurhythmix restriction banner is NOT displayed
+  const viewOnlyBanner = page.locator('.pulse-banner-view');
+  await expect(viewOnlyBanner).not.toBeVisible();
+
+  // Verify switching to Personal Schedule reflects Malay Language & Cultural Club
+  const scheduleNavBtn = page.getByRole('button', { name: /Personal Schedule/i });
+  await expect(scheduleNavBtn).toBeVisible({ timeout: 10000 });
+  await scheduleNavBtn.click();
+  await expect(page.getByText(/Malay Language & Cultural Club • Academic Timetable/i)).toBeVisible({ timeout: 10000 });
 });
 
