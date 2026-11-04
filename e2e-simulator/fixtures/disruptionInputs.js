@@ -1,3 +1,5 @@
+// SUPPORT FILE PURPOSE: disruptionInputs.js supplies shared setup or controlled data for the browser workflows.
+// Keep this support code: the Playwright tests depend on consistent setup and isolated state.
 // Test restored/programmatic parent state without weakening production controls
 // or adding a test-only API to the application.
 export async function setRawInterval(page, values, index=0) {

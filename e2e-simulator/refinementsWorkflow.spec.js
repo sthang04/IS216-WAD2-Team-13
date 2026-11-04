@@ -1,3 +1,6 @@
+// BROWSER TEST PURPOSE: refinements Workflow user workflows and regression coverage.
+// Setup opens the real Vue UI; actions use its controls; assertions check visible results/state.
+// Uses isolated fixture responses; passing UI checks do not prove deployed database or delivery integration.
 // Purpose: fixture-backed refinements Workflow browser regressions for simulator controls and state.
 // Use Setup -> Actions -> Assert; real Vue/engine code runs, but these tests do not prove live Supabase integration.
 import {test,expect} from '@playwright/test'

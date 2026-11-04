@@ -1,3 +1,5 @@
+// SUPPORT FILE PURPOSE: simulationTestData.js supplies shared setup or controlled data for the browser workflows.
+// Keep this support code: the Playwright tests depend on consistent setup and isolated state.
 // Isolated simulator fixture for automated tests. The production loader never
 // imports this module and must not fall back to it after a live read failure.
 

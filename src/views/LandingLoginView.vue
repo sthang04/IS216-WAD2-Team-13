@@ -747,6 +747,10 @@ async function handleManualLogin() {
               </button>
             </div>
 
+            <!-- Guest browsing uses the existing read-only persona; it grants no ExCo permissions. -->
+            <button type="button" class="btn btn-link guest-link w-100 mt-3" @click="emit('explore')">
+              Explore live facility calendar as guest
+            </button>
             <!-- Collapsible 1-Click Persona Drawer -->
             <div class="mt-4 pt-3 border-top">
               <button 

@@ -1,3 +1,7 @@
+// WHY THIS FILE IS RETAINED: Checks that paginated backend reads detect incomplete, repeated, or invalid result pages.
+// These focused regression checks preserve edge cases that browser journeys may not isolate.
+// SCOPE: Non-browser checks using the Playwright test runner; excluded from browser E2E commands.
+// A passing result here does not prove a complete user journey or deployed backend enforcement.
 // Playwright contract checks; these do not launch a browser or prove live RLS.
 // Complete paginated reads under row caps, changed counts and duplicate/missing keys. Browser
 // fixtures are small and cannot meaningfully cover server pagination limits.

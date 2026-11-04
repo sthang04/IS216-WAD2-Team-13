@@ -1,3 +1,7 @@
+// WHY THIS FILE IS RETAINED: Checks mocked invitation delivery authorization, deduplication, missing configuration, and uncertain delivery; it sends no messages.
+// These focused regression checks preserve edge cases that browser journeys may not isolate.
+// SCOPE: Non-browser checks using the Playwright test runner; excluded from browser E2E commands.
+// A passing result here does not prove a complete user journey or deployed backend enforcement.
 // Playwright contract checks; these do not launch a browser or prove live RLS.
 // Isolated worker authorization, deduplication, missing configuration, delivery uncertainty and
 // unchanged shared sender. All transport/database calls are mocked; no messages are sent.

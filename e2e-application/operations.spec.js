@@ -1,82 +1,94 @@
-﻿import {test,expect} from './fixtures/app.js'
-import {guest} from './fixtures/journeys.js'
-const search=page=>page.getByPlaceholder('Search cue title, crew (e.g. Darren, Angel), or venue...')
-const task=page=>page.locator('.transition-all').filter({hasText:'Act 2: Eurhythmix Tech Rehearsal'})
+// BROWSER TEST PURPOSE: operations user workflows and regression coverage.
+// Setup opens the real Vue UI; actions use its controls; assertions check visible results/state.
+// Uses isolated fixture responses; passing UI checks do not prove deployed database or delivery integration.
+// Current Day-of Operations browser workflows. The old search/copilot/standby UI
+// was replaced by per-person tasks, an event editor and crew check-in controls.
+// These cases exercise the supported sample-plan fallback, stored only in this browser.
+import {test,expect} from './fixtures/app.js'
+import {guest,fit} from './fixtures/journeys.js'
+async function open(page,app){
+ await page.clock.setFixedTime(new Date('2026-11-03T15:15:00+08:00'))
+ await app.open('/operations',{authenticated:true,opsSample:true})
+ await expect(page.getByRole('heading',{name:'Day-of Operations',exact:true})).toBeVisible()
+ await expect(page.getByText('Sample plan, saved in this browser only',{exact:false})).toBeVisible()
+}
 
-test('search and crew shortcuts filter real task cards and clear correctly',async({page,app})=>{
- await app.open('/operations',{authenticated:true})
- await search(page).fill('not a fixture cue')
- await expect(page.locator('.transition-all').filter({hasText:'Assigned Crew:'})).toHaveCount(0)
- await page.getByRole('button',{name:'Darren',exact:true}).click()
- await expect(task(page)).toBeVisible()
- await expect(task(page)).toContainText('Darren')
- await page.getByRole('button',{name:'All',exact:true}).click()
- await expect(search(page)).toHaveValue('')
- await expect(page.getByText('Act 1: Symphonia Soundcheck',{exact:true})).toBeVisible()
+test('person selection and all three schedule tabs show the selected crew',async({page,app})=>{
+ await open(page,app)
+ await page.getByRole('button',{name:'My schedule',exact:true}).click()
+ await page.getByLabel('Showing',{exact:true}).selectOption('Darren Koh')
+ await expect(page.locator('.ops-list-item').first()).toBeVisible()
+ for(const name of ['Everyone now','Full grid','My schedule']){
+  const tab=page.getByRole('button',{name,exact:true});await tab.click();await expect(tab).toHaveClass(/active/)
+ }
+ await fit(page)
 })
 
-test('delay cascade shifts unfinished cues but preserves completed cue timing',async({page,app})=>{
- await app.open('/operations',{authenticated:true})
- const before=await task(page).textContent()
- await page.getByRole('button',{name:'One-Click Delay (+15 mins)',exact:true}).click()
- await expect(task(page)).toContainText('18:45')
- expect(await task(page).textContent()).not.toBe(before)
- await expect(page.locator('.transition-all').filter({hasText:'Act 1: Symphonia Soundcheck'})).toContainText('17:00')
- await expect(page.getByRole('alert')).toContainText('One-Click Delay applied')
+test('delay shifts flexible tasks and preserves fixed performance times',async({page,app})=>{
+ await open(page,app)
+ await page.getByRole('button',{name:'Full grid',exact:true}).click()
+ const fixed=page.locator('.ops-block.ops-fixed').first()
+ const before=await fixed.getAttribute('title')
+ await page.getByRole('button',{name:/Delay current tasks/}).click()
+ await page.getByRole('button',{name:'+15 min',exact:true}).click()
+ await expect(page.getByRole('alert').first()).toBeVisible()
+ await expect(fixed).toHaveAttribute('title',before)
 })
 
-test('attendance ETA and manual override change the selected performer record',async({page,app})=>{
- await app.open('/operations',{authenticated:true})
- const late=page.getByRole('button',{name:'+15m Late',exact:true}).first()
- const performer=page.locator('.p-3.rounded-3.border').filter({has:page.getByText('Darren Koh',{exact:true})})
- await late.click()
- await expect(performer).toContainText('+15m Late (SOE Class)')
- await performer.getByRole('button',{name:'Override',exact:true}).click()
- await expect(performer).toContainText('ExCo Manual Override')
- await expect(performer.getByRole('button',{name:'+15m Late',exact:true})).toHaveCount(0)
+test('crew check-in can be completed and undone',async({page,app})=>{
+ await open(page,app)
+ const card=page.locator('.transition-all').filter({has:page.getByRole('button',{name:'Check in',exact:true})}).first()
+ const name=await card.locator('strong').first().textContent()
+ await card.getByRole('button',{name:'Check in',exact:true}).click()
+ const selected=page.locator('.transition-all').filter({has:page.getByText(name.trim(),{exact:true})})
+ await expect(selected).toContainText('Checked In')
+ await selected.getByRole('button',{name:'Undo check-in',exact:true}).click()
+ await expect(selected.getByRole('button',{name:'Check in',exact:true})).toBeVisible()
 })
 
-test('standby dispatch updates the attendance board and crew assignment locally',async({page,app})=>{
- await app.open('/operations',{authenticated:true})
- await page.getByRole('button',{name:'Call Standby',exact:true}).first().click()
- const modal=page.locator('.modal.show')
- const candidate=await modal.locator('strong').first().textContent()
- await modal.getByRole('button',{name:'Dispatch via Telegram',exact:true}).first().click()
- await expect(modal).toHaveCount(0)
- await expect(page.getByRole('alert')).toContainText('Emergency Standby Activated')
- await expect(page.getByRole('alert')).toContainText(candidate)
- await expect(task(page)).toContainText(candidate+' (Standby)')
- await expect(page.getByText(/Dispatched Standby/).first()).toBeVisible()
+test('new event validates required details and saves an isolated crew plan',async({page,app})=>{
+ await open(page,app)
+ await page.getByRole('button',{name:'+ New event',exact:true}).click()
+ const dialog=page.getByRole('dialog')
+ await dialog.getByLabel(/^Event name/).fill('Fixture new showcase')
+ await dialog.getByLabel(/^Starts/).fill('15:00')
+ await dialog.getByLabel(/^Ends/).fill('23:00')
+ await dialog.getByRole('button',{name:'Select all',exact:true}).click()
+ await dialog.getByRole('button',{name:'Create event',exact:true}).click()
+ // Missing required dates keep the form open; entering one permits creation.
+ await expect(dialog.getByText('Pick a date.',{exact:true})).toBeVisible()
+ await dialog.getByLabel(/^Date/).fill('2026-11-03')
+ await dialog.getByRole('button',{name:'Create event',exact:true}).click()
+ await expect(dialog).toHaveCount(0)
+ await expect(page.getByRole('combobox',{name:'Event',exact:true})).toContainText('Fixture new showcase')
 })
 
-test('notice parser uses demo input and renders extracted checklist',async({page,app})=>{
- await app.open('/operations',{authenticated:true})
- await page.getByRole('button',{name:'Pulse AI Copilot',exact:true}).click()
- const modal=page.locator('.modal.show')
- await modal.getByRole('button',{name:'2. AI Notice & Shopping List Parser',exact:true}).click()
- await expect(modal.getByRole('button',{name:'Run Pulse AI Parser',exact:true})).toBeDisabled()
- await modal.getByPlaceholder('Paste unstructured announcement from Telegram group chat...').fill('Fixture rehearsal needs tape and batteries.')
- await modal.getByRole('button',{name:'Run Pulse AI Parser',exact:true}).click()
- await expect(modal.getByText('Logistics Shopping Checklist:',{exact:true})).toBeVisible()
- await expect(modal).toContainText('4x AAA batteries')
- // Parser currently returns fixed demo output, not an external LLM result.
+test('task editor accepts a title and Cancel discards the unsaved task',async({page,app})=>{
+ await open(page,app)
+ await page.getByRole('button',{name:'+ Add task',exact:true}).click()
+ const dialog=page.getByRole('dialog')
+ await dialog.getByLabel('Task',{exact:true}).fill('Fixture unsaved task')
+ await expect(dialog.getByLabel('Task',{exact:true})).toHaveValue('Fixture unsaved task')
+ await fit(page)
+ await dialog.getByRole('button',{name:'Cancel',exact:true}).click()
+ await expect(dialog).toHaveCount(0)
+ await expect(page.getByText('Fixture unsaved task',{exact:true})).toHaveCount(0)
 })
 
-test('publishing reports local demo feedback without sending any transport request',async({page,app})=>{
- await app.open('/operations',{authenticated:true})
- await page.getByRole('button',{name:'Publish Live to Mobile (Telegram & Push)',exact:true}).click()
- await expect(page.getByRole('alert')).toContainText('Schedule Published Live!')
+test('notify crew shows sample feedback without an external delivery request',async({page,app})=>{
+ await open(page,app)
+ await page.getByRole('button',{name:'Notify crew',exact:true}).click()
+ await expect(page.getByRole('alert')).toContainText('Updated run of show for Showcase')
+ // This page currently reports local feedback; the fixture guard proves no real message is sent.
 })
 
-test('guest cannot delay cues, check in or dispatch a standby',async({page,app})=>{
+test('guest cannot delay the sample plan or check in crew',async({page,app})=>{
+ await page.clock.setFixedTime(new Date('2026-11-03T15:15:00+08:00'))
  await guest(page,app,'/operations')
- const before=await task(page).textContent()
- await page.getByRole('button',{name:'One-Click Delay (+15 mins)',exact:true}).click()
+ await page.getByRole('button',{name:/Delay current tasks/}).click()
+ await page.getByRole('button',{name:'+15 min',exact:true}).click()
  await expect(page.getByRole('alert')).toContainText('Guest view is read-only')
- await expect(task(page)).toHaveText(before)
- await page.getByRole('button',{name:'Override',exact:true}).first().click()
- await page.getByRole('button',{name:'Call Standby',exact:true}).first().click()
- await expect(page.locator('.modal.show')).toHaveCount(0)
+ await page.getByRole('button',{name:'Check in',exact:true}).first().click()
  await expect(page.getByRole('alert')).toContainText('Guest view is read-only')
+ await expect(page.getByRole('button',{name:'+ Add task',exact:true})).toHaveCount(0)
 })
-

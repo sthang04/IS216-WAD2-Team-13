@@ -1,3 +1,7 @@
+// WHY THIS FILE IS RETAINED: Checks combining multiple disruptions and ranking recovery alternatives without corrupting the original schedule.
+// These focused regression checks preserve edge cases that browser journeys may not isolate.
+// SCOPE: Non-browser checks using the Playwright test runner; excluded from browser E2E commands.
+// A passing result here does not prove a complete user journey or deployed backend enforcement.
 // Playwright contract checks; these do not launch a browser or prove live RLS.
 // Combined disruption normalization, simultaneous conflicts, deduplication and bounded plan
 // composition. Browser overlap: controlRoom; exact algorithm edge cases remain here.

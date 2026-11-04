@@ -1,3 +1,6 @@
+// BROWSER TEST PURPOSE: application.mobile user workflows and regression coverage.
+// Setup opens the real Vue UI; actions use its controls; assertions check visible results/state.
+// Uses isolated fixture responses; passing UI checks do not prove deployed database or delivery integration.
 ﻿import {test,expect} from './fixtures/app.js'
 import {room,eventSelect,runDelay,openScheduleForm,fit} from './fixtures/journeys.js'
 
@@ -6,7 +9,7 @@ test('mobile navigation opens actual events and touch simulation selects an acti
  await app.navigate('risk','Event Risk Planning')
  await expect(eventSelect(page).locator('option')).toHaveCount(2)
  await runDelay(page)
- const node=page.getByRole('region',{name:'Scrollable activity dependency graph',exact:true}).locator('.sim-graph-node').first()
+ const node=page.getByRole('region',{name:'Scrollable Event Village',exact:true}).locator('.sim-graph-node').first()
  await node.tap()
  await expect(node).toHaveAttribute('aria-pressed','true')
  await fit(page)
@@ -45,10 +48,10 @@ test('mobile notifications open schedule and return through the actual page menu
 })
 
 test('mobile heatmap remains scrollable and availability updates by touch',async({page,app})=>{
- await app.open('/availability',{authenticated:true})
- const cell=page.locator('.pulse-heat-cell').first()
+ await app.open('/availability',{authenticated:true,meetings:true})
+ const cell=page.locator('.scheduler-grid [role=button]').first()
  await cell.tap()
- await expect(cell).toHaveClass(/pulse-heat-my-active/)
+ await expect(cell).toHaveClass(/slot-mine/)
  const scroll=page.locator('.table-responsive').filter({has:page.getByRole('columnheader',{name:'Time',exact:true})})
  await scroll.evaluate(e=>{e.scrollLeft=e.scrollWidth})
  expect(await scroll.evaluate(e=>e.scrollLeft)).toBeGreaterThan(0)

@@ -398,7 +398,12 @@ function closeModal() {
 }
 
 function saveEvent() {
-  if (!eventForm.value.title.trim()) return;
+  if (blockedForGuest() || !eventForm.value.title.trim()) return;
+  // A same-day event must end after it starts; keep invalid input open for correction.
+  if (eventForm.value.endTime <= eventForm.value.startTime) {
+    toastMsg.value = 'End time must be after start time.';
+    return;
+  }
 
   const combinedVenue = eventForm.value.room.trim()
     ? `${eventForm.value.room}, ${eventForm.value.building.replace('SMU ', '')}`

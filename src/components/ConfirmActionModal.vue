@@ -1,5 +1,5 @@
 <script setup>
-import { ref, watch } from 'vue'
+import { ref, watch, onMounted, onUnmounted } from 'vue'
 
 const props = defineProps({
   show: { type: Boolean, default: false },
@@ -13,6 +13,12 @@ const props = defineProps({
 })
 const emit = defineEmits(['confirm', 'cancel'])
 
+// Escape cancels an open, idle confirmation; never interrupt a submitted request.
+function cancelOnEscape(event) {
+  if (event.key === 'Escape' && props.show && !props.busy) emit('cancel')
+}
+onMounted(() => document.addEventListener('keydown', cancelOnEscape))
+onUnmounted(() => document.removeEventListener('keydown', cancelOnEscape))
 const reason = ref('')
 watch(() => props.show, open => { if (open) reason.value = '' })
 </script>

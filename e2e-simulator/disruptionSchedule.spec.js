@@ -1,3 +1,6 @@
+// BROWSER TEST PURPOSE: disruption Schedule user workflows and regression coverage.
+// Setup opens the real Vue UI; actions use its controls; assertions check visible results/state.
+// Uses isolated fixture responses; passing UI checks do not prove deployed database or delivery integration.
 // Purpose: fixture-backed disruption Schedule browser regressions for simulator controls and state.
 // Use Setup -> Actions -> Assert; real Vue/engine code runs, but these tests do not prove live Supabase integration.
 import {setRawInterval} from './fixtures/disruptionInputs.js'
@@ -95,7 +98,8 @@ test('activity delay uses original segment; delayed finish may exceed event',asy
  const result=runCompleteSimulation(data,990001,prepareDisruptionCards(data,990001,cards))
  expect(Date.parse(result.simulatedSegments.find(s=>s.id===8).ends_at)).toBeGreaterThan(Date.parse(data.events[0].ends_at))
 })
-test('central validation rejects restored/programmatic ranges, stale events and invalid activities',()=>{
+// Retain this focused function check, but exclude it from browser E2E selection.
+test('central validation rejects restored/programmatic ranges, stale events and invalid activities [non-browser]',()=>{
  const data=campusConnectMultiEventFixture()
  const prepare=cards=>prepareDisruptionCards(data,990001,cards)
  expect(prepare([member(first,last)])[0].start).toBe('2026-11-02T02:00:00.000Z')

@@ -1,3 +1,6 @@
+// BROWSER TEST PURPOSE: read Only user workflows and regression coverage.
+// Setup opens the real Vue UI; actions use its controls; assertions check visible results/state.
+// Uses the configured application/backend; do not replace missing evidence with a passing skip.
 import {test,expect} from '@playwright/test'
 import {loadEnv} from 'vite'
 import {guardReadOnlyBackend} from '../helpers/readOnlyBackend.js'
@@ -44,6 +47,8 @@ async function signInNormally(page){
   if(!response?.ok())return false
   await expect.poll(()=>authenticated(page)).toBe(true)
  }
+ // Wait for the app to finish applying the session before the next page load.
+ await expect(page).toHaveURL(/\/facilities$/)
  return authenticated(page)
 }
 
@@ -58,7 +63,7 @@ test('actual Vue application exposes its normal sign-in UI',async({page})=>{
 
 test('browser reads actual accessible facility records from configured Supabase [backend smoke]',async({page})=>{
  // Setup: browser uses the app's configured project and public API key.
- test.skip(!backend||!publicKey,'BLOCKED: configured Supabase URL/public key missing.')
+ expect(backend && publicKey, 'Configured backend URL/key are required').toBeTruthy()
  await page.goto('/')
  // Actions: perform a genuine anonymous or signed-in read, never a mock.
  const response=await read(page,'/rest/v1/facilities?select=id,name&is_active=eq.true')
@@ -71,15 +76,15 @@ test('browser reads actual accessible facility records from configured Supabase 
 
 test('real authenticated event selection and history refresh use accessible backend records',async({page})=>{
  // Setup: the real app obtains its normal Supabase session.
- test.skip(!backend||!publicKey,'BLOCKED: configured Supabase URL/public key missing.')
+ expect(backend && publicKey, 'Configured backend URL/key are required').toBeTruthy()
  await page.goto('/')
- test.skip(!await signInNormally(page),'BLOCKED: authorized Supabase session unavailable.')
+ expect(await signInNormally(page), 'Authorized backend session is required').toBe(true)
  await page.goto('/events')
  const picker=page.getByRole('region',{name:'Scenario builder',exact:true}).getByLabel('Event',{exact:true})
  await expect(picker).toBeEnabled()
  // Actions: select a persisted event through the UI, without a fixed event ID.
  const ids=await picker.locator('option:not([disabled])').evaluateAll(options=>options.map(o=>o.value).filter(Boolean))
- test.skip(!ids.length,'BLOCKED: account has no accessible persisted event.')
+ expect(ids.length, 'Account needs an accessible saved event').toBeGreaterThan(0)
  await picker.selectOption(ids[0])
  // Assert: that exact engine event identity exists in actual Supabase records.
  const records=await read(page,'/rest/v1/events?select=id&order=id')
@@ -98,10 +103,10 @@ test('real authenticated event selection and history refresh use accessible back
 
 test('real authenticated simulator loads events, calculates a preview and refreshes history without task writes',async({page})=>{
  // Setup: normal sign-in or supplied storage state. No fabricated credentials.
- test.skip(!backend||!publicKey,'BLOCKED: configured Supabase URL/public key missing.')
+ expect(backend && publicKey, 'Configured backend URL/key are required').toBeTruthy()
  await page.goto('/')
  const signedIn=await signInNormally(page)
- test.skip(!signedIn,'BLOCKED: no genuine Supabase Auth session; provide authorized credentials or browser storage state. Local demo-persona fallback does not qualify.')
+ expect(signedIn, 'Genuine backend authentication is required').toBe(true)
  await page.goto('/events')
  await expect(page.getByRole('heading',{name:'Scenario Builder',exact:true})).toBeVisible()
  const picker=page.getByRole('region',{name:'Scenario builder',exact:true}).getByLabel('Event',{exact:true})
@@ -126,7 +131,7 @@ test('real authenticated simulator loads events, calculates a preview and refres
   if(await options.count()){task=await options.first().getAttribute('value');break}
  }
  page.off('dialog',discard)
- test.skip(!task,'BLOCKED: account has no accessible activity with movable times; fixed tasks must remain fixed.')
+ expect(task, 'Account needs an event with movable activities').toBeTruthy()
  await page.getByLabel('Delayed activity',{exact:true}).selectOption(task)
  await page.getByLabel('Delay (minutes)',{exact:true}).fill('15')
  await page.getByRole('button',{name:/^Run (combined )?simulation \(1\)$/}).click()

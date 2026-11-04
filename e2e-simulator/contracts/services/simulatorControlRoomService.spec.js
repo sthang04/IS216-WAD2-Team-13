@@ -1,3 +1,7 @@
+// WHY THIS FILE IS RETAINED: Checks transformation of activity dependencies and timing evidence into the impact workspace model.
+// These focused regression checks preserve edge cases that browser journeys may not isolate.
+// SCOPE: Non-browser checks using the Playwright test runner; excluded from browser E2E commands.
+// A passing result here does not prove a complete user journey or deployed backend enforcement.
 // Playwright contract checks; these do not launch a browser or prove live RLS.
 // Graph cycles, event scoping, heatmap conflict evidence and multi-day timeline calculations.
 // Browser overlap: controlRoom/responsiveJourney; exact derived models remain here.

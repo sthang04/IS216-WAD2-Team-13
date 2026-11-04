@@ -1,3 +1,6 @@
+// BROWSER TEST PURPOSE: notifications user workflows and regression coverage.
+// Setup opens the real Vue UI; actions use its controls; assertions check visible results/state.
+// Uses isolated fixture responses; passing UI checks do not prove deployed database or delivery integration.
 ﻿import {test,expect} from './fixtures/app.js'
 const bell=page=>page.getByRole('button',{name:/^Notifications, \d+ unread$/})
 const notice=page=>page.getByRole('button',{name:/Fixture schedule update Review your synthetic assignment/})
@@ -73,7 +76,7 @@ test('failed mark-read does not falsely present unread notifications as read',as
  await app.open('/facilities',{authenticated:true,notifications:true,rpcError:'rpc_mark_notifications_read'})
  await bell(page).click()
  await page.getByRole('button',{name:'Mark all read',exact:true}).click()
- // Preserve as a regression if the optimistic UI never rolls back refusal.
+ // A refused mark-read request must preserve the unread count.
  await expect(bell(page)).toHaveAccessibleName('Notifications, 2 unread')
 })
 

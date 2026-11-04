@@ -1,3 +1,5 @@
+// SUPPORT FILE PURPOSE: harness.js supplies shared setup or controlled data for the browser workflows.
+// Keep this support code: the Playwright tests depend on consistent setup and isolated state.
 // Local browser-test entry only. Production index.html never imports this file.
 // Playwright replaces only the data loader with fixtures and blocks Supabase.
 import {createApp,h,KeepAlive} from 'vue'

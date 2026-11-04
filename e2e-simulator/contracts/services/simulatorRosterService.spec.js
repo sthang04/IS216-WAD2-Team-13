@@ -1,3 +1,7 @@
+// WHY THIS FILE IS RETAINED: Checks roster normalization, allowed fields, membership evidence, and incomplete or rejected reads.
+// These focused regression checks preserve edge cases that browser journeys may not isolate.
+// SCOPE: Non-browser checks using the Playwright test runner; excluded from browser E2E commands.
+// A passing result here does not prove a complete user journey or deployed backend enforcement.
 // Playwright contract checks; these do not launch a browser or prove live RLS.
 // Authorized roster normalization, field whitelisting, incomplete evidence and RPC contract
 // failures. Browser replacement flows use injected data rather than real RLS.

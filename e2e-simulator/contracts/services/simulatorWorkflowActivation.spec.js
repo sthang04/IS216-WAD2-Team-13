@@ -1,3 +1,7 @@
+// WHY THIS FILE IS RETAINED: Checks that recovery writes remain disabled unless exact project and environment activation gates are satisfied.
+// These focused regression checks preserve edge cases that browser journeys may not isolate.
+// SCOPE: Non-browser checks using the Playwright test runner; excluded from browser E2E commands.
+// A passing result here does not prove a complete user journey or deployed backend enforcement.
 // Playwright contract checks; these do not launch a browser or prove live RLS.
 // Explicit project activation and production opt-in checks. Browser fixture gates cannot prove
 // that real environment settings are safe.

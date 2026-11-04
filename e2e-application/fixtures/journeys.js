@@ -1,6 +1,8 @@
+// SUPPORT FILE PURPOSE: journeys.js supplies shared setup or controlled data for the browser workflows.
+// Keep this support code: the Playwright tests depend on consistent setup and isolated state.
 ﻿import {expect} from './app.js'
 
-export const eventSelect=page=>page.getByLabel('Event',{exact:true})
+export const eventSelect=page=>page.getByRole('region',{name:'Scenario builder',exact:true}).getByLabel('Event',{exact:true})
 export async function runDelay(page){
  await page.getByLabel('Disruption type',{exact:true}).selectOption('SCHEDULE_DELAY')
  await page.getByLabel('Delay (minutes)',{exact:true}).fill('30')
@@ -12,6 +14,8 @@ export async function openScheduleForm(page,title='Fixture custom rehearsal'){
  await page.getByRole('button',{name:'Add Event / Class',exact:true}).click()
  const modal=page.locator('.modal.show')
  await modal.getByPlaceholder('e.g. IS216 Lab, Rehearsal Warmup, Team Debrief').fill(title)
+ // Keep schedule examples on the day of the fixture's baseline classes.
+ await modal.locator('input[type=date]').fill('2026-10-23')
  return modal
 }
 export const scheduleCard=(page,title)=>page.locator('.pulse-card').filter({has:page.getByRole('heading',{name:title,exact:true})})

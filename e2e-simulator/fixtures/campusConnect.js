@@ -1,3 +1,5 @@
+// SUPPORT FILE PURPOSE: campusConnect.js supplies shared setup or controlled data for the browser workflows.
+// Keep this support code: the Playwright tests depend on consistent setup and isolated state.
 // ISOLATED TEST DATA ONLY. Not a copy of Supabase Event 900001.
 // Imported by automated tests only; the live loader never imports this module.
 export const FIXTURE_EVENT_ID=990001

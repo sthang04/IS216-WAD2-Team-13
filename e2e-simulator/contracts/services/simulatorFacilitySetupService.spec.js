@@ -1,3 +1,7 @@
+// WHY THIS FILE IS RETAINED: Checks interpretation of existing activity-to-booking links and missing booking evidence.
+// These focused regression checks preserve edge cases that browser journeys may not isolate.
+// SCOPE: Non-browser checks using the Playwright test runner; excluded from browser E2E commands.
+// A passing result here does not prove a complete user journey or deployed backend enforcement.
 // Playwright contract checks; these do not launch a browser or prove live RLS.
 // Linked-room evidence and conservative booking/approval blockers. Browser overlap:
 // originalBooking; exact data-contract checks remain here.

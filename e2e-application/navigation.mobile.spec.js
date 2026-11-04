@@ -1,14 +1,17 @@
+// BROWSER TEST PURPOSE: navigation.mobile user workflows and regression coverage.
+// Setup opens the real Vue UI; actions use its controls; assertions check visible results/state.
+// Uses isolated fixture responses; passing UI checks do not prove deployed database or delivery integration.
 ﻿import {test,expect} from './fixtures/app.js'
 
 test('touch navigation reaches student pages and supports account logout',async({page,app})=>{
  await app.open('/facilities',{authenticated:true})
- const navigation=page.getByLabel('Navigate PULSE',{exact:true})
+ const navigation=page.getByRole('navigation',{name:'Mobile PULSE navigation',exact:true})
  await expect(navigation).toBeVisible()
- await navigation.selectOption('schedule')
+ await app.navigate('schedule','Personal Schedule')
  await expect(page).toHaveURL(/\/personal-schedule$/)
  await expect(page.getByRole('heading',{name:/Hi Fixture Exco/})).toBeVisible()
- await navigation.selectOption('operations')
- await expect(page.getByRole('heading',{name:'Live Operations Command Center',exact:true})).toBeVisible()
+ await app.navigate('operations','Day-of Operations')
+ await expect(page.getByRole('heading',{name:'Day-of Operations',exact:true})).toBeVisible()
  await page.getByRole('button',{name:'Account menu for Fixture Exco',exact:true}).tap()
  await page.getByRole('button',{name:'Sign Out to Landing',exact:true}).tap()
  await expect(page).toHaveURL(/\/$/)
