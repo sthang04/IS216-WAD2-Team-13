@@ -17,11 +17,11 @@ const props=defineProps({active:{type:Boolean,default:true},sessionVersion:{type
 const emit=defineEmits(['refresh','invitations-changed','select-option','stage-change','review-saved','operation-complete'])
 // Reads are safe behind server authorization; every write still requires both gates.
 const enabled=SIMULATOR_WORKFLOW_VERIFIED
-const api=createSimulatorWorkflow(supabase,{enabled,allowReadOnly:true})
+const api=createSimulatorWorkflow(supabase,{enabled,allowReadOnly:true,eventContext:()=>selectedEvent.value})
 // Fail closed until authenticated read-only metadata confirms the reviewed backend.
 const capabilities=ref(null),capabilityError=ref('')
-const applicationEnabled=computed(()=>enabled&&capabilities.value?.application_enabled===true)
-const invitationEnabled=computed(()=>enabled&&capabilities.value?.invitations_enabled===true)
+const applicationEnabled=computed(()=>enabled&&integrationReady.value&&capabilities.value?.application_enabled===true)
+const invitationEnabled=computed(()=>enabled&&integrationReady.value&&capabilities.value?.invitations_enabled===true)
 // Proposal IDs describe unsaved choices; plan IDs identify persisted history.
 // Keeping them separate avoids applying a preview that was never saved/reviewed.
 const selectedOptionId=ref(''),selectedPlanId=ref(''),bookingSelections=ref({}),resolutionReasons=ref({})
@@ -36,6 +36,7 @@ let historyTimer
 // per-read versions also prevent older refreshes replacing newer history.
 let contextEpoch=0,historyVersion=0,incomingVersion=0,authId,authSubscription,timer,disposed=false
 const selectedEvent=computed(()=>props.data?.events?.find(e=>String(e.id)===String(props.eventId)))
+const integrationReady=computed(()=>selectedEvent.value?.source_table!=='ops_events' || selectedEvent.value?.recovery_integration_ready===true)
 // Never use the facility navbar's active club as the event's identity.
 const eventClubId=computed(()=>selectedEvent.value?.club_id ?? null)
 function keepAppliedSelection(){return ['Applied','Undone'].includes(history.value.plans.find(p=>p.id===selectedPlanId.value)?.application_status)}
@@ -63,7 +64,7 @@ const applyReady=computed(()=>!historyLoading.value && !historyError.value && re
 const savedFilter=ref('All')
 const savedCategory=item=>{const t=savedTracker(item);return item.application_status==='Applied'?'Applied':item.application_status==='Undone' || item.application_status==='Cancelled' || ['Stale or blocked','Rejected or expired'].includes(t.status)?'Other':t.requirementsReady?'Ready to Apply':'Pending'}
 const visibleSaved=computed(()=>history.value.plans.filter(p=>savedFilter.value==='All' || savedCategory(p)===savedFilter.value))
-const recoveryNotice=computed(()=>historyError.value || (!enabled?'Live updates are unavailable in this environment. You can safely explore scenarios and compare proposals.':capabilityError.value?'Recovery readiness could not be verified. Refresh requirements or contact the club manager.':!plan.value && !invitationEnabled.value?'Preparing recovery requests is unavailable in this environment. Compare proposals now and ask a club manager about activation.':plan.value && !applicationEnabled.value?'Applying and undoing recovery are unavailable in this environment. Requirements may still be reviewed.':'') )
+const recoveryNotice=computed(()=>!integrationReady.value?'Live Day Ops tasks are loaded. Recovery updates require the operations integration migration.':historyError.value || (!enabled?'Live updates are unavailable in this environment. You can safely explore scenarios and compare proposals.':capabilityError.value?'Recovery readiness could not be verified. Refresh requirements or contact the club manager.':!plan.value && !invitationEnabled.value?'Preparing recovery requests is unavailable in this environment. Compare proposals now and ask a club manager about activation.':plan.value && !applicationEnabled.value?'Applying and undoing recovery are unavailable in this environment. Requirements may still be reviewed.':'') )
 // Match the existing router's simulator access check. Missing backend activation,
 // draft requirements and recovery-history permissions do not deny page access.
 // Read the current persona on render instead of caching a non-reactive session.
@@ -90,11 +91,12 @@ function proposedTimes(change){
 }
 async function loadCapabilities(){
  const epoch=contextEpoch
- try{const result=await api.capabilities();if(!disposed&&epoch===contextEpoch){capabilities.value=result;capabilityError.value=''}}
+ if(!selectedEvent.value || !integrationReady.value){capabilities.value=null;return}
+ try{const result=await api.capabilities(props.eventId);if(!disposed&&epoch===contextEpoch){capabilities.value=result;capabilityError.value=''}}
  catch(e){if(!disposed&&epoch===contextEpoch){capabilities.value=null;capabilityError.value='Backend activation not verified: '+e.message}}
 }
 async function loadHistory(){
- if(!selectedEvent.value)return
+ if(!selectedEvent.value || !integrationReady.value){history.value={plans:[],invitations:[],audit:[]};return}
  const version=++historyVersion,epoch=contextEpoch,eventId=props.eventId
  historyLoading.value=true;historyError.value=''
  try{

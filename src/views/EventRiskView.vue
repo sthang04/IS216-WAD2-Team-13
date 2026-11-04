@@ -95,6 +95,7 @@ const props = defineProps({
 // shallowRef prevents structuredClone errors caused by
 // passing Vue reactive proxies into the simulation engine.
 const data = shallowRef(null)
+const sourceRefreshNotice=ref('')
 const result = shallowRef(null)
 
 const loading = ref(false)
@@ -102,6 +103,7 @@ const error = ref('')
 const initialized = ref(false)
 const sessionVersion = ref(0)
 const invitationRefreshVersion = ref(0)
+let dataRequestVersion=0
 
 const selectedRecoveryId = ref('')
 const selectedSavedRecovery=shallowRef(null),workflowStage=ref('Draft')
@@ -283,7 +285,7 @@ const eventSchedule = computed(() => scheduleRange(selectedEvent.value))
 function createDisruption() {
   return { id: 'D' + nextDisruptionId++, type: 'MEMBER_UNAVAILABLE',
     memberId: eventMembers.value[0]?.id ?? null, facilityBookingId:eventLinkedBookings.value[0]?.id ?? null, venueName: eventFacilities.value[0] || '',
-    segmentId: eventSegments.value[0]?.id ?? null, delayMinutes: 30,
+    segmentId: eventSegments.value.find(s=>!s.is_fixed)?.id ?? null, delayMinutes: 30,
     start: toSingaporeLocal(selectedEvent.value?.starts_at), end: toSingaporeLocal(selectedEvent.value?.ends_at) }
 }
 function addDisruption() { disruptionCards.value.push(createDisruption()) }
@@ -344,12 +346,12 @@ const removeAfterNavigation = router.afterEach((to,from,failure) => {
 watch(() => props.active, active => { if(active) { if(recoveryCalendarTrip){recoveryCalendarTrip=false;adoptEventContext();return} resetSelections(); adoptEventContext() } })
 function adoptEventContext() {
   const id = navigationEventId()
-  if(id != null && events.value.some(e => String(e.id) === String(id))) selectedEventId.value = events.value.find(e => String(e.id) === String(id)).id
+  if(id != null && events.value.some(e => String(e.id) === String(id) || String(e.source_id) === String(id))) selectedEventId.value = events.value.find(e => String(e.id) === String(id) || String(e.source_id) === String(id)).id
 }
 watch(() => [props.eventId, route.query.eventId, route.query.event_id], () => { if(props.active) adoptEventContext() })
 let wasDeactivated = false
 onDeactivated(() => { wasDeactivated = true })
-onActivated(() => { if(wasDeactivated) { if(!recoveryCalendarTrip)resetSelections();recoveryCalendarTrip=false; adoptEventContext(); wasDeactivated = false } })
+onActivated(() => { if(wasDeactivated) { if(!recoveryCalendarTrip)resetSelections();recoveryCalendarTrip=false; adoptEventContext(); if(!loading.value)void refreshSimulator(false,true);wasDeactivated = false } })
 onMounted(() => window.addEventListener('beforeunload', beforeUnload))
 onUnmounted(() => { removeNavigationGuard(); removeAfterNavigation(); window.removeEventListener('beforeunload', beforeUnload) })
 
@@ -426,18 +428,26 @@ watch(disruptionCards, () => {
  * Reset clears hypothetical choices; persisted history belongs to SQL. */
 // Reload authoritative records after a real operation; preserving inputs here
 // is an explicit choice, unlike entering the simulator, which starts clean.
-async function refreshSimulator(preserveScenario=false) {
+async function refreshSimulator(preserveScenario=false,background=false) {
+  const requestVersion=++dataRequestVersion
   loading.value = true
-  initialized.value = false
-  error.value = ''
-  result.value = null
+  if(!background){initialized.value = false;error.value = '';result.value = null}
   const previousEventId = selectedEventId.value
   const priorCards=preserveScenario===true?structuredClone(disruptionCards.value.map(c=>({...c}))):null
   try {
-    data.value = await loadSimulationData({ source: 'supabase' })
-    selectedEventId.value = data.value.events.find(e => String(e.id) === String(previousEventId))?.id ?? data.value.events[0]?.id ?? null
+    const fresh=await loadSimulationData({ source: 'supabase' })
+    if(requestVersion!==dataRequestVersion)return false
+    // Focus/poll reads preserve unsaved choices when the underlying evidence is
+    // unchanged. Any source edit invalidates old impact/ranking/confirmation.
+    if(background && JSON.stringify(fresh)===JSON.stringify(data.value))return true
+    sourceRefreshNotice.value=background && data.value?'Saved operational data changed. The simulator has refreshed; rerun your scenario against the current tasks.':''
+    data.value=fresh
+    initialized.value=false
+    result.value=null
+    const requestedEvent=selectedEventId.value
+    selectedEventId.value = data.value.events.find(e => String(e.id) === String(requestedEvent) || String(e.source_id) === String(requestedEvent))?.id ?? data.value.events[0]?.id ?? null
     if (!selectedEventId.value) throw new Error('No accessible events found in Supabase.')
-    resetSelections(false)
+    resetSelections(background)
     if(priorCards && String(previousEventId)===String(selectedEventId.value)){
       disruptionCards.value=priorCards
       for(const card of disruptionCards.value)if(card.type==='FACILITY_UNAVAILABLE' && card.facilityBookingId==null && eventLinkedBookings.value.length){card.facilityBookingId=eventLinkedBookings.value[0].id;setDisruptedBooking(card)}
@@ -446,13 +456,17 @@ async function refreshSimulator(preserveScenario=false) {
     initialized.value = true
     return true
   } catch (e) {
+    if(requestVersion!==dataRequestVersion)return false
     data.value = null
     error.value = e?.message || String(e)
     return false
-  } finally { loading.value = false }
+  } finally { if(requestVersion===dataRequestVersion)loading.value = false }
 }
-onMounted(() => { if(props.active) refreshSimulator() })
-watch(() => props.active, active => { if(active && !data.value && !loading.value) refreshSimulator() })
+function refreshOnFocus(){if(props.active && !document.hidden && !loading.value) void refreshSimulator(false,true)}
+let sourceRefreshTimer
+onMounted(() => { window.addEventListener('focus',refreshOnFocus);sourceRefreshTimer=setInterval(refreshOnFocus,30000);if(props.active) refreshSimulator() })
+onUnmounted(()=>{++dataRequestVersion;window.removeEventListener('focus',refreshOnFocus);clearInterval(sourceRefreshTimer)})
+watch(() => props.active, active => { if(active && !loading.value) refreshSimulator(false,true) })
 
 // ========================================================
 // KPI CALCULATIONS
@@ -735,6 +749,8 @@ const recommendationBadge = computed(() => 'All Selected Disruptions')
       <select id="simulation-event" :value="selectedEventId" @change="changeEvent" class="form-select form-select-sm mb-3" :disabled="loading">
         <option v-for="event in events" :key="event.id" :value="event.id">{{ event.name }}</option>
       </select>
+      <p v-if="sourceRefreshNotice" class="alert alert-info small" role="status">{{ sourceRefreshNotice }}</p>
+      <p v-for="notice in (data?.integration_notices || []).filter(n=>String(n.event_id)===String(selectedEventId))" :key="notice.message" class="alert alert-info small" role="status">{{ notice.message }}</p>
       <p v-if="eventSchedule" class="small text-muted" data-testid="event-schedule">Event schedule (Singapore): {{ formatTime(selectedEvent.starts_at) }} to {{ formatTime(selectedEvent.ends_at) }}</p>
       <p v-else class="alert alert-warning small">This event has a missing or invalid schedule. Verify its start and end before simulating.</p>
       <p class="small text-muted">Add member, facility and delay disruptions together. Repeated delays on one activity accumulate. Times use Singapore time.</p>
@@ -771,7 +787,7 @@ const recommendationBadge = computed(() => 'All Selected Disruptions')
         <template v-else>
           <label class="small fw-bold" :for="d.id + '-segment'">Delayed activity</label>
           <select :id="d.id + '-segment'" v-model="d.segmentId" class="form-select form-select-sm mb-2">
-            <option v-for="segment in eventSegments" :key="segment.id" :value="segment.id">{{ segment.title }}</option>
+            <option v-for="segment in eventSegments" :key="segment.id" :value="segment.id" :disabled="segment.is_fixed">{{ segment.title }}{{ segment.is_fixed ? ' (fixed)' : '' }}</option>
           </select>
           <p class="small text-muted">Activity schedule (Singapore): {{ formatTime(eventSegments.find(s => String(s.id) === String(d.segmentId))?.starts_at) }} to {{ formatTime(eventSegments.find(s => String(s.id) === String(d.segmentId))?.ends_at) }}. Delay starts at this activity's scheduled start; its finish may extend beyond the event.</p>
           <label class="small fw-bold" :for="d.id + '-delay'">Delay (minutes)</label>

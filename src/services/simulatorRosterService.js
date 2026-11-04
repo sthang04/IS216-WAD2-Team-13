@@ -3,7 +3,7 @@
  * Supabase client. Tests inject a mock client; this module creates no client.
  * Membership does not establish role experience or timetable availability.
  */
-export async function loadEventReplacementRosters(client, events) {
+export async function loadEventReplacementRosters(client, events, {rpcName='rpc_simulator_event_roster'} = {}) {
   // Events may share a club: deduplicate membership evidence while retaining
   // each event's authorization/coverage result independently.
   const membershipsByKey = new Map()
@@ -16,7 +16,7 @@ export async function loadEventReplacementRosters(client, events) {
   for (const event of events) {
     try {
       if (!validId(event.id)) throw new Error('Invalid event ID for replacement roster')
-      const { data, error } = await client.rpc('rpc_simulator_event_roster', {
+      const { data, error } = await client.rpc(rpcName, {
         p_event_id: event.id
       })
       // Fail visibly; do not use fixtures or treat a failed RPC as an empty roster.

@@ -6,6 +6,7 @@
  */
 export async function readSimulatorRows(client, table, configureQuery, columns = '*') {
   const keys = {
+    ops_event_crew: ['event_id', 'member_id'],
     segment_dependencies: ['prerequisite_segment_id', 'dependent_segment_id'],
     segment_facility_bookings: ['segment_id', 'booking_id']
   }[table] || ['id']

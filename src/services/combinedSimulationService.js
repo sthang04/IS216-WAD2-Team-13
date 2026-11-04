@@ -32,6 +32,7 @@ export function prepareDisruptionCards(data, eventId, cards) {
     const base = {id:card.id,type:card.type}
     if (card.type === 'SCHEDULE_DELAY') {
       const segment = segments.find(s => same(s.id,card.segmentId))
+      if(segment?.is_fixed) throw new Error('Fixed Day Ops task times cannot be moved.')
       const delayMinutes = Number(card.delayMinutes)
       if (!segment || !Number.isInteger(delayMinutes) || delayMinutes <= 0 || delayMinutes > 1440) throw new Error('Disruption '+(index+1)+': select an activity and a whole delay from 1 to 1440 minutes.')
       // Delay begins at the selected activity's scheduled start. Bound its original

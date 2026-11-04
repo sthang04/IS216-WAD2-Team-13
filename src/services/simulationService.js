@@ -356,6 +356,7 @@ export function runSimulation(data, eventId, disruptions) {
       throw new Error('Invalid delay duration');
     }
 
+    if(segment.is_fixed && d.delayMinutes>0) throw new Error('Fixed Day Ops task times cannot be moved');
     const delay = d.delayMinutes * 60 * 1000;
 
     segment.starts_at = new Date(

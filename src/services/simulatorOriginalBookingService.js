@@ -1,10 +1,14 @@
 // Separate from recovery-plan booking attachment. Never insert links in Vue.
-export const ORIGINAL_BOOKING_LINK_VERIFIED=false
+import {simulatorWorkflowActivation} from './simulatorWorkflowActivation.js'
+// Deployment opt-in only: the server separately checks its release gate, the
+// actor's event permission, exact fingerprints and approved booking evidence.
+export const ORIGINAL_BOOKING_LINK_VERIFIED=simulatorWorkflowActivation(import.meta.env || {}).enabled
 const fingerprint=value=>typeof value==='string'&&/^[a-f0-9]{64}$/.test(value)
 // Discovery returns evidence only. Linking requires explicit confirmation and
 // both server fingerprints to prevent attaching a changed booking or event.
 export function createOriginalBookingWorkflow(client,{enabled=ORIGINAL_BOOKING_LINK_VERIFIED}={}){
  const call=async(name,args)=>{
+  if(args.p_event_id!=null && !/^[1-9][0-9]*$/.test(String(args.p_event_id))) throw Error('Day Ops booking links require the operations integration migration.')
   if(!client)throw Error('Supabase is unavailable.')
   const {data,error}=await client.rpc(name,args)
   if(error)throw Error('Original booking contract unavailable or rejected: '+error.message)
