@@ -667,10 +667,8 @@ onMounted(async () => {
  
         </div>
       </header>
-      <!-- A blurred header forms a containing block for fixed descendants. Keep
-           bottom navigation outside it so it cannot cover the account/bell controls. -->
+      <!-- Responsive Website Mobile Top Navigation (clean scrollable pill bar under the sticky header) -->
       <!-- Decorative icons are hidden from assistive technology so each control has its visible text name. -->
-      <!-- Dynamic Mobile Feature Segmented Pill Navigation Bar -->
       <nav class="d-lg-none pulse-mobile-nav-container" aria-label="Mobile PULSE navigation">
         <!-- Case A: OSL Admin Mobile Navigation -->
         <div v-if="isAdmin" class="pulse-mobile-nav">
