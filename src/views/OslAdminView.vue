@@ -255,7 +255,7 @@ function submitViolation() {
         </svg>
         <span class="small fw-semibold">{{ toastMsg }}</span>
       </div>
-      <button type="button" class="btn-close" @click="toastMsg = ''"></button>
+      <button type="button" class="btn-close" aria-label="Close message" @click="toastMsg = ''"></button>
     </div>
 
     <!-- OSL Hero Banner -->
@@ -872,7 +872,7 @@ function submitViolation() {
                 <small class="text-muted" style="font-size: 0.7rem;">Facility Booking System (FBS) • Office of Student Life (OSL)</small>
               </div>
             </div>
-            <button type="button" class="btn-close" @click="closeTransferSlip"></button>
+            <button type="button" class="btn-close" aria-label="Close" @click="closeTransferSlip"></button>
           </div>
 
           <div class="modal-body p-4">
@@ -979,7 +979,7 @@ function submitViolation() {
                 <small class="text-muted" style="font-size: 0.7rem;">SSU Handbook Clause 9.1(c) • ACF Operating Sanctions</small>
               </div>
             </div>
-            <button type="button" class="btn-close" @click="closeViolationModal"></button>
+            <button type="button" class="btn-close" aria-label="Close" @click="closeViolationModal"></button>
           </div>
 
           <form @submit.prevent="submitViolation">

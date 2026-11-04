@@ -25,10 +25,11 @@ export function fetchClubRoster(clubId) {
   return call('rpc_club_roster', { p_club_id: clubId })
 }
 
-export function createMeeting({ clubId, title, weekStart, voteDeadline, memberIds }) {
+export function createMeeting({ clubId, title, agenda, weekStart, voteDeadline, memberIds }) {
   return call('rpc_create_meeting', {
     p_club_id: clubId,
     p_title: title,
+    p_agenda: agenda || null,
     p_week_start: weekStart,
     p_vote_deadline: voteDeadline,
     p_member_ids: memberIds
@@ -54,6 +55,16 @@ export function confirmMeeting(meetingId, { date, startHour, endHour, venue }) {
   return call('rpc_confirm_meeting', {
     p_meeting_id: meetingId, p_date: date, p_start_hour: startHour, p_end_hour: endHour, p_venue: venue
   })
+}
+
+// Organiser only, while voting is open. memberIds = the full new list. Returns { added, removed }.
+export function updateParticipants(meetingId, memberIds) {
+  return call('rpc_update_meeting_participants', { p_meeting_id: meetingId, p_member_ids: memberIds })
+}
+
+// Organiser only, until the meeting starts. Empty text removes the agenda.
+export function updateAgenda(meetingId, agenda) {
+  return call('rpc_update_meeting_agenda', { p_meeting_id: meetingId, p_agenda: agenda })
 }
 
 export function cancelMeeting(meetingId) {

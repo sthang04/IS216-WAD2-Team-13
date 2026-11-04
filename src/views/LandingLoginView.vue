@@ -65,8 +65,8 @@ const FUN_FACT_TEMPLATES = [
   "☕ Connexion Project Fuel: Over 4,200 cups of iced latte are consumed at SMU Connexion during project crunch week.",
   
   // 10. Telegram Bot Speed
-  "🤖 Telegram @SMUPulseBot: Webhook notifications alert 40+ stage performers within 1.5 seconds of a venue slot release.",
-  
+  "🤖 Telegram @pulse_wad2_bot: Webhook notifications alert 40+ stage performers within 1.5 seconds of a venue slot release.",
+    
   // 11. Liquid Glass & Zero Dark Mode
   "👑 Supreme Emixers Lore: Group 13 designed Pulse with zero dark mode and 100% pure liquid glass aesthetics!",
   
@@ -268,13 +268,12 @@ async function completeLogin(loginEmail, loginPassword) {
       loadingStageText.value = 'Preparing Real-Time CCA Operations Dashboard...'
     }, 2000)
 
-    // Wait for auth promise + snappy 3.0s reading time (3 rounds of facts)
-    const [persona] = await Promise.all([
-      authPromise,
-      new Promise(resolve => setTimeout(resolve, 3000))
-    ])
+    // Await authentication result directly without artificial delay
+    const persona = await authPromise
 
-    clearInterval(progressInterval)
+    if (progressInterval) clearInterval(progressInterval)
+    if (roundTimer1) clearTimeout(roundTimer1)
+    if (roundTimer2) clearTimeout(roundTimer2)
     authProgress.value = 100
     loadingStageText.value = 'Authentication Complete ✓'
 
@@ -302,7 +301,7 @@ async function completeLogin(loginEmail, loginPassword) {
     setTimeout(() => {
       isAuthenticating.value = false
       emit('login', persona)
-    }, 350)
+    }, 150)
 
   } catch (err) {
     if (progressInterval) clearInterval(progressInterval)
@@ -752,7 +751,7 @@ async function handleManualLogin() {
             <div class="mt-4 pt-3 border-top">
               <button 
                 type="button" 
-                class="btn w-100 rounded-3 d-flex align-items-center justify-content-between demo-toggle-bar text-start"
+                class="btn w-100 rounded-3 d-flex align-items-center justify-content-between demo-toggle-bar text-start overflow-hidden"
                 :class="showDemoLogins ? 'demo-toggle-active' : 'demo-toggle-inactive'"
                 style="padding: 11px 16px; border-radius: 12px;"
                 @click="showDemoLogins = !showDemoLogins"
@@ -761,8 +760,8 @@ async function handleManualLogin() {
                   <span class="badge rounded-pill demo-badge flex-shrink-0" style="font-size: 0.72rem; font-weight: 700; padding: 5px 12px;">
                     1-Click
                   </span>
-                  <span class="fw-bold text-dark text-start" style="font-size: 0.82rem; letter-spacing: -0.01em; white-space: nowrap;">
-                    Click here for 1-Click Login for different personas
+                  <span class="fw-bold text-dark text-start" style="font-size: 0.82rem; letter-spacing: -0.01em; line-height: 1.3;">
+                    Click here for 1-Click Login<span class="d-none d-sm-inline"> for different personas</span>
                   </span>
                 </div>
                 <div class="d-flex align-items-center small text-muted flex-shrink-0 ms-2" style="font-size: 0.74rem; font-weight: 500; gap: 6px;">
@@ -804,7 +803,7 @@ async function handleManualLogin() {
                           <strong class="d-block text-dark text-truncate" style="font-size: 0.76rem;">Rachel Tan</strong>
                           <small class="text-muted d-block text-truncate" style="font-size: 0.66rem;">Eurhythmix ExCo</small>
                         </div>
-                        <span class="badge bg-danger bg-opacity-10 text-danger border flex-shrink-0" style="font-size: 0.65rem;">Arts</span>
+                        <span class="badge bg-danger bg-opacity-10 text-danger border flex-shrink-0" style="font-size: 0.65rem;">Logistics</span>
                       </button>
                     </div>
 
@@ -820,7 +819,7 @@ async function handleManualLogin() {
                           <strong class="d-block text-dark text-truncate" style="font-size: 0.76rem;">Darren Koh</strong>
                           <small class="text-muted d-block text-truncate" style="font-size: 0.66rem;">Samba Masala ExCo</small>
                         </div>
-                        <span class="badge bg-warning bg-opacity-25 text-dark border flex-shrink-0" style="font-size: 0.65rem;">Samba</span>
+                        <span class="badge bg-warning bg-opacity-25 text-dark border flex-shrink-0" style="font-size: 0.65rem;">Logistics</span>
                       </button>
                     </div>
 
@@ -836,7 +835,7 @@ async function handleManualLogin() {
                           <strong class="d-block text-dark text-truncate" style="font-size: 0.76rem;">Marcus Lim</strong>
                           <small class="text-muted d-block text-truncate" style="font-size: 0.66rem;">Eurhythmix Marketing</small>
                         </div>
-                        <span class="badge bg-danger bg-opacity-10 text-danger border flex-shrink-0" style="font-size: 0.65rem;">Mktg</span>
+                        <span class="badge bg-danger bg-opacity-10 text-danger border flex-shrink-0" style="font-size: 0.65rem;">Marketing</span>
                       </button>
                     </div>
 
@@ -852,7 +851,7 @@ async function handleManualLogin() {
                           <strong class="d-block text-dark text-truncate" style="font-size: 0.76rem;">Chloe Ang</strong>
                           <small class="text-muted d-block text-truncate" style="font-size: 0.66rem;">OSL Facility Admin</small>
                         </div>
-                        <span class="badge bg-dark text-white flex-shrink-0" style="font-size: 0.65rem;">Staff</span>
+                        <span class="badge bg-dark text-white flex-shrink-0" style="font-size: 0.65rem;">OSL Admin</span>
                       </button>
                     </div>
 
@@ -868,7 +867,7 @@ async function handleManualLogin() {
                           <strong class="d-block text-dark text-truncate" style="font-size: 0.76rem;">Dev Administrator</strong>
                           <small class="text-muted d-block text-truncate" style="font-size: 0.66rem;">All CCAs Super-Admin</small>
                         </div>
-                        <span class="badge text-white flex-shrink-0" style="background-color: var(--pulse-purple-transit); font-size: 0.65rem;">Dev</span>
+                        <span class="badge text-white flex-shrink-0" style="background-color: var(--pulse-purple-transit); font-size: 0.65rem;">Super Admin</span>
                       </button>
                     </div>
                   </div>
@@ -1167,7 +1166,8 @@ async function handleManualLogin() {
     padding-right: 0.5rem !important;
     justify-content: flex-start !important;
     overflow-x: hidden !important;
-    max-width: 100vw !important;
+    max-width: 100% !important;
+    width: 100% !important;
   }
   .liquid-glass-card {
     padding: 1.25rem 1rem !important;

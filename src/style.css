@@ -41,8 +41,15 @@
   --pulse-shadow-brand: 0 10px 25px -5px rgba(225, 29, 72, 0.25);
 }
 
-body {
+html, body, #app {
   margin: 0;
+  width: 100%;
+  max-width: 100%;
+  overflow-x: hidden;
+  box-sizing: border-box;
+}
+
+body {
   font-family: var(--pulse-font);
   background-color: var(--pulse-bg);
   color: var(--pulse-ink);
@@ -929,89 +936,127 @@ body {
 /* ==========================================================================
    Mobile Responsive Navigation & Anti-Overflow Architecture
    ========================================================================== */
+/* Native-Feeling Mobile Bottom Navigation Bar */
 .pulse-mobile-nav-container {
-  overflow-x: auto;
-  -webkit-overflow-scrolling: touch;
-  scrollbar-width: none;
-  -ms-overflow-style: none;
-  padding: 0.4rem 0.75rem 0.65rem;
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 1040;
   background: rgba(255, 255, 255, 0.96);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  border-bottom: 1px solid rgba(226, 232, 240, 0.85);
-  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.04);
-}
-.pulse-mobile-nav-container::-webkit-scrollbar {
-  display: none;
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border-top: 1px solid rgba(226, 232, 240, 0.9);
+  box-shadow: 0 -4px 16px rgba(15, 23, 42, 0.06);
+  padding: 0.35rem 0.5rem calc(0.35rem + env(safe-area-inset-bottom, 6px));
 }
 
 .pulse-mobile-nav {
   display: flex;
   align-items: center;
-  gap: 0.45rem;
-  white-space: nowrap;
-  width: max-content;
+  justify-content: space-around;
+  width: 100%;
+  gap: 0.25rem;
 }
 
 .pulse-mobile-pill {
-  display: inline-flex;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
   align-items: center;
-  gap: 0.35rem;
-  padding: 0.425rem 0.85rem;
-  font-size: 0.775rem;
-  font-weight: 700;
-  border-radius: 9999px;
-  border: 1px solid #e2e8f0;
-  background: #f8fafc;
-  color: #475569;
+  justify-content: center;
+  gap: 0.15rem;
+  padding: 0.3rem 0.2rem;
+  font-size: 0.65rem;
+  font-weight: 600;
+  border-radius: 0.65rem;
+  border: none;
+  background: transparent;
+  color: #64748b;
   text-decoration: none;
-  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  transition: all 0.15s ease;
   user-select: none;
+  min-width: 0;
 }
 
 .pulse-mobile-pill:active {
-  transform: scale(0.95);
+  transform: scale(0.92);
 }
 
 .pulse-mobile-pill.active {
-  background: linear-gradient(135deg, #e11d48, #be123c);
-  color: #ffffff;
-  border-color: #be123c;
-  box-shadow: 0 4px 12px rgba(225, 29, 72, 0.28);
+  color: #e11d48;
+  font-weight: 700;
+  background: rgba(225, 29, 72, 0.08);
 }
 
 .pulse-mobile-pill .pill-icon {
-  font-size: 0.875rem;
+  font-size: 1.15rem;
   line-height: 1;
+}
+
+.pulse-mobile-pill span:not(.pill-icon) {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
 }
 
 @media (max-width: 991.98px) {
   /* Prevent horizontal screen overflow */
-  html, body {
+  html, body, #app {
     overflow-x: hidden !important;
-    max-width: 100vw !important;
+    max-width: 100% !important;
+    width: 100% !important;
+  }
+
+  main {
+    padding-bottom: 80px !important;
+  }
+
+  /* Compact floating mascot on mobile placed above the bottom navigation */
+  .pip-container {
+    bottom: 74px !important;
+    right: 14px !important;
+  }
+
+  .pip-button {
+    width: 62px !important;
+    height: 62px !important;
+  }
+
+  .pip-cat {
+    width: 58px !important;
+    height: 58px !important;
   }
   
   /* Compact mobile header row */
+  .pulse-header {
+    max-width: 100% !important;
+    width: 100% !important;
+  }
+
   .pulse-header .container-fluid {
-    padding-left: 0.75rem !important;
-    padding-right: 0.75rem !important;
+    padding-left: 0.5rem !important;
+    padding-right: 0.5rem !important;
+    max-width: 100% !important;
   }
   
   .pulse-header #clubSwitcher {
-    max-width: 130px !important;
+    max-width: 140px !important;
     font-size: 0.75rem !important;
     text-overflow: ellipsis;
   }
 
   /* Prevent text and cards from bursting the phone viewport */
-  .container-xl, .container-fluid {
+  .container-xl, .container-fluid, .container {
     padding-left: 0.75rem !important;
     padding-right: 0.75rem !important;
+    max-width: 100% !important;
   }
 
-  .card, .pulse-case-card, .alert {
+  .card, .pulse-case-card, .alert, .pulse-card {
     word-break: break-word;
+    max-width: 100% !important;
   }
 }
 

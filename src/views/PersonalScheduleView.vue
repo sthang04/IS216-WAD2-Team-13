@@ -3,6 +3,8 @@ import { ref, computed, watch, nextTick } from 'vue';
 import { useRoute } from 'vue-router';
 import SimulatorInvitationInbox from '../components/SimulatorInvitationInbox.vue';
 import { getWalkTime } from '../services/onemap';
+import { supabase } from '../supabase';
+import { demoMemberId } from '../services/sessionState';
 
 const props = defineProps({
   active: { type: Boolean, default: true },
@@ -333,7 +335,27 @@ function toggleEventStatus(event) {
   }
   setTimeout(() => { toastMsg.value = ''; }, 3500);
 }
-
+// Asks Supabase to queue a Telegram alert about a schedule change.
+// action is 'added', 'updated' or 'removed'. The bot token stays on the server;
+// the Edge Function send-telegram-notifications does the actual sending.
+// It never throws: if the alert can't be sent, the schedule change still works.
+async function sendScheduleAlert(action, ev) {
+  if (props.readOnly || !supabase) return;
+  try {
+    const { error } = await supabase.rpc('rpc_notify_schedule_change', {
+      p_action: action,
+      p_title: ev.title,
+      p_date: ev.date,
+      p_start_time: ev.startTime,
+      p_end_time: ev.endTime,
+      p_venue: ev.venue,
+      p_demo_member_id: demoMemberId()
+    });
+    if (error) throw error;
+  } catch (err) {
+    console.log('Telegram schedule alert not sent:', err.message);
+  }
+}
 // Modal Form Actions
 function openAddModal() {
   if (blockedForGuest()) return
@@ -390,6 +412,7 @@ function saveEvent() {
         venue: combinedVenue
       });
       toastMsg.value = `Updated: "${eventForm.value.title}" successfully modified.`;
+      sendScheduleAlert('updated', scheduleEvents.value[idx]);
     }
   } else {
     scheduleEvents.value.push({
@@ -400,6 +423,7 @@ function saveEvent() {
       isCustom: true
     });
     toastMsg.value = `Added: "${eventForm.value.title}" scheduled on your calendar.`;
+    sendScheduleAlert('added', scheduleEvents.value[scheduleEvents.value.length - 1]);
   }
 
   // If the event was saved on a different day, jump to that day so you can see it
@@ -416,7 +440,8 @@ function deleteEvent(id) {
   const item = scheduleEvents.value.find(e => e.id === id);
   if (!item) return;
   scheduleEvents.value = scheduleEvents.value.filter(e => e.id !== id);
-  toastMsg.value = `Removed: "${item.title}" deleted from personal schedule.`;
+  toastMsg.value = `"${item.title}" was removed from your schedule.`;
+  sendScheduleAlert('removed', item);
   setTimeout(() => { toastMsg.value = ''; }, 4000);
 }
 
@@ -540,15 +565,15 @@ function exportCalendarICS() {
         </svg>
         <span class="small fw-semibold">{{ toastMsg }}</span>
       </div>
-      <button type="button" class="btn-close" @click="toastMsg = ''"></button>
-    </div>
+      <button type="button" class="btn-close" aria-label="Close message" @click="toastMsg = ''"></button>
+      </div>
 
     <!-- Day Navigation: switch days to view or prefill them in advance -->
     <div class="card border-0 shadow-sm p-2 mb-4" style="border-radius: 0.75rem; background-color: var(--pulse-card-bg);">
       <div class="d-flex flex-wrap justify-content-between align-items-center gap-2">
         <div class="d-flex align-items-center gap-2">
           <button type="button" class="btn btn-sm btn-outline-secondary px-2 py-0" aria-label="Previous day" @click="shiftDay(-1)">‹</button>
-          <div class="fw-bold small text-center" style="min-width: 230px;">{{ selectedDateLabel }}</div>
+          <div class="fw-bold small text-center" style="min-width: 140px;">{{ selectedDateLabel }}</div>
           <button type="button" class="btn btn-sm btn-outline-secondary px-2 py-0" aria-label="Next day" @click="shiftDay(1)">›</button>
         </div>
         <div class="d-flex align-items-center gap-2">
@@ -723,6 +748,7 @@ function exportCalendarICS() {
 
           <div v-if="filteredEvents.length === 0" class="pulse-card p-4 shadow-sm text-center text-muted small">
             No events to show for this day{{ selectedCategory !== 'All' ? ' in this category' : '' }}.
+            <span v-if="!readOnly">Use "Add Event / Class" to plan something.</span>
           </div>
 
           <div
@@ -836,7 +862,7 @@ function exportCalendarICS() {
             <h6 class="modal-title fw-bold text-dark mb-0">
               {{ isEditing ? 'Edit Schedule Event' : 'Add Custom Event / Class' }}
             </h6>
-            <button type="button" class="btn-close" @click="closeModal"></button>
+            <button type="button" class="btn-close" aria-label="Close" @click="closeModal"></button>
           </div>
 
           <form @submit.prevent="saveEvent">

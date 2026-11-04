@@ -467,11 +467,11 @@ async function runAction(booking, action) {
     selectable
   />
 
-  <div v-if="session.memberships.length && !canManageActiveClub" class="pulse-banner pulse-banner-view">
-    <strong>View only.</strong> You are {{ session.memberships.find(m => m.club_id === session.activeClubId)?.role_name }} of {{ activeClubName }}.
+  <div v-if="!session.isDev && session.memberships.length && !canManageActiveClub" class="pulse-banner pulse-banner-view">
+    <strong>View only.</strong> You are {{ (session.memberships.find(m => m.club_id === session.activeClubId)?.role_name) || 'viewing as a guest' }} of {{ activeClubName }}.
     Only its Logistics Director can release, claim or join waitlists.
   </div>
-  <div v-else-if="!session.memberships.length && !session.isOslAdmin" class="pulse-banner pulse-banner-view">
+  <div v-else-if="!session.isDev && !session.memberships.length && !session.isOslAdmin" class="pulse-banner pulse-banner-view">
     <strong>Browsing as a public viewer.</strong> Sign in as a CCA Logistics Director to release or claim slots.
   </div>
   <div v-else-if="canManageActiveClub && myEntries.some(e => e.status === 'OFFERED')" class="pulse-banner pulse-banner-hot">

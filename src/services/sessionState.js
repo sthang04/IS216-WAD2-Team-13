@@ -5,7 +5,7 @@
 // Where the data comes from (Supabase):
 //   auth.users -> members (auth_user_id) -> club_memberships -> exco_roles
 // The view v_user_club_memberships joins these for us: one row per membership.
- 
+
 // ref() wraps a value so Vue can watch it. In JS you read and change it through .value
 //   (session.value.memberName); in a template Vue unwraps it for you (session.memberName).
 // computed() makes a value that is recalculated automatically whenever the data it reads changes.
@@ -14,11 +14,103 @@ import { ref, computed } from 'vue'
 import { supabase } from '../supabase'
 // restoreSession() asks authService who is signed in
 import { restoreSession } from './authService'
- 
+import { ALL_CLUBS } from './authProfiles'
+
+export const KNOWN_CLUB_IDS = {
+  'ardiente': 1,
+  'smu ardiente': 1,
+  'caderas latinas': 2,
+  'smu caderas latinas': 2,
+  'chamber choir': 3,
+  'smu chamber choir': 3,
+  'chinese orchestra': 4,
+  'smu chinese orchestra': 4,
+  'eurhythmix': 5,
+  'smu eurhythmix': 5,
+  'funk movement': 6,
+  'smu funk movement': 6,
+  'guitarissimo': 7,
+  'smu guitarissimo': 7,
+  'indancity': 8,
+  'smu indancity': 8,
+  'ivory keys': 9,
+  'smu ivory keys': 9,
+  'samba masala': 10,
+  'smu samba masala': 10,
+  'soundfoundry': 11,
+  'smu soundfoundry': 11,
+  'stageit': 12,
+  'stage it': 12,
+  'smu stageit': 12,
+  'smu stage it': 12,
+  'symphonia': 13,
+  'smu symphonia': 13,
+  'voix': 14,
+  'smu voix': 14,
+  'rentak': 17,
+  'smu rentak': 17,
+  'office of student life': 19,
+  'osl': 19,
+  'artdicted': 21,
+  'smu artdicted': 21,
+  'ballare': 22,
+  'smu ballare': 22,
+  'broadcast & entertainment': 23,
+  'smu broadcast & entertainment': 23,
+  'literati': 24,
+  'smu literati': 24,
+  'malay language & cultural club': 25,
+  'smu malay language & cultural club': 25,
+  'mlcc': 25,
+  'smusaic': 26,
+  'smu smusaic': 26,
+  'stereometa': 27,
+  'smu stereometa': 27,
+  'smu red cross': 28,
+  'red cross': 28,
+  'rotaract club': 29,
+  'smu rotaract club': 29,
+  'rotaract': 29,
+  'acf exco': 30,
+  'acf': 30
+}
+
+export function resolveClubId(nameOrId) {
+  if (typeof nameOrId === 'number' && !isNaN(nameOrId)) {
+    return nameOrId
+  }
+  const str = String(nameOrId || '').trim().toLowerCase()
+  if (KNOWN_CLUB_IDS[str]) {
+    return KNOWN_CLUB_IDS[str]
+  }
+  const clean = str.replace(/^smu\s+/i, '').trim()
+  if (KNOWN_CLUB_IDS[clean]) {
+    return KNOWN_CLUB_IDS[clean]
+  }
+  let hash = 0
+  for (let i = 0; i < str.length; i++) {
+    hash = (hash << 5) - hash + str.charCodeAt(i)
+    hash |= 0
+  }
+  return Math.abs(hash % 900) + 100
+}
+
+export function resolveClubName(clubId) {
+  const id = Number(clubId)
+  for (const [name, cId] of Object.entries(KNOWN_CLUB_IDS)) {
+    if (cId === id && !name.startsWith('smu ') && name !== 'osl' && name !== 'mlcc' && name !== 'acf' && name !== 'rotaract' && name !== 'red cross') {
+      const match = ALL_CLUBS.find((c) => c.toLowerCase() === name)
+      if (match) return match
+      return name.split(' ').map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')
+    }
+  }
+  return ''
+}
+
 // Keys used to remember choices in the browser's localStorage
 const DEMO_KEY = 'pulse_demo_member_id'   // demo mode: which persona was picked last
 const CLUB_KEY = 'pulse_active_club_id'   // which CCA was picked in the "Acting for" menu
- 
+
 // The facility session. It starts as "Public viewer" and is filled in by initSession() below.
 export const session = ref({
   ready: false,                                                // true once initSession() has finished (pages wait for this)
@@ -27,18 +119,18 @@ export const session = ref({
   memberId: null,                                              // members.id of the person using the page
   memberName: 'Public viewer',                                 // shown in the facility navbar
   isOslAdmin: false,                                           // true if their exco_roles row has is_admin_role
+  isDev: false,                                                // true when logged in as Developer / Super Admin
   memberships: [],                                             // the CCAs they belong to, each with its permission flags
   personas: [],                                                // demo mode: everyone you can switch to
   activeClubId: null                                           // the CCA picked in the "Acting for" menu
 })
- 
+
 // The small pop-up message at the top of the facility pages
 export const toast = ref({ message: '', type: 'info' })
- 
+
 // ---------------- Computed values (recalculate automatically) ----------------
- 
+
 // The membership for the CCA currently picked in "Acting for", or null if none.
-// A plain for loop: check each membership and return the one whose club matches.
 export const activeMembership = computed(() => {
   const memberships = session.value.memberships
   for (let i = 0; i < memberships.length; i++) {
@@ -46,51 +138,73 @@ export const activeMembership = computed(() => {
       return memberships[i]
     }
   }
+  if (session.value.isDev && session.value.activeClubId) {
+    const id = session.value.activeClubId
+    const name = resolveClubName(id) || 'Eurhythmix'
+    return {
+      club_id: id,
+      club_name: name,
+      short_name: name,
+      role_name: 'Developer / Super Admin',
+      role_code: 'DEV_SUPER_ADMIN',
+      can_release_booking: true,
+      can_claim_booking: true,
+      can_manage_waitlist: true,
+      can_send_transfer_email: true,
+      can_manage_facilities: true
+    }
+  }
   return null
 })
- 
+
 // The name of that CCA, or '' if there is none
 export const activeClubName = computed(() => {
   if (activeMembership.value === null) {
     return ''
   }
-  return activeMembership.value.club_name
+  return activeMembership.value.short_name || activeMembership.value.club_name.replace(/^SMU\s+/i, '')
 })
- 
+
 // Anyone with a membership may open My Club
 export const canViewMyClub = computed(() => {
   return activeMembership.value !== null
 })
- 
+
 // Only roles whose exco_roles row allows releasing or claiming (the Logistics Director)
-// can act on bookings. Everyone else is view-only on the facility pages.
+// can act on bookings. Developer / Super Admin can always act across all CCAs.
 export const canManageActiveClub = computed(() => {
+  if (session.value.isDev) {
+    return true
+  }
   if (activeMembership.value === null) {
     return false
   }
   return activeMembership.value.can_release_booking || activeMembership.value.can_claim_booking
 })
- 
+
 // One computed per exco_roles flag, so buttons can check exactly the permission they need.
-// "a !== null && a.flag" -> false when there is no membership, otherwise the flag itself.
 export const canRelease = computed(() => {
+  if (session.value.isDev) return true
   return activeMembership.value !== null && activeMembership.value.can_release_booking
 })
- 
+
 export const canClaim = computed(() => {
+  if (session.value.isDev) return true
   return activeMembership.value !== null && activeMembership.value.can_claim_booking
 })
- 
+
 export const canManageWaitlist = computed(() => {
+  if (session.value.isDev) return true
   return activeMembership.value !== null && activeMembership.value.can_manage_waitlist
 })
- 
+
 export const canSendTransferEmail = computed(() => {
+  if (session.value.isDev) return true
   return activeMembership.value !== null && activeMembership.value.can_send_transfer_email
 })
- 
+
 // ---------------- Helpers ----------------
- 
+
 // The database functions (rpc_*) take an optional p_demo_member_id.
 // With a real login the database works out who you are from the login itself, so we send null.
 // Only in demo mode with no login do we send the chosen persona's member id.
@@ -100,7 +214,7 @@ export function demoMemberId() {
   }
   return session.value.memberId
 }
- 
+
 // localStorage can throw an error (e.g. in a private window), so wrap it in try/catch
 function readStorage(key) {
   try {
@@ -109,7 +223,7 @@ function readStorage(key) {
     return null
   }
 }
- 
+
 function writeStorage(key, value) {
   try {
     localStorage.setItem(key, value)
@@ -117,20 +231,20 @@ function writeStorage(key, value) {
     console.log(error.message)
   }
 }
- 
+
 // The view v_user_club_memberships returns ONE ROW PER MEMBERSHIP.
 // Someone in 2 CCAs comes back as 2 rows. This groups the rows so each person
 // appears once, with a list of their CCAs inside.
 function groupPersonas(rows) {
   const people = []
- 
+
   rows.forEach((row) => {
     // Skip old memberships (club_memberships keeps history; only active ones count).
     // "return" inside forEach just skips to the next row.
     if (row.membership_is_active === false) {
       return
     }
- 
+
     // Find this person in the list; if they aren't there yet, add them.
     // .find() returns the first item that matches, or undefined if none does.
     let person = people.find((p) => p.member_id === Number(row.member_id))
@@ -144,19 +258,20 @@ function groupPersonas(rows) {
       }
       people.push(person)
     }
- 
+
     // OSL staff: their role has is_admin_role. "Office of Student Life" is not a CCA
     // they act for, so we mark them as OSL admin and don't add it to their CCA list.
     if (row.is_admin_role === true) {
       person.is_osl_admin = true
       return
     }
- 
+
     if (row.club_id !== null) {
       // Permissions come only from the exco_roles flags, never from the role's name
       person.memberships.push({
         club_id: Number(row.club_id),
         club_name: row.club_name,
+        short_name: row.short_name || row.club_name.replace(/^SMU\s+/i, ''),
         role_name: row.role_name,       // e.g. 'Logistics Director', 'President'
         role_code: row.role_code,
         can_release_booking: row.can_release_booking === true,
@@ -168,31 +283,33 @@ function groupPersonas(rows) {
       })
     }
   })
- 
+
   return people
 }
- 
+
 // Copy one person's details into the session (or reset to "Public viewer" when person is null)
 function applyMember(person) {
   if (person === null) {
     session.value.memberId = null
     session.value.memberName = 'Public viewer'
     session.value.isOslAdmin = false
+    session.value.isDev = false
     session.value.memberships = []
     session.value.activeClubId = null
     return
   }
- 
+
   session.value.memberId = person.member_id
   session.value.memberName = person.full_name
   session.value.isOslAdmin = person.is_osl_admin
- 
+  session.value.isDev = !!person.is_dev
+
   // CCAs where they can act are listed first, then view-only ones.
   // concat() joins two arrays into a new one.
   const actingClubs = person.memberships.filter((m) => m.can_manage_facilities)
   const viewOnlyClubs = person.memberships.filter((m) => !m.can_manage_facilities)
   session.value.memberships = actingClubs.concat(viewOnlyClubs)
- 
+
   // Re-open the CCA picked last time if they still belong to it;
   // otherwise the first CCA in the list; otherwise none (null)
   const savedClubId = Number(readStorage(CLUB_KEY))
@@ -205,7 +322,7 @@ function applyMember(person) {
     session.value.activeClubId = null
   }
 }
- 
+
 // ---------------- Loading the session ----------------
 // Called when the facility pages open. Steps:
 //   1. ask authService who is signed in
@@ -216,11 +333,11 @@ export async function initSession() {
   // Note: we don't set ready back to false here. If initSession runs again
   // (someone signs in or out), the current page stays on screen instead of
   // flashing back to the loading spinner.
- 
+
   try {
     // Step 1: the team's authService decides who is signed in
     const teamPersona = await restoreSession()
- 
+
     // If no persona is signed in, reset to public viewer with no permissions
     if (!teamPersona) {
       session.value.authUserId = null
@@ -228,7 +345,7 @@ export async function initSession() {
       applyMember(null)
       return
     }
- 
+
     // No Supabase keys (supabase.js exports null): the facility calendar needs
     // the database, so everyone is a Public viewer. Stop before any supabase call.
     if (!supabase) {
@@ -237,7 +354,7 @@ export async function initSession() {
       applyMember(null)
       return
     }
- 
+
     // Also get the Supabase login itself, for its user id
     const authResponse = await supabase.auth.getSession()
     if (authResponse.error) {
@@ -249,7 +366,7 @@ export async function initSession() {
     } else {
       session.value.authUserId = null
     }
- 
+
     // Step 2: read the rows
     let rows = []
     if (session.value.authUserId) {
@@ -275,27 +392,41 @@ export async function initSession() {
       }
       rows = response.data
     }
- 
+
     // Step 3: one entry per person
     session.value.personas = groupPersonas(rows)
- 
+
     // Step 4: choose who is using the page
     if (session.value.authUserId) {
       // Signed in: the person whose login matches
       let me = session.value.personas.find((p) => p.auth_user_id === session.value.authUserId)
-      if (!me && teamPersona && teamPersona.cca) {
+      const isDev = !!(teamPersona && (teamPersona.isDev || teamPersona.role === 'dev'))
+      if (!me && teamPersona && (teamPersona.cca || isDev)) {
         const isMarketing = (teamPersona.roleLabel || '').toLowerCase().includes('marketing')
-        const isLd = !isMarketing && ((teamPersona.roleLabel || '').toLowerCase().includes('logistics') || (teamPersona.roleLabel || '').toLowerCase().includes('exco'))
-        const roleName = isMarketing ? 'Marketing Director' : (isLd ? 'Logistics Director' : 'ExCo Member')
-        me = {
-          member_id: teamPersona.memberId || 999,
-          full_name: teamPersona.name,
-          auth_user_id: session.value.authUserId,
-          is_osl_admin: teamPersona.role === 'admin',
-          memberships: [
+        const isLd = isDev || (!isMarketing && ((teamPersona.roleLabel || '').toLowerCase().includes('logistics') || (teamPersona.roleLabel || '').toLowerCase().includes('exco') || (teamPersona.roleLabel || '').toLowerCase().includes('admin')))
+        const roleName = isDev ? 'Developer / Super Admin' : (isMarketing ? 'Marketing Director' : (isLd ? 'Logistics Director' : 'ExCo Member'))
+
+        let memberships = []
+        if (isDev) {
+          memberships = ALL_CLUBS.map((club) => ({
+            club_id: resolveClubId(club),
+            club_name: club,
+            short_name: club,
+            role_name: 'Developer / Super Admin',
+            role_code: 'DEV_SUPER_ADMIN',
+            can_release_booking: true,
+            can_claim_booking: true,
+            can_manage_waitlist: true,
+            can_send_transfer_email: true,
+            can_manage_facilities: true
+          }))
+        } else {
+          const clubId = resolveClubId(teamPersona.cca)
+          memberships = [
             {
-              club_id: 1,
+              club_id: clubId,
               club_name: teamPersona.cca,
+              short_name: teamPersona.cca,
               role_name: roleName,
               role_code: isLd ? 'LD' : 'MD',
               can_release_booking: isLd,
@@ -306,22 +437,63 @@ export async function initSession() {
             }
           ]
         }
+        me = {
+          member_id: teamPersona.memberId || 999,
+          full_name: teamPersona.name,
+          auth_user_id: session.value.authUserId,
+          is_osl_admin: teamPersona.role === 'admin',
+          is_dev: isDev,
+          memberships
+        }
+      } else if (me && isDev) {
+        me.is_dev = true
+        ALL_CLUBS.forEach((club) => {
+          const cId = resolveClubId(club)
+          if (!me.memberships.some((m) => m.club_id === cId)) {
+            me.memberships.push({
+              club_id: cId,
+              club_name: club,
+              short_name: club,
+              role_name: 'Developer / Super Admin',
+              role_code: 'DEV_SUPER_ADMIN',
+              can_release_booking: true,
+              can_claim_booking: true,
+              can_manage_waitlist: true,
+              can_send_transfer_email: true,
+              can_manage_facilities: true
+            })
+          }
+        })
       }
       applyMember(me || null)
-    } else if (teamPersona && teamPersona.cca) {
+    } else if (teamPersona && (teamPersona.cca || teamPersona.isDev)) {
       // Signed in via local session (e.g. 1-click evaluator persona)
+      const isDev = !!(teamPersona.isDev || teamPersona.role === 'dev')
       const isMarketing = (teamPersona.roleLabel || '').toLowerCase().includes('marketing')
-      const isLd = !isMarketing && ((teamPersona.roleLabel || '').toLowerCase().includes('logistics') || (teamPersona.roleLabel || '').toLowerCase().includes('exco'))
-      const roleName = isMarketing ? 'Marketing Director' : (isLd ? 'Logistics Director' : 'ExCo Member')
-      const localMe = {
-        member_id: teamPersona.memberId || 999,
-        full_name: teamPersona.name,
-        auth_user_id: null,
-        is_osl_admin: teamPersona.role === 'admin',
-        memberships: [
+      const isLd = isDev || (!isMarketing && ((teamPersona.roleLabel || '').toLowerCase().includes('logistics') || (teamPersona.roleLabel || '').toLowerCase().includes('exco') || (teamPersona.roleLabel || '').toLowerCase().includes('admin')))
+      const roleName = isDev ? 'Developer / Super Admin' : (isMarketing ? 'Marketing Director' : (isLd ? 'Logistics Director' : 'ExCo Member'))
+
+      let memberships = []
+      if (isDev) {
+        memberships = ALL_CLUBS.map((club) => ({
+          club_id: resolveClubId(club),
+          club_name: club,
+          short_name: club,
+          role_name: 'Developer / Super Admin',
+          role_code: 'DEV_SUPER_ADMIN',
+          can_release_booking: true,
+          can_claim_booking: true,
+          can_manage_waitlist: true,
+          can_send_transfer_email: true,
+          can_manage_facilities: true
+        }))
+      } else {
+        const clubId = resolveClubId(teamPersona.cca)
+        memberships = [
           {
-            club_id: 1,
+            club_id: clubId,
             club_name: teamPersona.cca,
+            short_name: teamPersona.cca,
             role_name: roleName,
             role_code: isLd ? 'LD' : 'MD',
             can_release_booking: isLd,
@@ -331,6 +503,15 @@ export async function initSession() {
             can_manage_facilities: isLd
           }
         ]
+      }
+
+      const localMe = {
+        member_id: teamPersona.memberId || 999,
+        full_name: teamPersona.name,
+        auth_user_id: null,
+        is_osl_admin: teamPersona.role === 'admin',
+        is_dev: isDev,
+        memberships
       }
       applyMember(localMe)
     } else if (session.value.demoMode) {
@@ -364,49 +545,67 @@ export async function initSession() {
     session.value.ready = true
   }
 }
- 
+
 // Demo mode only: act as a different persona (ignored when someone is really signed in)
 export function switchPersona(memberId) {
   if (!session.value.demoMode || session.value.authUserId) {
     return
   }
- 
+
   const person = session.value.personas.find((p) => p.member_id === Number(memberId))
   if (!person) {
     console.log('Demo persona not found: ' + memberId)
     return
   }
- 
+
   // Forget the old persona's CCA so it isn't carried over to the new one
   try {
     localStorage.removeItem(CLUB_KEY)
   } catch (error) {
     console.log(error.message)
   }
- 
+
   writeStorage(DEMO_KEY, String(person.member_id))
   applyMember(person)
 }
- 
-// "Acting for" menu: switch CCA, but only to one this person belongs to
-export function setActiveClub(clubId) {
-  const id = Number(clubId)
+
+// "Acting for" menu: switch CCA, but only to one this person belongs to (or any CCA for Dev)
+export function setActiveClub(clubIdOrName) {
+  let id = Number(clubIdOrName)
+  if (isNaN(id) || (typeof clubIdOrName === 'string' && isNaN(Number(clubIdOrName)))) {
+    id = resolveClubId(clubIdOrName)
+  }
   const belongs = session.value.memberships.some((m) => m.club_id === id)
-  if (!belongs) {
+  if (!belongs && !session.value.isDev) {
     return
+  }
+  if (session.value.isDev && !belongs) {
+    const clubName = resolveClubName(id) || (typeof clubIdOrName === 'string' ? clubIdOrName : 'Eurhythmix')
+    session.value.memberships.push({
+      club_id: id,
+      club_name: clubName,
+      short_name: clubName,
+      role_name: 'Developer / Super Admin',
+      role_code: 'DEV_SUPER_ADMIN',
+      can_release_booking: true,
+      can_claim_booking: true,
+      can_manage_waitlist: true,
+      can_send_transfer_email: true,
+      can_manage_facilities: true
+    })
   }
   session.value.activeClubId = id
   writeStorage(CLUB_KEY, String(id))   // remember it for next time
 }
- 
+
 let toastTimer = null
- 
+
 // Show a pop-up message. type is 'info', 'success' or 'danger' (Bootstrap colour names).
 // "type = 'info'" is a DEFAULT PARAMETER: used when showToast is called without a type.
 export function showToast(message, type = 'info') {
   toast.value.message = message
   toast.value.type = type
- 
+
   // Errors stay a little longer so they can be read
   let seconds = 5
   if (type === 'danger') {
@@ -418,7 +617,7 @@ export function showToast(message, type = 'info') {
     toast.value.message = ''
   }, seconds * 1000)
 }
- 
+
 // Reload the facility session when someone signs in or out anywhere in the app.
 // onAuthStateChange runs our function on every login event of the shared Supabase client.
 // supabase is null when the keys are missing, so only listen when it exists.
@@ -430,7 +629,7 @@ if (supabase) {
     if (event !== 'SIGNED_IN' && event !== 'SIGNED_OUT') {
       return
     }
- 
+
     // Supabase also sends SIGNED_IN every time you come back to the browser tab,
     // even though the same person is still signed in. Reloading then would redraw
     // the page each time, so only reload when the signed-in person really changed.
@@ -441,7 +640,7 @@ if (supabase) {
     if (newUserId === session.value.authUserId) {
       return
     }
- 
+
     // Supabase can freeze if we make another Supabase call INSIDE this callback.
     // setTimeout(..., 0) runs initSession just after the callback has finished, which avoids that.
     setTimeout(() => {

@@ -152,7 +152,7 @@ function onExpired() {
   />
 
 
-  <div v-if="session.activeClubId && !canManageActiveClub" class="pulse-banner pulse-banner-view">
+  <div v-if="!session.isDev && session.activeClubId && !canManageActiveClub" class="pulse-banner pulse-banner-view">
     <strong>View only.</strong> You can follow {{ activeClubName }}'s queue positions; only its Logistics Director can join, leave or accept.
   </div>
 

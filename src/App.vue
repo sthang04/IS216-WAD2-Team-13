@@ -9,7 +9,7 @@ import {
   enterGuest, restoreSession, signOut,
   canOpenView, canResetDemo as canResetDemoFor, homeView,
 } from './services/authService';
-import { session as facilitySession, initSession, setActiveClub } from './services/sessionState';
+import { session as facilitySession, initSession, setActiveClub, resolveClubId } from './services/sessionState';
 import {
   notificationStore, unreadCount, soonestOfferSeconds,
   startNotifications, reloadAll, setPipStatic, setPipQuiet
@@ -88,9 +88,19 @@ const canResetDemo = computed(() => canResetDemoFor(sessionPersona.value))
  
 // The facility pages act for the club picked in this header (their own navbar is gone)
 watch([selectedClub, () => facilitySession.value.memberships], ([club]) => {
-  const membership = facilitySession.value.memberships.find((m) => m.club_name === club)
-  if (membership && membership.club_id !== facilitySession.value.activeClubId) {
-    setActiveClub(membership.club_id)
+  if (!club) return
+  if (activePersona.value && activePersona.value.cca !== club) {
+    activePersona.value = { ...activePersona.value, cca: club }
+  }
+  const normalized = club.replace(/^SMU\s+/i, '').trim().toLowerCase()
+  const membership = facilitySession.value.memberships.find((m) => {
+    const mName = (m.club_name || '').replace(/^SMU\s+/i, '').trim().toLowerCase()
+    const mShort = (m.short_name || '').trim().toLowerCase()
+    return mName === normalized || mShort === normalized || m.club_name === club
+  })
+  const targetId = membership ? membership.club_id : resolveClubId(club)
+  if (targetId !== facilitySession.value.activeClubId) {
+    setActiveClub(targetId)
     startNotifications()
   }
 })
@@ -117,6 +127,9 @@ function switchPersona(personaKey) {
   activePersona.value = p
   selectedClub.value = p.cca
   profileMenuOpen.value = false
+  if (p.cca) {
+    setActiveClub(resolveClubId(p.cca))
+  }
   
   if (p.role === 'admin' || !canOpenView(p, currentView.value)) {
     currentView.value = homeView(p)
@@ -247,6 +260,9 @@ function applySession(persona, { stayOnLanding = false } = {}) {
   sessionPersona.value = persona
   activePersona.value = persona
   selectedClub.value = persona.cca
+  if (persona.cca) {
+    setActiveClub(resolveClubId(persona.cca))
+  }
   isLoggedIn.value = true
   loadNotificationSession()
   if (stayOnLanding) {
@@ -397,14 +413,14 @@ onMounted(async () => {
             </a>
  
             <!-- Case A: Admin Mode -->
-            <div v-if="isAdmin" class="badge bg-danger px-3 py-2" style="border-radius: 0.65rem; font-size: 0.75rem;">
-              OSL Facility Administration
+            <div v-if="isAdmin" class="badge bg-danger px-2 px-sm-3 py-2 text-truncate" style="border-radius: 0.65rem; font-size: 0.75rem; max-width: 150px;">
+              <span class="d-none d-sm-inline">OSL Facility </span>Admin<span class="d-none d-sm-inline">istration</span>
             </div>
  
             <!-- Case B: Dev Mode (All 24 CCAs Unlocked) -->
             <div v-else-if="isDev" class="d-flex align-items-center gap-2">
               <div class="input-group input-group-sm">
-                <span class="input-group-text bg-white border-end-0 text-muted" style="border-radius: 0.65rem 0 0 0.65rem;">
+                <span class="input-group-text bg-white border-end-0 text-muted d-none d-sm-flex" style="border-radius: 0.65rem 0 0 0.65rem;">
                   <span style="font-size: 0.725rem; font-weight: 700; text-transform: uppercase; color: var(--pulse-purple-transit);">Dev Scope:</span>
                 </span>
                 <select 
@@ -423,14 +439,14 @@ onMounted(async () => {
             </div>
  
             <!-- Case C: Guest (View Only, no club to act for) -->
-            <div v-else-if="isGuest" class="badge bg-light text-muted border px-3 py-2" style="border-radius: 0.65rem; font-size: 0.75rem;">
-              Guest • View Only
+            <div v-else-if="isGuest" class="badge bg-light text-muted border px-2 px-sm-3 py-2 text-truncate" style="border-radius: 0.65rem; font-size: 0.75rem; max-width: 140px;">
+              Guest<span class="d-none d-sm-inline"> • View Only</span>
             </div>
  
             <!-- Case D: Regular Club ExCo (Strictly Scoped to their CCA) -->
             <div v-else class="d-flex align-items-center">
               <div class="input-group input-group-sm">
-                <span class="input-group-text bg-white border-end-0 text-muted" style="border-radius: 0.65rem 0 0 0.65rem;">
+                <span class="input-group-text bg-white border-end-0 text-muted d-none d-sm-flex" style="border-radius: 0.65rem 0 0 0.65rem;">
                   <span style="font-size: 0.725rem; font-weight: 700; text-transform: uppercase; color: var(--pulse-primary);">Club:</span>
                 </span>
                 <select 
@@ -756,7 +772,7 @@ onMounted(async () => {
           <div class="d-flex align-items-center gap-2">
             <strong>Notice:</strong> {{ toast }}
           </div>
-          <button type="button" class="btn-close" @click="toast = ''"></button>
+          <button type="button" class="btn-close" aria-label="Close notice" @click="toast = ''"></button>
         </div>
  
         <!-- Guest banner: every page is view-only -->

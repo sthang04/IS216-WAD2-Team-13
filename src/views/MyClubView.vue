@@ -286,7 +286,7 @@ async function confirmPending() {
       </button>
     </div>
 
-    <div v-if="!canManageActiveClub" class="pulse-banner pulse-banner-view">
+    <div v-if="!session.isDev && !canManageActiveClub" class="pulse-banner pulse-banner-view">
       <strong>View only.</strong> Release and claim are limited to {{ activeClubName }}'s Logistics Director.
     </div>
     <RouterLink v-if="liveOffers" to="/facilities/waitlist" class="pulse-banner pulse-banner-hot d-block text-decoration-none">
