@@ -350,14 +350,19 @@ function resetPlan() {
 /* 4. TIMELINE                                                         */
 /* ================================================================== */
 
-// From the first block to the last, rounded out to the half hour (09:00–18:00 if empty)
+// The event's own start and end (set-up to teardown), stretched to fit any task
+// outside it, rounded out to the half hour (09:00–18:00 if there's nothing yet)
 const allBlocks = computed(() => crew.value.flatMap(p => p.blocks))
-const dayStart = computed(() =>
-  allBlocks.value.length ? Math.floor(Math.min(...allBlocks.value.map(b => b.start)) / 30) * 30 : toMinutes('09:00')
-)
-const dayEnd = computed(() =>
-  allBlocks.value.length ? Math.ceil(Math.max(...allBlocks.value.map(b => b.end)) / 30) * 30 : toMinutes('18:00')
-)
+const dayStart = computed(() => {
+  const starts = allBlocks.value.map(b => b.start)
+  if (event.value?.start != null) starts.push(event.value.start)
+  return starts.length ? Math.floor(Math.min(...starts) / 30) * 30 : toMinutes('09:00')
+})
+const dayEnd = computed(() => {
+  const ends = allBlocks.value.map(b => b.end)
+  if (event.value?.end != null) ends.push(event.value.end)
+  return ends.length ? Math.ceil(Math.max(...ends) / 30) * 30 : toMinutes('18:00')
+})
 const halfHours = computed(() => {
   const ticks = []
   for (let t = dayStart.value; t < dayEnd.value; t += 30) ticks.push(t)
@@ -401,6 +406,14 @@ const eventDay = computed(() => {
 })
 const isEventDay = computed(() => eventDay.value === 'today')
 
+const daysAway = computed(() => {
+  if (!event.value) return 0
+  const [y, m, d] = event.value.date.split('-').map(Number)
+  const [ty, tm, td] = today.value.split('-').map(Number)
+  return Math.round((new Date(y, m - 1, d) - new Date(ty, tm - 1, td)) / 86400000)
+})
+
+// Event day: the real time. Otherwise: a preview a bit into the day.
 function resetClock() {
   followLive.value = true
   if (isEventDay.value) {
@@ -408,11 +421,6 @@ function resetClock() {
   } else {
     showClock.value = dayStart.value + Math.min(120, Math.floor((dayEnd.value - dayStart.value) / 2 / 15) * 15)
   }
-}
-
-function moveClock(mins) {
-  followLive.value = false
-  showClock.value = Math.min(dayEnd.value, Math.max(dayStart.value, roundToQuarter(showClock.value) + mins))
 }
 
 // Keep the live clock (and today's date) up to date
@@ -462,22 +470,20 @@ const myNext = computed(() => (me.value ? nextBlock(me.value) : null))
 /* ================================================================== */
 
 const activeTab = ref('grid')
-const showMoreMenu = ref(false)
 const showDelayMenu = ref(false)
 
-// Clicking anywhere else closes the dropdowns
-function closeMoreMenu(e) {
-  if (!e.target.closest('.ops-more')) showMoreMenu.value = false
+// Clicking anywhere else closes the delay dropdown
+function closeDelayMenu(e) {
   if (!e.target.closest('.ops-delay')) showDelayMenu.value = false
 }
 
 onMounted(() => {
   if (window.innerWidth < 768) activeTab.value = 'me'
-  document.addEventListener('click', closeMoreMenu)
+  document.addEventListener('click', closeDelayMenu)
   clockTimer = setInterval(tickClock, 30000)
 })
 onBeforeUnmount(() => {
-  document.removeEventListener('click', closeMoreMenu)
+  document.removeEventListener('click', closeDelayMenu)
   clearInterval(clockTimer)
 })
 
@@ -577,6 +583,8 @@ function openNewEvent() {
     name: '',
     date: '',
     venue: '',
+    start: '',
+    end: '',
     mainStart: '',
     mainEnd: '',
     mainTitle: 'Performance',
@@ -592,6 +600,9 @@ function openEditEvent() {
     name: event.value.name,
     date: event.value.date,
     venue: event.value.venue,
+    // Older events have no times saved: start from what the tasks cover
+    start: formatTime(event.value.start ?? dayStart.value),
+    end: formatTime(event.value.end ?? dayEnd.value),
     crewIds: crew.value.map(p => p.memberId)
   }
   eventEditorError.value = ''
@@ -608,11 +619,18 @@ function saveEvent() {
   if (!e.name.trim()) return (eventEditorError.value = 'Give the event a name.')
   if (!e.date) return (eventEditorError.value = 'Pick a date.')
   if (!e.crewIds.length) return (eventEditorError.value = 'Pick at least one ExCo for the crew.')
+  if (!e.start || !e.end) return (eventEditorError.value = 'Give the event a start and end time (from set-up to teardown).')
+  const start = toMinutes(e.start)
+  const end = toMinutes(e.end)
+  if (end <= start) return (eventEditorError.value = 'The event must end after it starts.')
 
   if (e.mode === 'add') {
     const hasMain = e.mainStart && e.mainEnd
     if (hasMain && toMinutes(e.mainEnd) <= toMinutes(e.mainStart)) {
-      return (eventEditorError.value = 'The end time must be after the start time.')
+      return (eventEditorError.value = 'The fixed time must end after it starts.')
+    }
+    if (hasMain && (toMinutes(e.mainStart) < start || toMinutes(e.mainEnd) > end)) {
+      return (eventEditorError.value = `The fixed time has to be within the event (${e.start}–${e.end}).`)
     }
     // Everyone on the crew gets the main fixed block (e.g. the show)
     const newEvent = {
@@ -620,6 +638,8 @@ function saveEvent() {
       name: e.name.trim(),
       date: e.date,
       venue: e.venue.trim(),
+      start,
+      end,
       crew: excoPool.value
         .filter(exco => e.crewIds.includes(exco.memberId))
         .map(exco => crewFromExco(exco, hasMain
@@ -633,6 +653,8 @@ function saveEvent() {
     event.value.name = e.name.trim()
     event.value.date = e.date
     event.value.venue = e.venue.trim()
+    event.value.start = start
+    event.value.end = end
     const kept = event.value.crew.filter(p => e.crewIds.includes(p.memberId))
     const added = excoPool.value
       .filter(exco => e.crewIds.includes(exco.memberId) && !kept.some(p => p.memberId === exco.memberId))
@@ -677,16 +699,18 @@ function roundToQuarter(minutes) {
   return Math.ceil(minutes / 15) * 15
 }
 
-function openAddTask() {
+// prefill (from dragging on the grid): { names, start, end } in minutes
+function openAddTask(prefill = null) {
   if (blockedForGuest()) return
-  const start = roundToQuarter(showClock.value)
+  const start = prefill ? prefill.start : roundToQuarter(showClock.value)
+  const end = prefill ? prefill.end : start + 60
   editor.value = {
     mode: 'add',
-    names: [me.value.name],
+    names: prefill ? prefill.names : [me.value.name],
     title: '',
     type: 'other',
     start: formatTime(start),
-    end: formatTime(start + 60),
+    end: formatTime(end),
     venue: event.value.venue,
     fixed: false
   }
@@ -770,6 +794,78 @@ function deleteTask() {
   editor.value = null
 }
 
+/* ---------------- Drag on the grid to add a task (mouse only) ----------------
+   Press on empty space in someone's row and drag: sideways picks the time,
+   up/down picks more people. Letting go opens "Add a task" already filled in.
+   Touch screens keep dragging to scroll the grid, and use "+ Add task". */
+
+const drag = ref(null) // { track, fromRow, toRow, anchor, current }
+
+// The time under the pointer, snapped to 15 min and kept inside the timeline
+function minuteAtPointer(e, track) {
+  const rect = track.getBoundingClientRect()
+  const ratio = Math.min(1, Math.max(0, (e.clientX - rect.left) / rect.width))
+  return Math.round((dayStart.value + ratio * (dayEnd.value - dayStart.value)) / 15) * 15
+}
+
+const dragSelection = computed(() => {
+  if (!drag.value) return null
+  const d = drag.value
+  return {
+    fromRow: Math.min(d.fromRow, d.toRow),
+    toRow: Math.max(d.fromRow, d.toRow),
+    start: Math.min(d.anchor, d.current),
+    end: Math.max(d.anchor, d.current)
+  }
+})
+
+function inDragSelection(rowIndex) {
+  const s = dragSelection.value
+  return !!s && s.end > s.start && rowIndex >= s.fromRow && rowIndex <= s.toRow
+}
+
+// Red when the dragged time overlaps something this person already has
+function dragClashes(person) {
+  const s = dragSelection.value
+  return person.blocks.some(b => b.start < s.end && s.start < b.end)
+}
+
+function startDrag(e, rowIndex) {
+  if (props.readOnly || e.pointerType !== 'mouse' || e.button !== 0) return
+  if (e.target.closest('.ops-block')) return // clicking a task still opens it
+  e.preventDefault() // no text selection while dragging
+  const track = e.currentTarget
+  const minute = minuteAtPointer(e, track)
+  drag.value = { track, fromRow: rowIndex, toRow: rowIndex, anchor: minute, current: minute }
+  window.addEventListener('pointermove', moveDrag)
+  window.addEventListener('pointerup', endDrag)
+}
+
+function moveDrag(e) {
+  if (!drag.value) return
+  drag.value.current = minuteAtPointer(e, drag.value.track)
+  const row = document.elementFromPoint(e.clientX, e.clientY)?.closest('[data-ops-row]')
+  if (row) drag.value.toRow = Number(row.dataset.opsRow)
+}
+
+function endDrag() {
+  window.removeEventListener('pointermove', moveDrag)
+  window.removeEventListener('pointerup', endDrag)
+  const s = dragSelection.value
+  drag.value = null
+  if (!s || s.end - s.start < 15) return // just a click on empty space
+  openAddTask({
+    names: crew.value.slice(s.fromRow, s.toRow + 1).map(p => p.name),
+    start: s.start,
+    end: s.end
+  })
+}
+
+onBeforeUnmount(() => {
+  window.removeEventListener('pointermove', moveDrag)
+  window.removeEventListener('pointerup', endDrag)
+})
+
 /* ================================================================== */
 /* 11. CREW CHECK-IN (each person is due at their first task)          */
 /* ================================================================== */
@@ -779,10 +875,13 @@ function callTime(person) {
   return person.blocks.length ? Math.min(...person.blocks.map(b => b.start)) : null
 }
 
-// 'in' | 'late' | 'due' | 'missing', as at the clock. Before the event day nobody is missing yet.
+// 'in' | 'late' | 'due' | 'missing', as at the clock.
+// Check-in only happens on the event day: before it everyone is just due,
+// and after it the check-ins are kept as a record.
 function checkInStatus(p) {
+  if (eventDay.value === 'upcoming') return 'due'
+  if (eventDay.value === 'past') return p.checkedInAt !== null ? 'in' : 'due'
   if (p.checkedInAt !== null && p.checkedInAt <= showClock.value) return 'in'
-  if (!isEventDay.value) return 'due'
   if (p.late) return 'late'
   const call = callTime(p)
   if (call === null || showClock.value < call) return 'due'
@@ -795,24 +894,37 @@ const sortedCrewForCheckIn = computed(() => {
   return [...crew.value].sort((a, b) => STATUS_ORDER[checkInStatus(a)] - STATUS_ORDER[checkInStatus(b)])
 })
 
-const needsAttention = computed(() =>
-  crew.value
-    .filter(p => checkInStatus(p) !== 'in')
-    .sort((a, b) => STATUS_ORDER[checkInStatus(a)] - STATUS_ORDER[checkInStatus(b)])
-)
 const checkedIn = computed(() => crew.value.filter(p => checkInStatus(p) === 'in'))
 
-function reportLateETA(person) {
-  if (blockedForGuest()) return
-  person.late = '+15 min late'
-  showToast(`${person.name} marked as running late.`)
+// Check-in, late and undo only work on the event day
+function blockedBeforeEventDay() {
+  if (isEventDay.value) return false
+  showToast('Check-in opens on the day of the event.')
+  return true
+}
+
+// "Running late" asks how late before marking them
+const LATE_OPTIONS = [5, 10, 15, 30] // minutes
+const lateChoiceFor = ref(null) // memberId whose late options are showing
+
+function reportLateETA(person, mins) {
+  lateChoiceFor.value = null
+  if (blockedForGuest() || blockedBeforeEventDay()) return
+  person.late = `+${mins} min late`
+  showToast(`${person.name} marked as running ${mins} min late.`)
 }
 
 function checkInPerformer(person) {
-  if (blockedForGuest()) return
+  if (blockedForGuest() || blockedBeforeEventDay()) return
   person.checkedInAt = showClock.value
   person.late = ''
   showToast(`${person.name} checked in at ${formatTime(showClock.value)}.`)
+}
+
+// 'Rachel Tan' -> 'RT' (the crew picker)
+function initials(name) {
+  const parts = name.trim().split(/\s+/)
+  return (parts[0][0] + (parts.length > 1 ? parts[parts.length - 1][0] : '')).toUpperCase()
 }
 
 // 'Rachel Tan' -> 'Rachel T' (the grid's name column on phones)
@@ -823,141 +935,15 @@ function shortName(name) {
 
 // For a check-in pressed by mistake
 function undoCheckIn(person) {
-  if (blockedForGuest()) return
+  if (blockedForGuest() || blockedBeforeEventDay()) return
   person.checkedInAt = null
   showToast(`${person.name} is no longer checked in.`)
 }
 
 function clearLate(person) {
-  if (blockedForGuest()) return
+  if (blockedForGuest() || blockedBeforeEventDay()) return
   person.late = ''
   showToast(`${person.name} is no longer marked late.`)
-}
-
-/* ================================================================== */
-/* 12. STANDBY FINDER + NOTICE PARSER (under "More tools")             */
-/* ================================================================== */
-
-const showAiCopilotModal = ref(false)
-const activeCopilotTab = ref('standby') // 'standby' or 'parser'
-const targetAbsentPerformer = ref(null)
-const isDispatchingStandby = ref(false)
-
-function openTool(tab) {
-  showMoreMenu.value = false
-  activeCopilotTab.value = tab
-  showAiCopilotModal.value = true
-}
-
-const standbyPool = ref([
-  {
-    id: 101,
-    name: 'Jessica Ong',
-    role: 'Lead Dancer (Act 2 Standby)',
-    phone: '@jessicaong',
-    status: 'On-Call',
-    matchScore: 98,
-    availability: 'Free in Heatmap (18:00 - 21:00)',
-    distance: '4m walk from SMU Connexion',
-    qualification: 'Mastered Act 2 choreography in Oct rehearsals'
-  },
-  {
-    id: 102,
-    name: 'Ryan Teo',
-    role: 'Stage Crew & Props Standby',
-    phone: '@ryanteo',
-    status: 'On-Call',
-    matchScore: 92,
-    availability: 'Free in Heatmap (17:30 - 21:30)',
-    distance: '2m walk from Li Ka Shing Library',
-    qualification: 'Certified stagehand & props coordinator'
-  },
-  {
-    id: 103,
-    name: 'Chloe Lim',
-    role: 'Ensemble Dancer Standby',
-    phone: '@chloelim',
-    status: 'On-Call',
-    matchScore: 85,
-    availability: 'Free in Heatmap (18:30 - 20:30)',
-    distance: '6m walk from SOE Concourse',
-    qualification: 'Ensemble dance backup'
-  }
-])
-
-function triggerStandbyForPerformer(p) {
-  if (blockedForGuest()) return
-  targetAbsentPerformer.value = p
-  activeCopilotTab.value = 'standby'
-  showAiCopilotModal.value = true
-}
-
-function dispatchStandby(candidate) {
-  if (blockedForGuest()) return
-  isDispatchingStandby.value = true
-  setTimeout(() => {
-    isDispatchingStandby.value = false
-    showAiCopilotModal.value = false
-
-    // The standby takes over the absent person's row (and tasks) in the run of show
-    const target = targetAbsentPerformer.value || crew.value.find(p => p.name === 'Darren Koh') || crew.value[0]
-    const targetName = target.name
-    target.name = candidate.name
-    target.role = `${target.role} (standby for ${targetName})`
-    target.phone = candidate.phone
-    target.checkedInAt = null
-    target.late = `On the way (${candidate.distance})`
-
-    showToast(`Emergency Standby Activated: Telegram Bot pinged ${candidate.name} (${candidate.phone}). Reassigned to ${targetName}'s tasks in the run of show.`, 6000)
-  }, 600)
-}
-
-// AI Telegram Notice & Shopping List Parser
-const rawChatInput = ref('')
-const isAiParsing = ref(false)
-const parsedNoticeResult = ref(null)
-
-const sampleChatNotice = `Hihi everyone, Ardiente will be giving away the following bookings:
-8 Oct, Thursday, 15:00-18:00 @ Gym Studio. Pls pm if needed!
-Also for rehearsal this Friday at Main Hall Stage:
-- Please remember to bring knee pads and black practice tights
-- Sound team needs 2 rolls of black gaffer tape and 4 extra AAA batteries
-- Logistics team please buy 15 bottles of 100PLUS from Cheers
-Poll below on who can make it!`
-
-function loadSampleChat() {
-  rawChatInput.value = sampleChatNotice
-}
-
-function parseNoticeWithAi() {
-  if (!rawChatInput.value.trim()) return
-  isAiParsing.value = true
-  parsedNoticeResult.value = null
-  setTimeout(() => {
-    isAiParsing.value = false
-    parsedNoticeResult.value = {
-      facilityRelease: {
-        venue: 'Gym Studio (Sports Court)',
-        date: 'Thursday, 8 Oct',
-        time: '15:00 - 18:00',
-        action: 'Direct Peer Transfer to Marketplace'
-      },
-      rehearsalCues: {
-        location: 'Main Hall Stage (Friday)',
-        gearRequired: ['Knee pads', 'Black practice tights'],
-        techNeeds: ['2 rolls black gaffer tape', '4x AAA batteries']
-      },
-      shoppingList: [
-        { item: '15 bottles of 100PLUS', store: 'Cheers (Campus Basement)', owner: 'Logistics Leads' },
-        { item: 'Black gaffer tape (2 rolls)', store: 'Stationery store', owner: 'Sound Team' },
-        { item: '4x AAA batteries', store: 'Cheers', owner: 'Sound Team' }
-      ],
-      telegramSummary: `[PULSE AI SUMMARY FOR ARDIENTE]
-1. Facility Swap: Gym Studio (Thu 8 Oct, 15:00-18:00) listed on Pulse Marketplace.
-2. Friday Rehearsal: Main Hall Stage. Bring knee pads + tights.
-3. Logistics Assigned: 15x 100PLUS + Gaffer tape claimed by Logistics Team.`
-    }
-  }, 750)
 }
 </script>
 
@@ -1016,16 +1002,7 @@ function parseNoticeWithAi() {
           <span>Notify crew</span>
         </button>
 
-        <div class="ops-more position-relative">
-          <button type="button" class="btn btn-sm btn-light border fw-semibold" :aria-expanded="showMoreMenu" @click="showMoreMenu = !showMoreMenu">
-            More tools ▾
-          </button>
-          <div v-if="showMoreMenu" class="ops-more-menu shadow-sm border rounded-3 py-1">
-            <button type="button" class="dropdown-item small py-2 px-3" @click="openTool('standby')">Find a standby</button>
-            <button type="button" class="dropdown-item small py-2 px-3" @click="openTool('parser')">Turn a chat message into tasks</button>
-            <button v-if="!readOnly && dataMode === 'local'" type="button" class="dropdown-item small py-2 px-3 text-danger" @click="showMoreMenu = false; resetPlan()">Reset to sample events</button>
-          </div>
-        </div>
+        <button v-if="!readOnly && dataMode === 'local'" type="button" class="btn btn-sm btn-light border text-danger" @click="resetPlan">Reset sample</button>
       </div>
     </div>
 
@@ -1068,10 +1045,12 @@ function parseNoticeWithAi() {
             <span v-else>Preview time</span>
           </div>
           <div class="d-flex align-items-center gap-2">
-              <!-- Interactive Range Slider -->
+              <!-- The time being shown, and a slider to move it -->
+              <span class="fw-bold fs-5 ops-clock">{{ formatTime(showClock) }}</span>
               <input
                 type="range"
-                class="form-range flex-grow-1"
+                class="form-range flex-grow-1 ops-slider"
+                aria-label="Time shown"
                 :min="dayStart"
                 :max="dayEnd"
                 step="15"
@@ -1121,7 +1100,7 @@ function parseNoticeWithAi() {
               <li class="nav-item"><button type="button" class="nav-link" :class="{ active: activeTab === 'now' }" @click="activeTab = 'now'">Everyone now</button></li>
               <li class="nav-item"><button type="button" class="nav-link" :class="{ active: activeTab === 'grid' }" @click="activeTab = 'grid'">Full grid</button></li>
             </ul>
-            <button v-if="!readOnly" type="button" class="btn btn-sm btn-outline-danger fw-semibold" @click="openAddTask">+ Add task</button>
+            <button v-if="!readOnly" type="button" class="btn btn-sm btn-outline-danger fw-semibold" @click="openAddTask()">+ Add task</button>
           </div>
 
           <!-- My schedule: one person's day as a list -->
@@ -1158,7 +1137,7 @@ function parseNoticeWithAi() {
 
           <!-- Everyone now: where each person should be at the show clock -->
           <div v-else-if="activeTab === 'now'">
-            <div class="text-muted small mb-2">Where everyone should be at <strong>{{ formatTime(showClock) }}</strong>. Use ◀ ▶ above to change the time.</div>
+            <div class="text-muted small mb-2">Where everyone should be at <strong>{{ formatTime(showClock) }}</strong>. Drag the time slider above to change it.</div>
             <div class="d-flex flex-column gap-2">
               <div v-for="p in crew" :key="p.name" class="d-flex align-items-center gap-2 p-2 rounded-3 border">
                 <div class="ops-now-name">
@@ -1181,7 +1160,8 @@ function parseNoticeWithAi() {
 
           <!-- Full grid: one row per person, time across (like the crew spreadsheet) -->
           <div v-else>
-            <div class="ops-grid-scroll">
+            <div v-if="!readOnly" class="text-muted ops-small mb-2 d-none d-md-block">Tip: drag across empty space in someone's row to add a task. Drag up or down to include more people.</div>
+            <div class="ops-grid-scroll" :class="{ 'ops-dragging': drag }">
               <div class="ops-grid">
                 <div class="ops-grid-row ops-grid-head">
                   <div class="ops-grid-name"></div>
@@ -1190,7 +1170,7 @@ function parseNoticeWithAi() {
                   </div>
                 </div>
 
-                <div v-for="p in crew" :key="p.name" class="ops-grid-row" :class="{ 'ops-grid-me': p.name === activePersona?.name }">
+                <div v-for="(p, rowIndex) in crew" :key="p.name" class="ops-grid-row" :class="{ 'ops-grid-me': p.name === activePersona?.name }" :data-ops-row="rowIndex">
                   <div class="ops-grid-name">
                     <div class="fw-semibold small d-flex align-items-center gap-1">
                       <span class="ops-dot" :class="`ops-dot-${checkInStatus(p)}`"></span>
@@ -1199,8 +1179,18 @@ function parseNoticeWithAi() {
                     </div>
                     <div class="text-muted ops-small text-truncate ops-grid-role">{{ p.role }}</div>
                   </div>
-                  <div class="ops-grid-track">
+                  <div class="ops-grid-track" :class="{ 'ops-drag-target': !readOnly }" @pointerdown="startDrag($event, rowIndex)">
                     <span v-for="t in halfHours" :key="t" class="ops-gridline" :style="{ left: `${percentAt(t)}%` }"></span>
+                    <!-- The time being dragged out for a new task -->
+                    <div
+                      v-if="inDragSelection(rowIndex)"
+                      class="ops-drag-sel"
+                      :class="{ 'ops-drag-clash': dragClashes(p) }"
+                      :style="blockStyle(dragSelection)"
+                    >
+                      <span v-if="rowIndex === dragSelection.fromRow">{{ formatTime(dragSelection.start) }}–{{ formatTime(dragSelection.end) }}</span>
+                      <span v-if="dragClashes(p)" class="d-block">Clashes</span>
+                    </div>
                     <div
                       v-for="b in p.blocks"
                       :key="b.id"
@@ -1244,6 +1234,8 @@ function parseNoticeWithAi() {
             </span>
           </div>
           <p v-if="isEventDay" class="text-muted small mb-3">Green cards indicate checked-in ExCos. Missing or late members stay pinned at the top.</p>
+          <p v-else-if="eventDay === 'upcoming'" class="text-muted small mb-3">Opens on {{ formatDate(event.date) }}. Each person will be due at their first task.</p>
+          <p v-else class="text-muted small mb-3">Check-ins from {{ formatDate(event.date) }}.</p>
 
           <!-- List of all crew members sorted by status -->
           <div class="d-flex flex-column gap-2 mb-3">
@@ -1279,17 +1271,23 @@ function parseNoticeWithAi() {
                 Was due at {{ formatTime(callTime(p)) }}, not checked in
               </div>
 
-              <!-- Action Buttons -->
-              <div v-if="checkInStatus(p) !== 'in'" class="d-flex gap-2 mt-2">
+              <!-- Action Buttons (event day only) -->
+              <template v-if="isEventDay">
+              <div v-if="checkInStatus(p) !== 'in' && lateChoiceFor === p.memberId" class="d-flex flex-wrap align-items-center gap-1 mt-2">
+                <span class="ops-small text-muted me-1">How late?</span>
+                <button v-for="mins in LATE_OPTIONS" :key="mins" type="button" class="btn btn-sm btn-outline-warning text-dark py-0 px-2 ops-small fw-bold" @click="reportLateETA(p, mins)">{{ mins }} min</button>
+                <button type="button" class="btn btn-link btn-sm p-0 ms-1 text-muted ops-small text-decoration-none" @click="lateChoiceFor = null">Cancel</button>
+              </div>
+              <div v-else-if="checkInStatus(p) !== 'in'" class="d-flex gap-2 mt-2">
                 <button type="button" class="btn btn-sm btn-outline-success flex-grow-1 py-1 ops-small fw-bold" @click="checkInPerformer(p)">Check in</button>
-                <button v-if="checkInStatus(p) === 'missing'" type="button" class="btn btn-sm btn-outline-warning text-dark py-1 ops-small fw-bold" @click="reportLateETA(p)">Running late</button>
-                <button type="button" class="btn btn-sm btn-outline-dark py-1 ops-small fw-bold" @click="triggerStandbyForPerformer(p)">Standby</button>
+                <button v-if="checkInStatus(p) === 'missing'" type="button" class="btn btn-sm btn-outline-warning text-dark py-1 ops-small fw-bold" @click="lateChoiceFor = p.memberId">Running late</button>
               </div>
               <div v-else class="d-flex justify-content-end mt-2">
                 <button type="button" class="btn btn-link btn-sm p-0 text-muted ops-small text-decoration-none" @click="undoCheckIn(p)">
                   Undo check-in
                 </button>
               </div>
+              </template>
             </div>
           </div>
 
@@ -1305,7 +1303,8 @@ function parseNoticeWithAi() {
     <!-- New / edit event -->
     <div v-if="eventEditor" class="modal-backdrop fade show" style="background: rgba(15, 23, 42, 0.6); z-index: 1065;" @click="eventEditor = null"></div>
     <div v-if="eventEditor" class="modal fade show d-block" tabindex="-1" style="z-index: 1070;" role="dialog" aria-modal="true">
-      <div class="modal-dialog modal-dialog-centered">
+      <!-- Wider on laptops so the crew picker fits 3 across instead of getting long -->
+      <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable modal-lg">
         <form class="modal-content border-0 shadow-lg rounded-4" @submit.prevent="saveEvent">
           <div class="modal-header border-bottom px-4 py-3">
             <h5 class="modal-title fw-bold mb-0">{{ eventEditor.mode === 'edit' ? 'Edit event' : 'New event' }}</h5>
@@ -1313,16 +1312,17 @@ function parseNoticeWithAi() {
           </div>
           <div class="modal-body px-4">
             <div v-if="eventEditorError" class="alert alert-danger py-2 small">{{ eventEditorError }}</div>
+            <div class="text-muted ops-small mb-2"><span class="text-danger">*</span> Required</div>
 
             <div class="mb-3">
-              <label for="opsEventName" class="form-label small fw-bold text-muted mb-1">Event name</label>
-              <input id="opsEventName" v-model="eventEditor.name" type="text" class="form-control form-control-sm" placeholder="e.g. Year-end concert" />
+              <label for="opsEventName" class="form-label small fw-bold text-muted mb-1">Event name <span class="text-danger" aria-hidden="true">*</span></label>
+              <input id="opsEventName" v-model="eventEditor.name" type="text" class="form-control form-control-sm" placeholder="e.g. Year-end concert" aria-required="true" />
             </div>
 
             <div class="row g-2 mb-3">
               <div class="col-6">
-                <label for="opsEventDate" class="form-label small fw-bold text-muted mb-1">Date</label>
-                <input id="opsEventDate" v-model="eventEditor.date" type="date" class="form-control form-control-sm" />
+                <label for="opsEventDate" class="form-label small fw-bold text-muted mb-1">Date <span class="text-danger" aria-hidden="true">*</span></label>
+                <input id="opsEventDate" v-model="eventEditor.date" type="date" class="form-control form-control-sm" aria-required="true" />
               </div>
               <div class="col-6">
                 <label for="opsEventVenue" class="form-label small fw-bold text-muted mb-1">Venue</label>
@@ -1330,28 +1330,55 @@ function parseNoticeWithAi() {
               </div>
             </div>
 
+            <div class="row g-2 mb-1">
+              <div class="col-6">
+                <label for="opsEventStart" class="form-label small fw-bold text-muted mb-1">Starts <span class="text-danger" aria-hidden="true">*</span></label>
+                <input id="opsEventStart" v-model="eventEditor.start" type="time" step="900" class="form-control form-control-sm" aria-required="true" />
+              </div>
+              <div class="col-6">
+                <label for="opsEventEnd" class="form-label small fw-bold text-muted mb-1">Ends <span class="text-danger" aria-hidden="true">*</span></label>
+                <input id="opsEventEnd" v-model="eventEditor.end" type="time" step="900" class="form-control form-control-sm" aria-required="true" />
+              </div>
+            </div>
+            <div class="text-muted ops-small mb-3">From reporting time to teardown, e.g. 3:00 PM – 11:00 PM</div>
+
             <!-- The fixed part of the day, added to everyone's plan (new events only) -->
-            <div v-if="eventEditor.mode === 'add'" class="p-2 rounded-3 border mb-3">
-              <div class="small fw-bold text-muted mb-1">Fixed time (optional)</div>
+            <div v-if="eventEditor.mode === 'add'" class="p-2 ps-3 rounded-3 mb-3 ops-fixed-box">
+              <div class="d-flex justify-content-between align-items-center mb-1">
+                <span class="small fw-bold">Fixed time <span class="fw-normal text-muted">(optional)</span></span>
+                <span class="badge rounded-pill bg-dark ops-small">🔒 Never moves</span>
+              </div>
               <div class="row g-2">
-                <div class="col-12 col-sm-5">
+                <div class="col-12">
                   <input v-model="eventEditor.mainTitle" type="text" class="form-control form-control-sm" aria-label="Fixed block name" placeholder="Performance" />
                 </div>
-                <div class="col-6 col-sm-auto">
-                  <input v-model="eventEditor.mainStart" type="time" step="900" class="form-control form-control-sm" aria-label="Fixed start" />
+                <div class="col-6">
+                  <label for="opsFixedStart" class="form-label ops-small fw-bold text-muted mb-1">Start</label>
+                  <input id="opsFixedStart" v-model="eventEditor.mainStart" type="time" step="900" class="form-control form-control-sm" aria-label="Fixed start" />
                 </div>
-                <div class="col-6 col-sm-auto">
-                  <input v-model="eventEditor.mainEnd" type="time" step="900" class="form-control form-control-sm" aria-label="Fixed end" />
+                <div class="col-6">
+                  <label for="opsFixedEnd" class="form-label ops-small fw-bold text-muted mb-1">End</label>
+                  <input id="opsFixedEnd" v-model="eventEditor.mainEnd" type="time" step="900" class="form-control form-control-sm" aria-label="Fixed end" />
                 </div>
               </div>
-              <div class="text-muted ops-small mt-1">e.g. the show itself. Delays never move it.</div>
+              <div class="text-muted ops-small mt-1">e.g. the show, 8:00 PM – 10:00 PM</div>
             </div>
 
-            <div class="mb-1 small fw-bold text-muted">Which ExCos are on the crew?</div>
-            <div class="d-flex flex-wrap gap-2 mb-2">
-              <label v-for="exco in excoPool" :key="exco.memberId" class="ops-person-pill small" :class="{ active: eventEditor.crewIds.includes(exco.memberId) }" :title="exco.role">
-                <input v-model="eventEditor.crewIds" type="checkbox" class="d-none" :value="exco.memberId" />
-                {{ exco.name }}
+            <div class="d-flex justify-content-between align-items-center mb-1">
+              <span class="small fw-bold text-muted">Which ExCos are on the crew? <span class="text-danger" aria-hidden="true">*</span></span>
+              <button v-if="eventEditor.crewIds.length < excoPool.length" type="button" class="btn btn-link btn-sm p-0 ops-small text-decoration-none" @click="eventEditor.crewIds = excoPool.map(e => e.memberId)">Select all</button>
+              <button v-else type="button" class="btn btn-link btn-sm p-0 ops-small text-decoration-none" @click="eventEditor.crewIds = []">Clear</button>
+            </div>
+            <!-- Laptops: cards with role. Phones: name pills, so a big CCA isn't a long scroll -->
+            <div class="ops-crew-grid mb-2">
+              <label v-for="exco in excoPool" :key="exco.memberId" class="ops-crew-option" :class="{ active: eventEditor.crewIds.includes(exco.memberId) }" :title="exco.role">
+                <input v-model="eventEditor.crewIds" type="checkbox" class="visually-hidden" :value="exco.memberId" />
+                <span class="ops-avatar">{{ initials(exco.name) }}</span>
+                <span class="text-truncate">
+                  <span class="d-block small fw-semibold text-truncate">{{ exco.name }}</span>
+                  <span class="d-block ops-small text-muted text-truncate ops-crew-role">{{ exco.role }}</span>
+                </span>
+                <span v-if="eventEditor.crewIds.includes(exco.memberId)" class="ms-auto ops-check" aria-hidden="true">✓</span>
               </label>
             </div>
             <div class="text-muted ops-small">{{ eventEditor.crewIds.length }} selected. Only crew can be given tasks for this event.</div>
@@ -1440,251 +1467,14 @@ function parseNoticeWithAi() {
       </div>
     </div>
 
-    <!-- Pulse AI Copilot Modal: Standby Matcher & Notice Parser -->
-    <div v-if="showAiCopilotModal" class="modal-backdrop fade show" style="background: rgba(15, 23, 42, 0.7); backdrop-filter: blur(4px); z-index: 1065;"></div>
-    <div v-if="showAiCopilotModal" class="modal fade show d-block" tabindex="-1" style="z-index: 1070;">
-      <div class="modal-dialog modal-dialog-centered modal-lg">
-        <div class="modal-content border-0 shadow-lg rounded-4 overflow-hidden" style="background-color: var(--pulse-card-bg); color: var(--pulse-ink);">
-          
-          <!-- Modal Header with Navigation Tabs -->
-          <div class="modal-header border-bottom px-4 py-3 bg-light d-flex justify-content-between align-items-center">
-            <div class="d-flex align-items-center gap-2">
-              <div class="pulse-logo-badge" style="width: 2rem; height: 2rem; font-size: 0.95rem;">
-                <span>AI</span>
-              </div>
-              <div>
-                <h5 class="modal-title fw-bold mb-0">Pulse AI Operational Copilot</h5>
-                <small class="text-muted" style="font-size: 0.725rem;">Intelligent On-Call Standby Matching & Telegram Notice Extraction</small>
-              </div>
-            </div>
-            <button type="button" class="btn-close" @click="showAiCopilotModal = false"></button>
-          </div>
-
-          <!-- Tab Switcher -->
-          <div class="px-4 pt-3 border-bottom pulse-copilot-tab-bar d-flex gap-2">
-            <button 
-              type="button" 
-              class="btn btn-sm pb-2 px-3 border-0 rounded-0 fw-bold"
-              :class="activeCopilotTab === 'standby' ? 'border-bottom border-danger border-2 text-danger' : 'text-muted'"
-              @click="activeCopilotTab = 'standby'"
-            >
-              1. On-Call Standby Dispatch
-            </button>
-            <button 
-              type="button" 
-              class="btn btn-sm pb-2 px-3 border-0 rounded-0 fw-bold"
-              :class="activeCopilotTab === 'parser' ? 'border-bottom border-danger border-2 text-danger' : 'text-muted'"
-              @click="activeCopilotTab = 'parser'"
-            >
-              2. AI Notice & Shopping List Parser
-            </button>
-          </div>
-
-          <div class="modal-body p-4" style="max-height: 70vh; overflow-y: auto;">
-            
-            <!-- TAB 1: On-Call Standby Matcher (Emergency Absence Resolution) -->
-            <div v-if="activeCopilotTab === 'standby'">
-              
-              <!-- Problem Context Box -->
-              <div class="card p-3 mb-3 border-0 rounded-3" style="background: rgba(239, 68, 68, 0.08); border-left: 4px solid #ef4444 !important;">
-                <div class="d-flex justify-content-between align-items-center mb-1">
-                  <span class="badge bg-danger rounded-pill px-2 py-0" style="font-size: 0.65rem;">PERFORMER ABSENCE DETECTED</span>
-                  <span class="text-muted small" style="font-size: 0.7rem;">Heatmap Cross-Referenced</span>
-                </div>
-                <div class="fw-bold small text-dark">
-                  Target Member: {{ targetAbsentPerformer ? targetAbsentPerformer.name : 'Darren Koh' }} 
-                  ({{ targetAbsentPerformer ? targetAbsentPerformer.role : 'Performer & Props' }})
-                </div>
-                <p class="small text-muted mb-0" style="font-size: 0.75rem;">
-                  Member reported emergency / delay for Act 2: Eurhythmix Tech Rehearsal. Pulse AI analyzed available members in the Weekly Availability Heatmap with matching skill tags and OneMap transit proximity.
-                </p>
-              </div>
-
-              <!-- Standby Candidates List -->
-              <h6 class="fw-bold text-dark mb-2" style="font-size: 0.85rem;">Top AI-Matched On-Call Replacements:</h6>
-              <div class="d-flex flex-column gap-2 mb-3">
-                
-                <div 
-                  v-for="candidate in standbyPool" 
-                  :key="candidate.id"
-                  class="p-3 rounded-3 border bg-light d-flex flex-column flex-sm-row justify-content-between align-items-sm-center gap-2"
-                >
-                  <div>
-                    <div class="d-flex align-items-center gap-2 mb-1">
-                      <strong class="text-dark small">{{ candidate.name }}</strong>
-                      <span class="badge bg-success bg-opacity-10 text-success border border-success-subtle" style="font-size: 0.65rem;">
-                        {{ candidate.matchScore }}% AI Match
-                      </span>
-                      <span class="badge bg-light text-muted border" style="font-size: 0.65rem;">{{ candidate.status }}</span>
-                    </div>
-                    <div class="text-muted small" style="font-size: 0.725rem;">
-                      {{ candidate.role }} • {{ candidate.phone }}
-                    </div>
-                    <div class="text-secondary small mt-1" style="font-size: 0.725rem;">
-                      <span>{{ candidate.availability }}</span>
-                      <span class="mx-1">•</span>
-                      <span class="text-primary fw-semibold">{{ candidate.distance }}</span>
-                    </div>
-                    <div class="text-muted small fst-italic" style="font-size: 0.7rem;">
-                      {{ candidate.qualification }}
-                    </div>
-                  </div>
-
-                  <button 
-                    type="button" 
-                    class="btn btn-sm btn-pulse-primary text-nowrap px-3 py-1 fw-bold"
-                    style="font-size: 0.75rem;"
-                    :disabled="isDispatchingStandby"
-                    @click="dispatchStandby(candidate)"
-                  >
-                    <span v-if="isDispatchingStandby">Dispatching...</span>
-                    <span v-else>Dispatch via Telegram</span>
-                  </button>
-                </div>
-
-              </div>
-
-              <div class="p-2 rounded-2 bg-light border text-muted small text-center" style="font-size: 0.725rem;">
-                One-click dispatch sends a high-priority Telegram Bot alert and reassigns the cue card in the live production run-of-show.
-              </div>
-            </div>
-
-            <!-- TAB 2: AI Telegram Notice & Shopping List Parser (Ardiente Real Problem) -->
-            <div v-else>
-              <div class="card p-3 mb-3 border-0 rounded-3" style="background: rgba(14, 165, 233, 0.08); border-left: 4px solid #0284c7 !important;">
-                <div class="d-flex justify-content-between align-items-center mb-1">
-                  <span class="badge bg-primary rounded-pill px-2 py-0" style="font-size: 0.65rem;">UNSTRUCTURED CHAT TO ACTIONABLE PULSE DATA</span>
-                  <button 
-                    type="button" 
-                    class="btn btn-link btn-sm p-0 text-primary text-decoration-none small fw-bold"
-                    style="font-size: 0.7rem;"
-                    @click="loadSampleChat"
-                  >
-                    Load Real Ardiente Chat Sample
-                  </button>
-                </div>
-                <p class="small text-muted mb-0" style="font-size: 0.75rem;">
-                  In regular flat Telegram group chats, important notices, room give-aways, and shopping lists get buried. Paste any unorganized message below to extract facility handovers, checklists, and tasks automatically.
-                </p>
-              </div>
-
-              <!-- Input Textarea -->
-              <div class="mb-3">
-                <label class="form-label small fw-bold text-dark mb-1">Paste Raw Telegram Message or Notice:</label>
-                <textarea 
-                  v-model="rawChatInput"
-                  class="form-control form-control-sm"
-                  rows="4"
-                  placeholder="Paste unstructured announcement from Telegram group chat..."
-                ></textarea>
-              </div>
-
-              <div class="d-flex justify-content-end mb-3">
-                <button 
-                  type="button" 
-                  class="btn btn-sm btn-danger px-3 py-1 fw-bold d-flex align-items-center gap-2"
-                  :disabled="isAiParsing || !rawChatInput.trim()"
-                  @click="parseNoticeWithAi"
-                >
-                  <span v-if="isAiParsing" class="spinner-border spinner-border-sm" role="status"></span>
-                  <span>{{ isAiParsing ? 'Analyzing with Pulse AI...' : 'Run Pulse AI Parser' }}</span>
-                </button>
-              </div>
-
-              <!-- Structured Output Results -->
-              <div v-if="parsedNoticeResult" class="p-3 border rounded-3 bg-light">
-                <div class="d-flex align-items-center justify-content-between mb-2">
-                  <h6 class="fw-bold text-dark mb-0" style="font-size: 0.825rem;">Extracted Structured Outputs:</h6>
-                  <span class="badge bg-success rounded-pill px-2 py-0" style="font-size: 0.65rem;">Parsed via LLM Prompt Engine</span>
-                </div>
-
-                <div class="row g-2 mb-3">
-                  <!-- Extracted Facility Release -->
-                  <div class="col-md-6">
-                    <div class="p-2 pulse-extracted-item rounded-2 border">
-                      <div class="fw-bold text-danger small" style="font-size: 0.725rem;">Extracted Facility Giveaway:</div>
-                      <div class="fw-bold text-dark" style="font-size: 0.8rem;">{{ parsedNoticeResult.facilityRelease.venue }}</div>
-                      <div class="text-muted small" style="font-size: 0.7rem;">{{ parsedNoticeResult.facilityRelease.date }} • {{ parsedNoticeResult.facilityRelease.time }}</div>
-                      <span class="badge bg-danger bg-opacity-10 text-danger border mt-1" style="font-size: 0.65rem;">
-                        {{ parsedNoticeResult.facilityRelease.action }}
-                      </span>
-                    </div>
-                  </div>
-
-                  <!-- Extracted Gear & Cues -->
-                  <div class="col-md-6">
-                    <div class="p-2 pulse-extracted-item rounded-2 border">
-                      <div class="fw-bold text-primary small" style="font-size: 0.725rem;">Rehearsal Gear Checklist:</div>
-                      <div class="text-dark small fw-semibold" style="font-size: 0.75rem;">
-                        {{ parsedNoticeResult.rehearsalCues.location }}
-                      </div>
-                      <ul class="mb-0 ps-3 small text-muted" style="font-size: 0.7rem;">
-                        <li v-for="(gear, idx) in parsedNoticeResult.rehearsalCues.gearRequired" :key="idx">{{ gear }}</li>
-                        <li v-for="(tech, idx) in parsedNoticeResult.rehearsalCues.techNeeds" :key="idx">{{ tech }}</li>
-                      </ul>
-                    </div>
-                  </div>
-                </div>
-
-                <!-- Extracted Shopping List -->
-                <div class="p-2 pulse-extracted-item rounded-2 border mb-2">
-                  <div class="fw-bold text-success small mb-1" style="font-size: 0.725rem;">Logistics Shopping Checklist:</div>
-                  <div class="d-flex flex-column gap-1">
-                    <div 
-                      v-for="(shop, idx) in parsedNoticeResult.shoppingList" 
-                      :key="idx"
-                      class="d-flex justify-content-between align-items-center py-1 px-2 rounded bg-light small"
-                      style="font-size: 0.725rem;"
-                    >
-                      <span class="fw-semibold text-dark">{{ shop.item }}</span>
-                      <div class="d-flex align-items-center gap-2">
-                        <span class="text-muted">{{ shop.store }}</span>
-                        <span class="badge bg-secondary-subtle text-dark border">{{ shop.owner }}</span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                <!-- Clean Formatted Telegram Topic Message -->
-                <div class="p-2 pulse-extracted-item rounded-2 border">
-                  <div class="d-flex justify-content-between align-items-center mb-1">
-                    <span class="fw-bold text-secondary small" style="font-size: 0.725rem;">Clean Formatted Telegram Broadcast:</span>
-                    <button 
-                      type="button" 
-                      class="btn btn-link btn-sm p-0 text-decoration-none small text-primary fw-bold"
-                      style="font-size: 0.7rem;"
-                      @click="toastMsg = 'Copied clean formatted digest to clipboard!'; setTimeout(() => toastMsg = '', 3000)"
-                    >
-                      Copy to Clipboard
-                    </button>
-                  </div>
-                  <pre class="mb-0 p-2 rounded bg-light text-dark small" style="font-size: 0.7rem; white-space: pre-wrap; font-family: inherit;">{{ parsedNoticeResult.telegramSummary }}</pre>
-                </div>
-
-              </div>
-
-            </div>
-
-          </div>
-
-          <div class="modal-footer border-top px-4 py-3 bg-light d-flex justify-content-between align-items-center">
-            <span class="text-muted small" style="font-size: 0.725rem;">Powered by Gemini API & SMU Availability Heatmap Engine</span>
-            <button type="button" class="btn btn-pulse-primary btn-sm px-4 rounded-pill" @click="showAiCopilotModal = false">
-              Close AI Assistant
-            </button>
-          </div>
-
-        </div>
-      </div>
-    </div>
-
   </div>
 </template>
 
 <style scoped>
 .ops-label { font-size: 0.65rem; letter-spacing: 0.04em; }
 .ops-small { font-size: 0.72rem; }
-.ops-clock { font-variant-numeric: tabular-nums; min-width: 3.5rem; text-align: center; }
+.ops-clock { font-variant-numeric: tabular-nums; white-space: nowrap; flex-shrink: 0; } /* digits don't jiggle while sliding */
+.ops-slider { min-width: 160px; }
 
 /* Big cards here hold the timeline, so they shouldn't jump on hover */
 .ops-static-card:hover { transform: none; }
@@ -1693,18 +1483,12 @@ function parseNoticeWithAi() {
 .ops-tabs .nav-link.active { background-color: #dc3545; color: #fff; }
 
 /* The delay menu opens to the right so it stays on screen on phones */
-.ops-delay .ops-more-menu { left: 0; right: auto; min-width: 140px; }
-/* On phones More tools wraps to the left edge, so open that one to the right too */
-@media (max-width: 576px) {
-  .ops-more .ops-more-menu { left: 0; right: auto; }
-}
-
 .ops-more-menu {
   position: absolute;
-  right: 0;
+  left: 0;
   top: calc(100% + 4px);
   z-index: 20;
-  min-width: 220px;
+  min-width: 140px;
   background: #fff;
 }
 
@@ -1740,6 +1524,54 @@ function parseNoticeWithAi() {
   user-select: none;
 }
 .ops-person-pill.active { background-color: #dc3545; border-color: #dc3545; color: #fff; }
+
+/* New / edit event: the fixed time looks like a fixed block on the grid */
+.ops-fixed-box { background-color: #fdf6dc; border: 1px solid #f3e3a3; box-shadow: inset 3px 0 0 #1f2937; }
+
+/* New / edit event: crew picker */
+.ops-crew-option {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.45rem 0.6rem;
+  border: 1px solid #e5e7eb;
+  border-radius: 0.75rem;
+  cursor: pointer;
+  user-select: none;
+  transition: border-color 0.15s ease, background-color 0.15s ease;
+}
+.ops-crew-option:hover { border-color: #f1aeb5; }
+.ops-crew-option.active { border-color: #dc3545; background-color: #fdf2f3; }
+.ops-crew-option:has(input:focus-visible) { outline: 2px solid #dc3545; outline-offset: 2px; } /* keyboard only */
+.ops-avatar {
+  width: 2rem;
+  height: 2rem;
+  flex-shrink: 0;
+  border-radius: 9999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.7rem;
+  font-weight: 800;
+  background-color: #f1f5f9;
+  color: #475569;
+}
+.ops-crew-option.active .ops-avatar { background: linear-gradient(135deg, #dc3545, #b02a37); color: #fff; }
+.ops-check { color: #dc3545; font-weight: 800; }
+.ops-crew-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.5rem; }
+@media (min-width: 992px) {
+  .ops-crew-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+
+/* Phones: plain name pills (picked = red), no avatar or role */
+@media (max-width: 576px) {
+  .ops-crew-grid { display: flex; flex-wrap: wrap; }
+  .ops-crew-option { padding: 0.25rem 0.75rem; border-radius: 9999px; border-color: #d1d5db; }
+  .ops-crew-option .ops-avatar,
+  .ops-crew-option .ops-crew-role,
+  .ops-crew-option .ops-check { display: none !important; } /* beats Bootstrap's d-block */
+  .ops-crew-option.active { background-color: #dc3545; border-color: #dc3545; color: #fff; }
+}
 
 /* My schedule list */
 .ops-list-time { width: 3.2rem; flex-shrink: 0; font-variant-numeric: tabular-nums; }
@@ -1778,6 +1610,31 @@ function parseNoticeWithAi() {
 .ops-grid-head .ops-grid-track { min-height: 22px; }
 .ops-tick { position: absolute; top: 0; padding-left: 4px; font-size: 0.65rem; color: #64748b; font-variant-numeric: tabular-nums; }
 .ops-gridline { position: absolute; top: 0; bottom: 0; border-left: 1px dashed #e5e7eb; }
+
+/* Drag on empty space to add a task (laptops) */
+@media (pointer: fine) {
+  .ops-drag-target { cursor: crosshair; }
+  .ops-grid { user-select: none; } /* dragging the mouse across the grid shouldn't highlight text */
+}
+.ops-dragging { user-select: none; }
+.ops-dragging .ops-block { pointer-events: none; } /* dragging over a task doesn't open it */
+.ops-drag-sel {
+  position: absolute;
+  top: 5px;
+  bottom: 5px;
+  z-index: 2;
+  padding: 2px 6px;
+  border: 2px dashed #dc3545;
+  border-radius: 0.5rem;
+  background: rgba(220, 53, 69, 0.08);
+  font-size: 0.68rem;
+  font-weight: 700;
+  color: #b02a37;
+  pointer-events: none;
+  overflow: hidden;
+  white-space: nowrap;
+}
+.ops-drag-clash { border-style: solid; background: rgba(220, 53, 69, 0.22); }
 
 .ops-block {
   position: absolute;
