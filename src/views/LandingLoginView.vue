@@ -867,19 +867,25 @@ async function handleManualLogin() {
                       </button>
                     </div>
 
-                    <!-- Persona 5: Dev Administrator -->
-                    <div class="col-12 col-sm-6">
+                    <!-- Persona 5: Dev Administrator (Spans full width to dynamically fill space) -->
+                    <div class="col-12">
                       <button 
                         type="button" 
-                        class="btn btn-sm btn-outline-secondary w-100 text-start p-2 rounded-3 d-flex justify-content-between align-items-center bg-white persona-tile h-100"
+                        class="btn btn-sm btn-outline-secondary w-100 text-start p-2 rounded-3 d-flex justify-content-between align-items-center bg-white persona-tile"
+                        style="border-left: 3px solid var(--pulse-purple-transit) !important;"
                         :disabled="isSubmitting"
                         @click="handleQuickLogin('dev')"
                       >
-                        <div class="me-1 text-truncate">
-                          <strong class="d-block text-dark text-truncate" style="font-size: 0.76rem;">Dev Administrator</strong>
-                          <small class="text-muted d-block text-truncate" style="font-size: 0.66rem;">All CCAs Super-Admin</small>
+                        <div class="me-2 text-truncate">
+                          <div class="d-flex align-items-center gap-1.5 text-truncate">
+                            <strong class="text-dark text-truncate" style="font-size: 0.76rem;">Dev Administrator</strong>
+                            <span class="text-muted small" style="font-size: 0.68rem;">• IT Support</span>
+                          </div>
+                          <small class="text-muted d-block text-truncate" style="font-size: 0.66rem;">Full platform access across all 24 CCAs • Emergency Overrides</small>
                         </div>
-                        <span class="badge text-white flex-shrink-0" style="background-color: var(--pulse-purple-transit); font-size: 0.65rem;">Super Admin</span>
+                        <span class="badge text-white flex-shrink-0 px-2 py-1" style="background-color: var(--pulse-purple-transit); font-size: 0.65rem; font-weight: 700;">
+                          Super Admin
+                        </span>
                       </button>
                     </div>
                   </div>
