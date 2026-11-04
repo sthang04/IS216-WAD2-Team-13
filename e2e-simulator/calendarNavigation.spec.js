@@ -1,3 +1,5 @@
+// Purpose: fixture-backed calendar Navigation browser regressions for simulator controls and state.
+// Use Setup -> Actions -> Assert; real Vue/engine code runs, but these tests do not prove live Supabase integration.
 import {test,expect} from '@playwright/test'
 async function boot(page,canManage=true){
  // Keep the fixture outside the calendar's four-day transfer lock.
@@ -32,6 +34,7 @@ async function boot(page,canManage=true){
  await page.getByLabel('Unavailable until (Singapore)',{exact:true}).selectOption('2026-11-02T10:30')
  await page.getByRole('button',{name:'Run simulation (1)',exact:true}).click()
  page.once('dialog',dialog=>dialog.accept())
+ await page.getByTestId('facility-alternative').locator('.facility-verification > summary').click()
  await page.getByTestId('facility-alternative').getByRole('link',{name:'View / Request facility',exact:true}).click()
 }
 test('recommendation opens the real calendar at facility/time; claim still requires normal confirmation',async({page})=>{

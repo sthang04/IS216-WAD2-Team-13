@@ -1,3 +1,4 @@
+// Purpose: Calculate direct disruption effects and downstream dependency risk on a copied event schedule.
 /*
 
 PURPOSE:

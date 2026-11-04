@@ -24,6 +24,10 @@ test('ordinary member uses actual PULSE navigation and sees complete invitation 
  const mobile=page.getByLabel('Navigate PULSE',{exact:true})
  if(await mobile.isVisible()){
   await mobile.selectOption('heatmap');await mobile.selectOption('schedule')
+ }else if(await page.getByRole('navigation',{name:'Mobile PULSE navigation',exact:true}).isVisible()){
+  const nav=page.getByRole('navigation',{name:'Mobile PULSE navigation',exact:true})
+  await nav.getByRole('button',{name:/Heatmap/}).click()
+  await nav.getByRole('button',{name:/My Schedule/}).click()
  }else{
   await page.getByRole('button',{name:'Availability Heatmap',exact:true}).click()
   await page.getByRole('button',{name:'Personal Schedule',exact:true}).click()
@@ -73,13 +77,15 @@ test('friendly empty state and read failure remain distinct',async({page})=>{
  await expect(page.getByText(/Inbox unavailable/)).toBeVisible();await expect(page.locator('#simulator-invitation-inbox').getByText(/all caught up/)).toHaveCount(0)
 })
 test('loading, write errors and disabled backend gate are visible and never imply success',async({page})=>{
- await boot(page);await page.evaluate(()=>{window.__memberInvitations.delay=250;window.__memberInvitations.writeError=true})
+ await boot(page);await page.evaluate(()=>{window.__memberInvitations.holdWrites=true;window.__memberInvitations.writeError=true})
  await card(page,'accept-me').getByRole('button',{name:'Accept this invitation',exact:true}).click()
  const box=page.getByLabel('Confirm invitation response',{exact:true});await box.getByRole('checkbox').check();await box.getByRole('button',{name:'Confirm invitation response',exact:true}).click()
- await expect(page.getByText('Saving your response?',{exact:true})).toBeVisible()
+ await expect(page.getByText(/^Saving your response/)).toBeVisible()
+ await page.evaluate(()=>window.__memberInvitations.releaseWrites())
  await expect(page.getByRole('alert')).toContainText('Fixture response unavailable')
- await page.evaluate(()=>window.__memberInvitations.gate=false);await page.getByRole('button',{name:'Refresh my invitations',exact:true}).click()
- await expect(page.getByText('Loading your invitations?',{exact:true})).toBeVisible()
+ await page.evaluate(()=>{window.__memberInvitations.gate=false;window.__memberInvitations.holdReads=true});await page.getByRole('button',{name:'Refresh my invitations',exact:true}).click()
+ await expect(page.getByText(/^Loading your invitations/)).toBeVisible()
+ await page.evaluate(()=>window.__memberInvitations.releaseReads())
  await expect(card(page,'accept-me').getByRole('button',{name:'Accept this invitation',exact:true})).toBeDisabled()
  await expect(page.getByText(/Responses are currently unavailable/)).toBeVisible()
 })

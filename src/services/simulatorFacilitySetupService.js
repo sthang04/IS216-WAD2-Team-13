@@ -1,3 +1,4 @@
+// Purpose: Describe original booking-link coverage and evidence for the setup panel.
 import {compareFacilityScheduleConflicts} from './conflictService.js'
 import {bookingEvidence} from './simulatorWorkflowService.js'
 // Describe existing links only. This is NOT a room recommendation/ranking

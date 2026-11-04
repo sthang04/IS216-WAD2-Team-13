@@ -1,3 +1,5 @@
+// Purpose: fixture-backed refinements Impact browser regressions for simulator controls and state.
+// Use Setup -> Actions -> Assert; real Vue/engine code runs, but these tests do not prove live Supabase integration.
 import {test,expect} from '@playwright/test'
 import {bootRefinement,runScenario,openHeatmap} from './helpers/refinementHarness.js'
 // Exercise the real Vue page and existing engine. Fixture graph edges are
@@ -34,10 +36,10 @@ test('replay preserves explore, fit, manual zoom, pan and single-activity select
 for(const type of ['MEMBER_UNAVAILABLE','FACILITY_UNAVAILABLE','SCHEDULE_DELAY'])test('contextual heatmap and schedule details: '+type,async({page})=>{
  await bootRefinement(page);await runScenario(page,type)
  const heat=page.locator('#impact-facilities'),timeline=page.locator('#impact-timeline')
- if(type==='MEMBER_UNAVAILABLE'){await expect(heat).toBeHidden();const tb=await timeline.boundingBox(),vb=await page.getByRole('region',{name:'Event Village',exact:true}).boundingBox();expect(Math.abs(tb.width-vb.width)).toBeLessThan(2)}else await expect(heat).toBeVisible()
+ if(type==='MEMBER_UNAVAILABLE'){await expect(heat).not.toHaveAttribute('open','');const tb=await timeline.boundingBox(),vb=await page.getByRole('region',{name:'Event Village',exact:true}).boundingBox();expect(Math.abs(tb.width-vb.width)).toBeLessThan(2)}else await expect(heat).toBeVisible()
  await openHeatmap(page);await expect(heat).toBeVisible();await expect(heat).toContainText('does not mean a room is available or approved')
  await heat.getByRole('button').first().click();await expect(heat.getByRole('status')).toBeVisible()
- await page.getByRole('button',{name:'Hide heatmap',exact:true}).click();await expect(heat).toBeHidden()
+ await page.getByRole('button',{name:'Hide heatmap',exact:true}).click();await expect(heat).not.toHaveAttribute('open','')
  await expect(page.getByLabel('Event day (Singapore)',{exact:true})).toHaveCount(0)
  if(type==='SCHEDULE_DELAY'){await page.getByRole('group',{name:'Activity booths',exact:true}).getByRole('button').first().click();await expect(page.getByRole('region',{name:'Selected Activity',exact:true})).toContainText('Schedule changed')}
 })
@@ -48,18 +50,18 @@ test('multi-day selector lives in Time Machine; modes, playback and scrubbing re
  await timeline.getByRole('button',{name:'Play timeline',exact:true}).click();const slider=timeline.getByRole('slider');await expect.poll(async()=>Number(await slider.inputValue())).toBeGreaterThan(0);await timeline.getByRole('button',{name:'Pause timeline',exact:true}).click();await slider.fill('10');await expect(slider).toHaveValue('10')
 })
 test('responsive hierarchy, map/sidebar split, 65/35 panels and safe floating controls',async({page})=>{
- await bootRefinement(page);await runScenario(page,'FACILITY_UNAVAILABLE')
+ await bootRefinement(page);await runScenario(page,'FACILITY_UNAVAILABLE');await openHeatmap(page)
  for(const [width,height] of [[1280,800],[1440,900],[1920,1080],[390,844],[375,667],[320,568]]){
   await page.setViewportSize({width,height});await expect.poll(()=>page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true)
   const t=await page.locator('#impact-timeline').boundingBox(),h=await page.locator('#impact-facilities').boundingBox()
   if(width>=1024){expect(Math.abs(t.y-h.y)).toBeLessThan(2);expect(Math.abs(t.height-h.height)).toBeLessThan(2);expect(t.width/(t.width+h.width)).toBeCloseTo(.65,1);const map=await page.locator('.village-map-panel').boundingBox(),side=await page.locator('.impact-sidebar').boundingBox();expect(map.width/(map.width+side.width)).toBeCloseTo(.75,1)}else expect(h.y).toBeGreaterThan(t.y)
-  await page.screenshot({path:test.info().outputPath('refined-'+width+'.png'),fullPage:true,animations:'disabled'})
+
  }
  await page.evaluate(()=>window.scrollTo(0,document.documentElement.scrollHeight));await expect(page.getByRole('button',{name:'Back to top',exact:true})).toBeVisible();await page.getByRole('button',{name:'Back to top',exact:true}).click();await expect.poll(()=>page.evaluate(()=>scrollY)).toBe(0)
 })
 
 // Combined scenarios must use one engine result, not two independently drawn
-// cascades. Add/remove and delay editing stay available without a shortcut.
+// cascades. Add/remove and delay editing stay available without a shortcut.example
 test('combined scenario editing keeps one calculated result and relevant heatmap',async({page})=>{
  await bootRefinement(page)
  await expect(page.getByRole('button',{name:'Add 15-min delay',exact:true})).toHaveCount(0)

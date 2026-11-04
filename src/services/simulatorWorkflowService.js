@@ -1,3 +1,4 @@
+// Purpose: Capture exact proposal terms and call authoritative recovery RPCs with consent, revision and response validation.
 import {opsPeriodOnEventDate} from './simulatorOpsDataService.js'
 import {simulatorFacilityFacts} from './simulatorFacilityEvidence.js'
 import {simulatorWorkflowActivation} from './simulatorWorkflowActivation.js'

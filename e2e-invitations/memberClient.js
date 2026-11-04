@@ -7,7 +7,7 @@ state.rows.find(r=>r.id==='expired') && (state.rows.find(r=>r.id==='expired').ex
 const save=()=>sessionStorage.setItem('member-invitation-fixture',JSON.stringify(state))
 const callbacks=[]
 const session=()=>({user:{id:'fixture-user-'+state.member,email:'member'+state.member+'@smu.edu.sg'}})
-const control={calls:[],gate:true,readError:false,writeError:false,delay:0,setMember(id){state.member=id;save();callbacks.forEach(fn=>fn('SIGNED_IN',session()))},empty(){state.rows=[];save()},state:()=>state}
+const control={calls:[],gate:true,readError:false,writeError:false,holdReads:false,holdWrites:false,pendingReads:[],pendingWrites:[],releaseReads(){this.holdReads=false;this.pendingReads.splice(0).forEach(resolve=>resolve())},releaseWrites(){this.holdWrites=false;this.pendingWrites.splice(0).forEach(resolve=>resolve())},setMember(id){state.member=id;save();callbacks.forEach(fn=>fn('SIGNED_IN',session()))},empty(){state.rows=[];save()},state:()=>state}
 window.__memberInvitations=control
 const membership=()=>({user_id:session().user.id,member_id:state.member,full_name:'Ordinary Member '+state.member,club_id:1,club_name:'Fixture Dance Club',role_name:'Member',membership_is_active:true,is_admin_role:false,can_manage_members:false,can_claim_booking:false,can_release_booking:false})
 export const isSupabaseConfigured=()=>true
@@ -29,11 +29,12 @@ export const supabase={
  async rpc(name,args){control.calls.push({name,args})
   if(name==='rpc_simulator_workflow_capabilities')return {data:{contract_version:4,invitations_enabled:control.gate,application_enabled:true}}
   if(name==='rpc_simulator_my_invitations'){
-   if(control.delay)await new Promise(r=>setTimeout(r,control.delay))
+   if(control.holdReads)await new Promise(resolve=>control.pendingReads.push(resolve))
    return control.readError?{error:{message:'Fixture inbox unavailable'}}:{data:{invitations:state.rows.filter(r=>r.recipient_member_id===state.member)}}
   }
   if(name==='rpc_simulator_respond_invitation'){
-   if(control.delay)await new Promise(r=>setTimeout(r,control.delay))
+   // Test-controlled pending response: loading assertions never race a timer.
+   if(control.holdWrites)await new Promise(resolve=>control.pendingWrites.push(resolve))
    const row=state.rows.find(r=>r.id===args.p_invitation_id)
    if(!row||row.recipient_member_id!==state.member)return {error:{code:'42501',message:'Only the invited member may respond'}}
    if(!control.gate||control.writeError)return {error:{message:'Fixture response unavailable'}}

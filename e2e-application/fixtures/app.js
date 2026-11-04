@@ -51,7 +51,14 @@ export const test=base.extend({
    async navigate(view,label){
     const mobile=page.getByLabel('Navigate PULSE',{exact:true})
     if(await mobile.isVisible())await mobile.selectOption(view)
-    else await page.getByRole('button',{name:label,exact:true}).click()
+    else {
+     // Current mobile navigation uses buttons with concise labels, while the
+     // desktop bar retains the full feature names. Follow the visible control.
+     const bar=page.getByRole('navigation',{name:'Mobile PULSE navigation',exact:true})
+     const mobileLabel={operations:/Day-of Ops/,risk:/Risk Sandbox/}[view]
+     if(mobileLabel && await bar.isVisible())await bar.getByRole('button',{name:mobileLabel}).click()
+     else await page.getByRole('button',{name:label,exact:true}).click()
+    }
    },
   }
   try{await use(app)}

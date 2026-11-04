@@ -1,4 +1,5 @@
 <script setup>
+// Purpose: Coordinate impact counts, map selection, timeline playback and facility usage from one isolated preview model.
 // Graph, timeline and heatmap share one preview model and playhead so inspecting
 // a recovery never replaces the original schedule or writes to the backend.
 import {computed,ref,watch,onUnmounted} from 'vue'
@@ -42,13 +43,15 @@ watch(()=>props.result,()=>{selectedEdge.value=null;selectedId.value=null;select
 
 // This disclosure changes presentation only. A quiet heatmap is not evidence
 // of vacancy. Existing calculated timing, outage and room-conflict evidence
-// determines the default; the user can always inspect linked booking records.
-const heatmapOpen=ref(false)
+// supplies the attention label; the user can expand the retained evidence.
+const heatmapOpen=ref(false),timelineOpen=ref(false)
+// Layout follows both disclosures, so either visualization can use the full row.
+function toggleTimeline(event){timelineOpen.value=event.target.open;if(!timelineOpen.value)stopPlayback()}
 const hasFacilityImpact=computed(()=>model.value.activities.some(a=>a.originalStart!==a.simulatedStart || a.originalEnd!==a.simulatedEnd) ||
  model.value.facilities.some(f=>f.cells.some(c=>['outage','conflict'].includes(c.status))) ||
  Object.keys(viewResult.value?.proposedVenues || {}).length>0 ||
  (viewResult.value?.newConflicts || []).some(c=>/FACILITY|BOOKING|VENUE|CAPACITY/.test(c.type || '')))
-watch([()=>props.result,()=>props.recovery,previewMode],()=>{heatmapOpen.value=hasFacilityImpact.value},{immediate:true})
+watch([()=>props.result,()=>props.recovery,previewMode],()=>{heatmapOpen.value=false},{immediate:true})
 const selectedDependencies=computed(()=>model.value.edges.filter(e=>String(e.from.id)===String(selectedId.value)||String(e.to.id)===String(selectedId.value)))
 // Missing intervals cannot support either a changed or unchanged claim.
 const scheduleKnown=computed(()=>selected.value && [selected.value.originalStart,selected.value.originalEnd,selected.value.simulatedStart,selected.value.simulatedEnd].every(Number.isFinite))
@@ -77,7 +80,7 @@ const heatLabel=status=>({'outage':'Outage','conflict':'Conflict','in-use':'Even
     <div class="d-flex flex-wrap gap-2 mt-2"><button type="button" class="btn btn-pulse-outline btn-sm" :aria-pressed="previewMode==='disrupted'" @click="previewMode='disrupted'">Disruption impact</button><button type="button" class="btn btn-pulse-outline btn-sm" :aria-pressed="previewMode==='recovery'" @click="previewMode='recovery'">Preview selected recovery</button></div>
     <p v-if="previewMode==='recovery'" class="small mb-0 mt-2">Preview only. {{ recovery.metrics ? recovery.metrics.conflictCount+' conflicts; '+recovery.metrics.warningCount+' verification items.' : 'Saved proposal; readiness is checked below.' }} Proposed facilities are not approved bookings.</p>
    </div>
-   <section class="sim-visual-grid" :class="{'heatmap-collapsed':!heatmapOpen}" aria-label="Impact visualizations">
+   <section class="sim-visual-grid" :class="{'panels-both-open':timelineOpen && heatmapOpen}" aria-label="Impact visualizations">
     <section id="impact-dependencies" class="pulse-card p-3 p-lg-4 sim-graph-panel" aria-label="Event Village">
      <div class="village-workspace">
       <div class="village-map-panel">
@@ -108,7 +111,8 @@ const heatLabel=status=>({'outage':'Outage','conflict':'Conflict','in-use':'Even
      </div>
     </section>
     <dialog v-if="model.edges.length" ref="dependencyDialog" class="dependency-dialog pulse-card" aria-label="All recorded dependencies"><div class="d-flex justify-content-between gap-3"><h6>Recorded dependencies</h6><button type="button" class="btn btn-pulse-outline btn-sm" @click="dependencyDialog.close()">Close dependencies</button></div><p class="small text-muted">Direct prerequisite relationships only. Downstream cascade risk does not add edges.</p><ul><li v-for="(e,i) in model.edges" :key="i"><button type="button" class="btn btn-link btn-sm" @click="selectLinked(e.from.id)">{{ e.from.title }}</button> &rarr; <button type="button" class="btn btn-link btn-sm" @click="selectLinked(e.to.id)">{{ e.to.title }}</button></li></ul></dialog>
-    <section id="impact-timeline" class="pulse-card p-3 p-lg-4 sim-time-panel">
+    <details id="impact-timeline" :open="timelineOpen" @toggle="toggleTimeline" class="pulse-card p-3 p-lg-4 sim-time-panel">
+      <summary class="impact-disclosure-heading">Time Machine <span class="small text-muted">View schedule and playback controls</span></summary>
      <header class="timeline-header"><div><h6 class="fw-bold mb-1">Time Machine</h6><span class="small text-muted">Explore schedule changes &middot; Singapore time</span></div><div class="timeline-header-controls"><div role="group" aria-label="Timeline display" class="d-flex gap-1"><button v-for="mode in ['original','simulated','overlay']" :key="mode" type="button" class="btn btn-sm text-capitalize" :class="timelineView===mode ? 'btn-pulse-primary' : 'btn-pulse-outline'" :aria-pressed="timelineView===mode" @click="timelineView=mode">{{ mode }}</button></div><button type="button" class="btn btn-pulse-outline btn-sm" :aria-expanded="heatmapOpen" aria-controls="impact-facilities" @click="heatmapOpen=!heatmapOpen">{{ heatmapOpen?'Hide heatmap':'Show heatmap' }}</button></div></header>
 <div class="sim-impact-legend small mt-3" role="group" aria-label="Timeline impact colours"><span class="direct">Direct impact</span><span class="downstream">Downstream risk</span><span>No detected impact</span></div>
 <div class="sim-schedule-legend small mb-2"><span>&#9648; Original schedule</span><span>&#9648; {{ previewMode==='recovery'?'Proposed recovery':'Simulated schedule' }}</span><span>&#9474; Playback marker</span></div>
@@ -132,8 +136,9 @@ const heatLabel=status=>({'outage':'Outage','conflict':'Conflict','in-use':'Even
           even when original and proposed activity days differ. -->
      <section class="active-activities mt-3" aria-label="Activities at selected time"><div class="d-flex justify-content-between gap-2"><h6>Active at {{ clockLabel(selectedTime) }}</h6><span class="badge bg-light text-dark border">{{ activeActivities.length }} {{ activeActivities.length===1?'activity':'activities' }}</span></div><div class="active-rows"><button v-for="a in activeActivities" :key="a.id" type="button" :class="a.status" :aria-pressed="String(selectedId)===String(a.id)" @click="selectActivity(a,true)"><strong>{{ a.title }}</strong><span>{{ statusLabel(a.status) }}</span></button></div><p v-if="!activeActivities.length" class="small text-muted mb-0">No activities at this time.</p></section>
 
-    </section>
-    <section v-show="heatmapOpen" id="impact-facilities" class="pulse-card p-3 p-lg-4 sim-heat-panel">
+    </details>
+<details :open="heatmapOpen" @toggle="heatmapOpen=$event.target.open" id="impact-facilities" class="pulse-card p-3 p-lg-4 sim-heat-panel">
+      <summary class="impact-disclosure-heading">Facility Heatmap <span class="small text-muted">{{ hasFacilityImpact ? 'Room or timing impacts to review' : 'View facility evidence' }}</span></summary>
      <div class="heatmap-heading"><h6 class="fw-bold mb-0">Facility Heatmap</h6><span class="small text-muted">{{ clockLabel(selectedTime) }}</span></div>
      <p class="small text-muted">&ldquo;No event use shown&rdquo; does not mean a room is available or approved.</p>
      <div class="sim-heat-legend small mb-3" aria-label="Heatmap states"><span class="in-use">Event use</span><span class="conflict">Conflict</span><span class="outage">Outage</span><span class="no-event-use">No event use shown</span></div>
@@ -150,8 +155,8 @@ const heatLabel=status=>({'outage':'Outage','conflict':'Conflict','in-use':'Even
       </div></div>
      </div>
      <p v-if="!selectedCell" class="small text-muted mt-2 mb-0">Select a slot to inspect its recorded evidence.</p><div v-if="selectedCell" class="sim-inspection selected-slot small mt-3" role="status" aria-label="Selected facility slot"><strong>Selected slot</strong><br><strong>{{ selectedCell.facility }}</strong> &middot; {{ controlRoomTime(selectedCell.start) }}&ndash;{{ controlRoomTime(selectedCell.end) }} &middot; {{ selectedCell.label }}<div>{{ selectedCell.activities.join(', ') || 'No event activity in this interval.' }}</div><p v-for="reason in selectedCell.conflictDetails" :key="reason" class="mb-0">{{ reason }}</p></div>
-    </section>
-   </section>
+    </details>
+</section>
   </template>
  </section>
 </template>
@@ -166,14 +171,16 @@ button:focus-visible,summary:focus-visible,[tabindex]:focus-visible{outline:2px 
 .sim-heat-scroll{overflow-x:auto;padding:3px}.sim-heat-labels{display:grid;gap:3px;min-width:max-content}.sim-heat-cells{overflow:visible;min-width:max-content}.sim-heat-labels span{font-size:.6rem;overflow-wrap:anywhere}.sim-heat-cell.current{outline:2px solid var(--pulse-ink);outline-offset:1px}.sim-heat-legend{display:flex;flex-wrap:wrap;gap:.4rem 1rem}
 .sim-impact-legend{display:flex;flex-wrap:wrap;gap:1rem}.sim-impact-legend span:before{content:"";display:inline-block;width:.6rem;height:.6rem;border-radius:50%;background:var(--pulse-border-hover);margin-right:.35rem}.sim-impact-legend .direct:before{background:var(--pulse-primary)}.sim-impact-legend .downstream:before{background:var(--pulse-amber)}
 .sim-transport{display:flex;flex-wrap:wrap;gap:.5rem;align-items:center;margin-top:1rem}.sim-transport input{flex:1;min-width:6rem;accent-color:var(--pulse-primary)}.sim-playhead{position:absolute;inset-block:0;width:2px;background:var(--pulse-primary);pointer-events:none;z-index:1}
-@media(min-width:1024px){.sim-visual-grid{grid-template-columns:minmax(0,13fr) minmax(0,7fr);align-items:stretch}}
+@media(min-width:1024px){.sim-visual-grid{grid-template-columns:minmax(0,13fr) minmax(0,7fr);align-items:start}}
 @media(prefers-reduced-motion:reduce){*{scroll-behavior:auto;animation:none!important}}
 .sim-schedule-legend{display:flex;flex-wrap:wrap;gap:.5rem 1rem}.sim-schedule-legend span:first-child{color:var(--pulse-ink-muted)}.sim-schedule-legend span:nth-child(2){color:var(--pulse-blue)}.sim-schedule-legend span:last-child{color:var(--pulse-primary)}
 .sim-summary{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:.6rem}.sim-summary>div{padding:.75rem;background:var(--pulse-bg);border-radius:.65rem}.sim-summary strong{display:block;font-size:1.5rem}.sim-summary span{font-size:.75rem;color:var(--pulse-ink-muted)}@media(max-width:575px){.sim-summary{grid-template-columns:repeat(2,minmax(0,1fr))}}
 .sim-impact-legend span:not(.direct):not(.downstream):before{background:var(--pulse-blue)}
-.village-workspace{display:grid;grid-template-columns:minmax(0,3fr) minmax(0,1fr);gap:1.25rem}.village-map-panel,.impact-sidebar{min-width:0}.impact-sidebar{border-left:1px solid var(--pulse-border);padding-left:1rem}.sim-summary{grid-template-columns:repeat(2,minmax(0,1fr));margin:.75rem 0 1.25rem}.sim-summary dt{font-size:.75rem;font-weight:500;color:var(--pulse-ink-muted)}.sim-summary dd{font-size:1.5rem;font-weight:750;margin:0}.selected-activity{border-top:1px solid var(--pulse-border);padding-top:1rem}.sim-inspection{background:transparent;border:0;padding:0}.sim-time-panel,.sim-heat-panel{min-width:0}.heatmap-collapsed .sim-time-panel{grid-column:1/-1}.sim-visual-grid .sim-graph-panel{grid-column:1/-1}.sim-visual-grid{align-items:stretch}@media(max-width:1023px){.village-workspace{grid-template-columns:1fr}.impact-sidebar{border-left:0;padding-left:0}.impact-sidebar{display:grid;grid-template-columns:1fr 1fr;gap:1rem}}@media(max-width:575px){.impact-sidebar{grid-template-columns:1fr}}button[aria-pressed=true]{background:var(--pulse-primary-light);border-color:var(--pulse-primary);color:var(--pulse-primary)}
+.village-workspace{display:grid;grid-template-columns:minmax(0,3fr) minmax(0,1fr);gap:1.25rem}.village-map-panel,.impact-sidebar{min-width:0}.impact-sidebar{border-left:1px solid var(--pulse-border);padding-left:1rem}.sim-summary{grid-template-columns:repeat(2,minmax(0,1fr));margin:.75rem 0 1.25rem}.sim-summary dt{font-size:.75rem;font-weight:500;color:var(--pulse-ink-muted)}.sim-summary dd{font-size:1.5rem;font-weight:750;margin:0}.selected-activity{border-top:1px solid var(--pulse-border);padding-top:1rem}.sim-inspection{background:transparent;border:0;padding:0}.sim-time-panel,.sim-heat-panel{min-width:0}.sim-time-panel,.sim-heat-panel{grid-column:1/-1}.sim-visual-grid .sim-graph-panel{grid-column:1/-1}.sim-visual-grid{align-items:start}@media(max-width:1023px){.village-workspace{grid-template-columns:1fr}.impact-sidebar{border-left:0;padding-left:0}.impact-sidebar{display:grid;grid-template-columns:1fr 1fr;gap:1rem}}@media(max-width:575px){.impact-sidebar{grid-template-columns:1fr}}button[aria-pressed=true]{background:var(--pulse-primary-light);border-color:var(--pulse-primary);color:var(--pulse-primary)}
 /* Large workspaces must remain aligned while a pointer moves between panels. */
 .pulse-card:hover{transform:none}
 .timeline-header,.timeline-header-controls{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:start;gap:.65rem}.timeline-header-controls{justify-content:end}.sim-playhead{background:transparent;border-left:2px dashed var(--pulse-ink)}.sim-schedule-legend span:last-child{color:var(--pulse-ink)}.active-rows{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.5rem}.active-rows button{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;min-width:0;gap:.5rem;border:1px solid var(--pulse-border);border-radius:.6rem;padding:.65rem;background:var(--pulse-card-bg);color:var(--pulse-ink);text-align:left;font-size:.75rem}.active-rows strong{min-width:0;overflow-wrap:anywhere}.active-rows span{display:inline-flex;align-self:center;flex:0 0 auto;width:fit-content;height:fit-content;line-height:1.4;font-size:.7rem;border-radius:.3rem;padding:.15rem .35rem;background:var(--pulse-blue-bg)}.active-rows .direct span{background:var(--pulse-primary-light)}.active-rows .downstream span{background:var(--pulse-amber-bg)}.context-dependencies button{display:block;background:none;border:0;padding:.3rem 0;text-align:left;color:var(--pulse-primary);font-size:.8rem}.dependency-dialog{width:min(92vw,42rem);max-height:80vh;overflow:auto;padding:1.25rem;color:var(--pulse-ink);border:1px solid var(--pulse-border)}.dependency-dialog::backdrop{background:#1a243b66}.dependency-dialog li{margin:.3rem 0}.sim-heat-cell{font-size:.62rem;padding:.4rem .2rem;min-height:2.65rem}.sim-heat-cell.is-selected{outline:2px solid var(--pulse-primary);outline-offset:2px}.selected-slot{border:1px solid var(--pulse-primary-border);border-radius:.6rem;padding:.7rem;background:var(--pulse-primary-light)}.sim-heat-legend span:before{content:'';display:inline-block;width:.6rem;height:.6rem;border-radius:50%;background:var(--pulse-border-hover);margin-right:.3rem}.sim-heat-legend .in-use:before{background:var(--pulse-blue)}.sim-heat-legend .conflict:before{background:var(--pulse-amber)}.sim-heat-legend .outage:before{background:var(--pulse-primary)}@media(max-width:575px){.active-rows{grid-template-columns:1fr}}
 .selected-heading,.heatmap-heading{display:flex;justify-content:space-between;align-items:center;gap:.5rem}.activity-impact-badge{font-size:.65rem;font-weight:700;padding:.3rem .45rem;border-radius:.4rem;background:var(--pulse-blue-bg);white-space:nowrap}.activity-impact-badge.direct{background:var(--pulse-primary-light);color:var(--pulse-primary)}.activity-impact-badge.downstream{background:var(--pulse-amber-bg);color:var(--pulse-amber)}.selected-name{font-size:1.05rem;font-weight:750;line-height:1.4;margin:.8rem 0 .6rem}.activity-fact{display:flex;gap:.4rem;align-items:baseline;margin:.6rem 0}.selected-dependencies{border-top:1px solid var(--pulse-border);margin-top:1rem;padding-top:1rem}.context-dependencies strong{font-size:.7rem;font-weight:500;color:var(--pulse-ink-muted)}.sim-timeline-row{padding:.4rem 0}.sim-timeline-lane{height:35px}.sim-time-bar.original.overlay{height:10px;top:2px}.sim-time-bar.simulated.overlay{height:15px;top:17px}.sim-time-bar:not(.overlay){height:25px;top:5px}.sim-heat-cell{font-size:.72rem}.heatmap-heading{margin-bottom:.7rem}
+.impact-disclosure-heading{cursor:pointer;font-weight:650;min-height:44px;line-height:1.5}.impact-disclosure-heading span{display:block;font-weight:400;margin:.25rem 0 .5rem}.sim-time-panel,.sim-heat-panel{min-width:0;scroll-margin-top:1.5rem}
+@media(min-width:1024px){.sim-visual-grid.panels-both-open>.sim-time-panel,.sim-visual-grid.panels-both-open>.sim-heat-panel{grid-column:auto;align-self:stretch}}
 </style>

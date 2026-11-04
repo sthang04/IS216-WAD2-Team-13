@@ -1,3 +1,4 @@
+import {openTimeline,openFacilityHeatmap} from './disclosures.js'
 import {expect} from '@playwright/test'
 // Serve synthetic records through the real loader contract. No production
 // credentials or transport are used; unexpected HTTPS requests are aborted.
@@ -17,5 +18,6 @@ export async function runScenario(page,type='MEMBER_UNAVAILABLE'){
  else{await page.getByLabel('End date for disruption 1',{exact:true}).selectOption('2026-11-02');await page.getByLabel('Unavailable from (Singapore)',{exact:true}).first().selectOption('2026-11-02T10:00');await page.getByLabel('Unavailable until (Singapore)',{exact:true}).first().selectOption('2026-11-02T10:30')}
  await page.getByRole('button',{name:/^Run simulation \(/}).click()
  await expect(page.getByTestId('impact-total')).toBeVisible()
+ await openTimeline(page)
 }
-export async function openHeatmap(page){const button=page.getByRole('button',{name:'Show heatmap',exact:true});if(await button.isVisible())await button.click()}
+export async function openHeatmap(page){await openTimeline(page);await openFacilityHeatmap(page)}

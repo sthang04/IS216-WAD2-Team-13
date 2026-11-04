@@ -1,3 +1,6 @@
+// Purpose: fixture-backed redesign browser regressions for simulator controls and state.
+// Use Setup -> Actions -> Assert; real Vue/engine code runs, but these tests do not prove live Supabase integration.
+import {openTimeline,openFacilityHeatmap} from './helpers/disclosures.js'
 import {test,expect} from '@playwright/test'
 async function boot(page,shape='branch'){
  await page.route('https://**',route=>route.abort())
@@ -7,6 +10,7 @@ async function boot(page,shape='branch'){
  await page.getByLabel('Unavailable from (Singapore)',{exact:true}).selectOption('2026-11-02T10:00')
  await page.getByLabel('Unavailable until (Singapore)',{exact:true}).selectOption('2026-11-02T10:30')
  await page.getByRole('button',{name:'Run simulation (1)',exact:true}).click()
+ await openTimeline(page)
  await expect(page.getByText('Simulation complete',{exact:true})).toBeVisible()
 }
 for(const shape of ['branch','linear','independent','shortcut'])test('village reflects recorded '+shape+' edges and shares selection with list',async({page})=>{
@@ -18,7 +22,7 @@ for(const shape of ['branch','linear','independent','shortcut'])test('village re
  if(shape!=='independent')await expect(village.locator('.village-path').first()).toHaveAttribute('data-from','1')
  await village.getByRole('button',{name:'Fit whole map',exact:true}).click()
  await expect(village.locator('.village-scroll')).toHaveClass(/fit/)
- await village.screenshot({path:test.info().outputPath('village-'+shape+'.png')})
+
  await village.locator('.village-node').first().click()
  await expect(page.locator('.sim-inspection')).toContainText('Fixture activity 1')
  await village.getByRole('button',{name:'Activity List',exact:true}).click()
@@ -38,11 +42,11 @@ test('redesign fits all requested widths and keeps recovery ranking below choice
   const timeline=await page.locator('#impact-timeline').boundingBox(),heat=await page.locator('#impact-facilities').boundingBox()
   if(width>=1024){expect(Math.abs(timeline.y-heat.y)).toBeLessThan(2);expect(Math.abs(timeline.height-heat.height)).toBeLessThan(2)}
   else expect(heat.y).toBeGreaterThan(timeline.y)
-  await page.screenshot({path:test.info().outputPath('redesign-'+width+'.png'),fullPage:true})
+
  }
  await expect(page.locator('#simulator-comparison')).toContainText('Select a recovery plan')
  await page.locator('[data-candidate-id]').first().click()
- await page.getByRole('button',{name:'Use in recovery preview',exact:true}).click()
+ await page.getByRole('button',{name:'Use this alternative',exact:true}).click()
  await expect(page.locator('#simulator-comparison table')).toContainText('Member')
  await expect(page.locator('#simulator-comparison')).toContainText('changed activities')
  await expect(page.getByRole('tablist',{name:'Recovery stages'})).toContainText('Local review required')
@@ -64,17 +68,18 @@ test('independent member and facility disclosure preserves preview selection',as
  await page.getByLabel('Unavailable until (Singapore)',{exact:true}).nth(1).selectOption('2026-11-02T10:30')
  await page.getByRole('button',{name:'Run simulation (2)',exact:true}).click()
  const members=page.locator('.candidate-chooser'),facilities=page.getByRole('region',{name:'Facility and schedule choices',exact:true})
- await expect(members.locator('[data-candidate-id]')).toHaveCount(5)
- await members.getByRole('button',{name:/^Show all/}).click()
- expect(await members.locator('[data-candidate-id]').count()).toBeGreaterThan(5)
- await expect(facilities.locator('[data-facility-option]')).toHaveCount(5)
- await facilities.getByRole('button',{name:/^Show all/}).click()
- expect(await facilities.locator('[data-facility-option]').count()).toBeGreaterThan(5)
- await facilities.locator('[data-facility-option]').last().getByRole('button',{name:'Use this alternative',exact:true}).click()
- await facilities.getByRole('button',{name:'Show less',exact:true}).click()
- await members.getByRole('button',{name:'Show less',exact:true}).click()
- await expect(members.locator('[data-candidate-id]')).toHaveCount(5)
- await expect(facilities.locator('[data-facility-option]')).toHaveCount(5)
+ await expect(members.locator('[data-candidate-id]')).toHaveCount(3)
+ await members.getByLabel(/Number of replacement candidates/).selectOption('all')
+ expect(await members.locator('[data-candidate-id]').count()).toBeGreaterThan(3)
+ await expect(facilities.locator('.facility-shortlist-option')).toHaveCount(3)
+ await facilities.getByLabel(/Number of facility and schedule alternatives/).selectOption('all')
+ expect(await facilities.locator('.facility-shortlist-option').count()).toBeGreaterThan(3)
+ await facilities.locator('.facility-shortlist-option').last().click()
+ await facilities.getByRole('button',{name:'Use this alternative',exact:true}).click()
+ await facilities.getByLabel(/Number of facility and schedule alternatives/).selectOption('3')
+ await members.getByLabel(/Number of replacement candidates/).selectOption('3')
+ await expect(members.locator('[data-candidate-id]')).toHaveCount(3)
+ await expect(facilities.locator('.facility-shortlist-option')).toHaveCount(3)
  await expect(page.locator('#simulator-comparison')).not.toContainText('Select a recovery plan to compare')
  const ranking=page.locator('.recovery-ranking')
  await ranking.getByLabel('Number of ranked plans').selectOption('all')

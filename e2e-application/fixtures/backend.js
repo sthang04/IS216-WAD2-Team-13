@@ -36,7 +36,7 @@ export function createBackend(config,calls){
     link_path:'/facilities',created_at:'2026-11-03T01:50:00Z'}]:[]}
  const persist=()=>sessionStorage.setItem(key,JSON.stringify(state))
  const allowedTables=new Set([
-  'v_master_facility_calendar','v_waitlist_queue',
+  'v_master_facility_calendar','v_waitlist_queue','ops_events',
   ...Object.keys(simulation).filter(name=>Array.isArray(simulation[name])),
  ])
  const pendingReads=new Set()
@@ -93,6 +93,11 @@ export function createBackend(config,calls){
  }
  async function rpc(name,args={}){
   if(config().rpcError===name)return {data:null,error:{message:'Fixture operation denied: '+name}}
+  // App.vue mounts the meeting pane alongside the simulator. Supply its exact
+  // empty read contracts without permitting any meeting mutations.
+  if(['rpc_club_roster','rpc_my_baseline','rpc_club_baselines'].includes(name))return ok([])
+  if(name==='rpc_meeting_snapshot')return ok({meeting:null,participants:[],availability:[]})
+  if(name==='rpc_simulator_event_sources')return ok({contract_version:1,links:[]})
   if(name==='rpc_simulator_event_roster'){
    if(config().rosterError===args.p_event_id)return {data:null,error:{message:'Fixture roster denied'}}
    return ok({event_id:args.p_event_id,club_id:1,members:simulation.members.map(m=>({

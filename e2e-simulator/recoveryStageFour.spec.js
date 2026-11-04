@@ -1,3 +1,5 @@
+// Purpose: fixture-backed recovery Stage Four browser regressions for simulator controls and state.
+// Use Setup -> Actions -> Assert; real Vue/engine code runs, but these tests do not prove live Supabase integration.
 import {test,expect} from '@playwright/test'
 import {bootRecovery,confirmRecovery} from './helpers/recoveryHarness.js'
 async function applied(page){const panel=await bootRecovery(page);await panel.getByRole('button',{name:'Apply selected recovery',exact:true}).click();await confirmRecovery(panel);await expect(panel.getByRole('region',{name:'Applied recovery',exact:true})).toBeVisible();return panel}

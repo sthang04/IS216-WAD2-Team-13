@@ -1,3 +1,5 @@
+// Purpose: fixture-backed facility Approval Integration browser regressions for simulator controls and state.
+// Use Setup -> Actions -> Assert; real Vue/engine code runs, but these tests do not prove live Supabase integration.
 import {test,expect} from '@playwright/test'
 import {bootRecovery,confirmRecovery} from './helpers/recoveryHarness.js'
 async function facility(page,{linked=false,status='Pending Admin Sign-off',action='Pending Approval',otherEventBooking=false}={}){

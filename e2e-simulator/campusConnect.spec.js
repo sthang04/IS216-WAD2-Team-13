@@ -1,3 +1,5 @@
+// Purpose: fixture-backed campus Connect browser regressions for simulator controls and state.
+// Use Setup -> Actions -> Assert; real Vue/engine code runs, but these tests do not prove live Supabase integration.
 import {test,expect} from '@playwright/test'
 // Every scenario uses synthetic data with ID 990001, never live Event 900001.
 // No production fallback/test mode is added. External requests are blocked.
@@ -39,7 +41,7 @@ for(const scenario of ['verified','manual','none','no-facility','facility-manual
   if(scenario==='none')await expect(page.getByText(/No eligible replacement was found among/)).toBeVisible()
   if(['facility-manual','no-facility','blocked'].includes(scenario))await expect(page.getByText('Candidate availability has not been confirmed. Check with your selected replacement before proceeding.',{exact:true})).toHaveCount(0)
   if(scenario==='facility-manual'){
-   const alternative=page.getByTestId('facility-alternative');await expect(alternative.getByText('Approval required',{exact:true})).toBeVisible();await alternative.getByText('Recorded suitability and scheduling evidence',{exact:true}).click()
+   const alternative=page.getByTestId('facility-alternative');await expect(alternative.getByText('Approval required',{exact:true})).toBeVisible();await alternative.locator('.facility-verification > summary').click();await alternative.getByText('Recorded suitability and scheduling evidence',{exact:true}).click()
    await expect(alternative.getByText('Requires owner approval / booking verification',{exact:true})).toBeVisible()
    await page.getByRole('button',{name:'Manage bookings',exact:true}).click()
    await page.getByText('Inspect linked records for Fixture activity 1 (1)',{exact:true}).click()
@@ -82,6 +84,7 @@ test('facility recommendations follow two selected events and actual linked book
   await expect(card).toContainText('/100')
   await expect(card).toContainText('Capacity: 50')
   await expect(card).toContainText('booking verification')
+  await card.locator('.facility-verification > summary').click()
   await card.getByText('Recorded suitability and scheduling evidence',{exact:true}).click()
   const href=await card.getByRole('link',{name:'View / Request facility',exact:true}).getAttribute('href')
   const request=new URL(href,'http://localhost')

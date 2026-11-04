@@ -1,4 +1,5 @@
 <script setup>
+// Purpose: Open the calendar at the exact proposed room/time and refresh evidence; navigation never reserves a room.
 // Bridge a tentative simulator room suggestion to the normal calendar workflow.
 // A status refresh is a read; the user still confirms any calendar action there.
 import { ref, computed, watch, onUnmounted } from 'vue'

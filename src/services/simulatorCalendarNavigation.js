@@ -1,3 +1,4 @@
+// Purpose: Encode and validate calendar navigation hints; URLs do not grant permission or confirm a reservation.
 const single=value=>typeof value==='string'?value:''
 const explicitTime=value=>typeof value==='string'&&/(Z|[+-]\d{2}:\d{2})$/.test(value)&&Number.isFinite(Date.parse(value))
 export const SIMULATOR_FOCUS_KEYS=['simFacilityId','simFacility','simStart','simEnd']

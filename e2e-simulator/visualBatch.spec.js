@@ -1,3 +1,5 @@
+// Purpose: fixture-backed visual Batch browser regressions for simulator controls and state.
+// Use Setup -> Actions -> Assert; real Vue/engine code runs, but these tests do not prove live Supabase integration.
 import {test,expect} from '@playwright/test'
 import {bootRefinement,runScenario,openHeatmap} from './helpers/refinementHarness.js'
 import {bootRecovery} from './helpers/recoveryHarness.js'
@@ -38,16 +40,16 @@ test('timeline header, impact legend, active selection and labelled heatmap pres
  await slider.fill(await slider.getAttribute('max'));await expect(active).toContainText('No activities at this time.')
  await openHeatmap(page);const heat=page.locator('#impact-facilities');await expect(time.locator('header').getByRole('button',{name:'Hide heatmap',exact:true})).toBeVisible();await expect(heat.getByLabel('Heatmap states')).toContainText('Event use')
  const cell=heat.locator('.sim-heat-cell').first();await cell.click();await expect(cell).toHaveAttribute('aria-pressed','true');await expect(heat.getByRole('status',{name:'Selected facility slot'})).toContainText('Selected slot');await expect(cell.locator('[aria-hidden=true]')).not.toHaveText(/^[!xo-]$/)
- const position=await slider.inputValue();await time.getByRole('button',{name:'Hide heatmap',exact:true}).click();await expect(slider).toHaveValue(position);await expect(heat).toBeHidden()
+ const position=await slider.inputValue();await time.getByRole('button',{name:'Hide heatmap',exact:true}).click();await expect(slider).toHaveValue(position);await expect(heat).not.toHaveAttribute('open','')
 })
 
 test('compact alternatives separate preview from calendar actions and preserve original timings',async({page})=>{
  await bootRefinement(page,{many:true});await runScenario(page,'FACILITY_UNAVAILABLE')
  const id=await page.getByTestId('facility-alternative').first().getAttribute('data-facility-option');const card=page.locator('[data-facility-option="'+id+'"]');await expect(card).toContainText('Schedule unchanged');await expect(card.getByLabel('Overall recovery score')).toContainText(/100|unavailable/)
- // Actions: the current design opens verification by default; closing it hides calendar actions.
+ // Actions: verification starts closed; explicit expansion reveals calendar actions.
  const preview=card.getByRole('button',{name:'Use this alternative',exact:true});await expect(preview).toBeVisible()
  const disclosure=card.locator('.facility-verification'),request=card.getByRole('link',{name:'View / Request facility',exact:true})
- await expect(request).toBeVisible();await disclosure.locator(':scope > summary').click();await expect(request).toBeHidden()
+ await expect(request).toBeHidden();await disclosure.locator(':scope > summary').click();await expect(request).toBeVisible();await disclosure.locator(':scope > summary').click();await expect(request).toBeHidden()
  await disclosure.locator(':scope > summary').click();await expect(request).toBeVisible()
  await expect(card.getByRole('button',{name:'Refresh booking status',exact:true})).toBeVisible();await expect(card).toContainText('Equipment');await expect(card).toContainText('does not confirm room availability or approval')
  await preview.click();await expect(card.getByRole('button',{name:'Selected alternative',exact:true})).toHaveAttribute('aria-pressed','true')
@@ -56,7 +58,7 @@ test('compact alternatives separate preview from calendar actions and preserve o
 
 test('empty saved recoveries hide filters; candidate inspection is pink without preview mutation',async({page})=>{
  await bootRefinement(page,{many:true});await runScenario(page)
- const workflow=page.getByRole('region',{name:'Persisted recovery workflow',exact:true});await expect(workflow.getByRole('group',{name:'Saved recovery views'})).toHaveCount(0);await expect(workflow).toContainText('No saved recoveries')
+ const workflow=page.getByRole('region',{name:'Persisted recovery workflow',exact:true});await expect(workflow.getByRole('group',{name:'Saved recovery views'})).toHaveCount(0);await workflow.locator('#simulator-saved-recoveries > summary').click();await expect(workflow).toContainText('No saved recoveries')
  const row=page.locator('.candidate-row').nth(1);await row.click();await expect(row).toHaveCSS('background-color','rgb(255, 241, 242)');await expect(workflow).toHaveAttribute('data-selected-recovery','')
  const first=page.getByRole('article',{name:'Recovery plan 1',exact:true});await first.getByTestId('follow-up-actions').locator(':scope > summary').click();await first.getByText('Scoring evidence',{exact:true}).click();await expect(first.locator('pre')).toHaveCount(0)
 })

@@ -1,3 +1,5 @@
+// Purpose: fixture-backed disruption Schedule browser regressions for simulator controls and state.
+// Use Setup -> Actions -> Assert; real Vue/engine code runs, but these tests do not prove live Supabase integration.
 import {setRawInterval} from './fixtures/disruptionInputs.js'
 import {test,expect} from '@playwright/test'
 import {campusConnectMultiEventFixture} from './fixtures/campusConnect.js'
@@ -69,6 +71,7 @@ test('switching events resets all cards and invalidates results',async({page})=>
 test('every card validates; facility whole-event outage preserves combined scenarios',async({page})=>{
  await boot(page);await page.getByRole('button',{name:'Add disruption',exact:true}).click()
  await page.locator('#D2-type').selectOption('FACILITY_UNAVAILABLE')
+ await page.getByText('More controls',{exact:true}).click()
  await page.locator('#D2-window').selectOption('event')
  await expect(page.locator('#D2-start')).toHaveValue(first)
  await expect(page.locator('#D2-end')).toHaveValue(last)

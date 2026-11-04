@@ -225,6 +225,7 @@ test('isolated Ops integration PostgreSQL contracts (no network or E2E)', async 
         )
         await db.exec(migration('20261104083807_simulator_ops_integration.sql'))
         await db.exec(migration('20261104093436_simulator_ops_task_only_validation.sql'))
+        await db.exec(migration('20261104121747_simulator_event_source_catalog.sql'))
         assert.deepEqual(
           await scalar(
             'SELECT to_jsonb(g) FROM simulator_private.release_gate g'
@@ -279,6 +280,13 @@ test('isolated Ops integration PostgreSQL contracts (no network or E2E)', async 
         )
       }
     )
+    await t.test('event catalog uses exact links, hides other clubs and denies anonymous access',async()=>{
+      const catalog=await user(1,'SELECT public.rpc_simulator_event_sources()')
+      assert.equal(catalog.contract_version,1)
+      assert.deepEqual(catalog.links,[{event_id:event,ops_event_id:source,source_event_uuid:source,archived:false}])
+      assert.deepEqual((await user(4,'SELECT public.rpc_simulator_event_sources()')).links,[])
+      await assert.rejects(user(null,'SELECT public.rpc_simulator_event_sources()'),/permission denied/)
+    })
     await t.test(
       'Day Ops edits and reassignments preserve stable mappings',
       async () => {
@@ -551,6 +559,7 @@ test('isolated Ops integration PostgreSQL contracts (no network or E2E)', async 
         )
         assert.ok(mapped)
         await q('DELETE FROM ops_events WHERE id=$1', [event2])
+        assert.ok((await user(1,'SELECT public.rpc_simulator_event_sources()')).links.some(l=>l.source_event_uuid===event2 && l.ops_event_id===null && l.archived===true))
         assert.equal(
           await scalar(
             'SELECT count(*)::integer FROM event_segments WHERE id=$1',

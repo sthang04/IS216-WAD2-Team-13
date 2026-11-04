@@ -1,3 +1,5 @@
+// Purpose: fixture-backed pip Settings browser regressions for simulator controls and state.
+// Use Setup -> Actions -> Assert; real Vue/engine code runs, but these tests do not prove live Supabase integration.
 import {test,expect} from '@playwright/test'
 
 test('simulator Pip settings persist, reverse, and synchronize with another Pip',async({page})=>{

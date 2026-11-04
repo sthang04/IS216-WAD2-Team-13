@@ -1,4 +1,5 @@
 <script setup>
+// Purpose: Draw recorded activity dependencies, share selection with the list and support fit, zoom, pan and cascade replay.
 import {computed,ref,useId,onMounted,onUnmounted,watch,nextTick} from 'vue'
 import {controlRoomTime} from '../services/simulatorControlRoomService.js'
 const props=defineProps({model:Object,selectedId:[String,Number],replayVersion:{type:Number,default:0}}),emit=defineEmits(['select','inspect-edge'])
@@ -33,6 +34,7 @@ const nodes=computed(()=>{
  * @param {object[]} obstacles Occupied rectangles, including long labels.
  * @returns {string} SVG path; geometry never changes cascade or dependency data.
  */
+// Route a stored dependency around booth bounds; geometry does not invent or change dependency relationships.
 function routeEdge(a,b,obstacles){
  const sign=b.x>a.x?1:b.x<a.x?-1:(a.x>bounds(nodes.value).x+bounds(nodes.value).width/2?1:-1),endSign=b.x===a.x?sign:-sign,start={x:a.x+sign*124,y:a.y+18},end={x:b.x+endSign*124,y:b.y+18}
  const xs=[...new Set([start.x,end.x,...obstacles.flatMap(r=>[r.left-16,r.right+16])])].sort((a,b)=>a-b),ys=[...new Set([start.y,end.y,...obstacles.flatMap(r=>[r.top-16,r.bottom+16])])].sort((a,b)=>a-b)

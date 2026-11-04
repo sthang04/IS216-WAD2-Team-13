@@ -1,3 +1,4 @@
+// Purpose: Join existing facility recommendations and evaluator evidence for display without changing scores or approvals.
 import {suggestSimulatorFacilities} from './simulatorWorkflowService.js'
 const same=(a,b)=>a!=null&&b!=null&&String(a)===String(b)
 const venueKey=value=>String(value || '').trim().toLowerCase()

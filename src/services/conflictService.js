@@ -1,3 +1,4 @@
+// Purpose: Detect overlaps and dependency violations from recorded schedules; missing evidence is not proof of availability.
 /*
 
 PULSE - CONFLICT CHECKING SERVICE

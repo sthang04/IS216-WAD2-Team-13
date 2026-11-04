@@ -102,7 +102,7 @@ test('actual live loader merges RPC standby with assigned impact members using m
   // bindings are replaced; all SELECT/merge/normalization logic stays unchanged.
   const source=readFileSync(new URL('../../../src/services/simulationDataService.js',import.meta.url),'utf8')
     .replace(/^import .*$/gm,'').replace(/export async function/g,'async function')
-  const factory=new Function('supabase','isSupabaseConfigured','loadEventReplacementRosters','readSimulatorRows',
+  const factory=new Function('supabase','isSupabaseConfigured','readUnifiedSimulationData','readSimulatorRows',
     source+'; return {loadLiveSimulationData,loadSimulationData};')
   const tables={
     events:[{...event,starts_at:'2026-11-10T10:00:00Z',ends_at:'2026-11-10T11:00:00Z'}],
@@ -121,7 +121,10 @@ test('actual live loader merges RPC standby with assigned impact members using m
         eq:(column,value)=>{rows=rows.filter(r=>r[column]===value);return query},gte:()=>query,lte:()=>query,then:resolve=>Promise.resolve({data:rows.slice(bounds[0],bounds[1]+1),count:rows.length,error:null}).then(resolve)}
       return query
     }}
-  const loader=factory(fake,()=>true,loadEventReplacementRosters,readSimulatorRows)
+  // The unified catalog now owns roster merging; exercise the loader against
+  // that normalized contract. Catalog joins have separate behavioural tests.
+  const unified=async c=>{const roster=await loadEventReplacementRosters(c,tables.events);return {...tables,...roster,members:[...tables.members,...roster.members]}}
+  const loader=factory(fake,()=>true,unified,readSimulatorRows)
   const data=await loader.loadLiveSimulationData()
   assert.deepEqual(data.members.map(m=>m.id),[1,2])
   assert.equal(data.replacement_memberships[0].memberId,2)

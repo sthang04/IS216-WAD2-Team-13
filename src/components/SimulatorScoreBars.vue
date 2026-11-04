@@ -1,4 +1,5 @@
 <script setup>
+// Purpose: Render recorded score factors accessibly; unavailable evidence never becomes a fabricated numeric score.
 const props=defineProps({breakdown:Object})
 const factors=[['conflict','Conflict resolution'],['timetable','Timetable'],['workload','Staffing / workload'],['venue','Venue suitability']]
 const valid=n=>typeof n==='number'&&Number.isFinite(n)

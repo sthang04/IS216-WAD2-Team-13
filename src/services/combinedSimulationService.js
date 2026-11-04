@@ -1,3 +1,4 @@
+// Purpose: Validate disruption cards and combine member, room and timing proposals without changing operational records.
 import { requireEventRange, requireActivityRange } from './disruptionScheduleService.js'
 // Proposals stay hypothetical: merge choices here, then evaluate the complete
 // schedule before ranking. A high rank never supplies consent or booking approval.

@@ -1,9 +1,11 @@
+// Purpose: fixture-backed original Booking browser regressions for simulator controls and state.
+// Use Setup -> Actions -> Assert; real Vue/engine code runs, but these tests do not prove live Supabase integration.
 import {test,expect} from '@playwright/test'
 // Only this isolated page receives the test flag. Production source stays OFF.
 test('original booking discovery, explicit association and refresh enable the real facility input',async({page})=>{
  await page.route('https://**',r=>r.abort())
  await page.route('**/src/services/simulatorOriginalBookingService.js*',async route=>{
-  const response=await route.fetch();const body=(await response.text()).replace(/ORIGINAL_BOOKING_LINK_VERIFIED\s*=\s*false/,'ORIGINAL_BOOKING_LINK_VERIFIED=true')
+  const response=await route.fetch();const body=(await response.text()).replace(/ORIGINAL_BOOKING_LINK_VERIFIED\s*=[^\n]+/,'ORIGINAL_BOOKING_LINK_VERIFIED=true')
   await route.fulfill({response,body})
  })
  await page.route('**/src/services/simulationDataService.js*',route=>route.fulfill({contentType:'application/javascript',body:

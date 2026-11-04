@@ -1,3 +1,4 @@
+// Purpose: Gate frontend RPC availability for approved configuration; server authorization remains mandatory.
 // Browser activation is an opt-in, not authorization. PostgreSQL independently
 // enforces identity, permissions, release gates, consent and stale-state checks.
 export function simulatorWorkflowActivation(env={}){

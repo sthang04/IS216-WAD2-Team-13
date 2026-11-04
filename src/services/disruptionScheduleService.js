@@ -1,3 +1,4 @@
+// Purpose: Resolve event/activity boundaries and Singapore time-picker choices, including precise and cross-day intervals.
 // Bounds come from the already loaded event, never a fallback date.
 // Singapore wall time is independent of the browser's timezone and DST.
 export function singaporeLocal(value) {

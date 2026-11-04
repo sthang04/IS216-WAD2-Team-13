@@ -1,3 +1,4 @@
+// Purpose: Carry exact calendar claim references back to recovery and read booking evidence without inventing associations.
 import {supabase} from '../supabase'
 import {readSimulatorRows} from './simulatorPaginationService.js'
 export const RECOVERY_BOOKING_EVENT='pulse:recovery-booking-claimed'

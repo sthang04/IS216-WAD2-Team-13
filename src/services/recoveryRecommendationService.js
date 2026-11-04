@@ -1,3 +1,4 @@
+// Purpose: Generate replacement and facility proposals from eligible recorded evidence while explaining exclusions.
 import {simulatorBookingPeriod} from './simulatorFacilityEvidence.js'
 /*
 ============================================================

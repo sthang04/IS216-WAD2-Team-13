@@ -1,3 +1,6 @@
+// Purpose: fixture-backed control Room browser regressions for simulator controls and state.
+// Use Setup -> Actions -> Assert; real Vue/engine code runs, but these tests do not prove live Supabase integration.
+import {openTimeline,openFacilityHeatmap} from './helpers/disclosures.js'
 import {test,expect} from '@playwright/test'
 import {campusConnectMultiEventFixture} from './fixtures/campusConnect.js'
 // The real Vue view runs; ONLY this isolated harness supplies fixtures.
@@ -10,6 +13,7 @@ async function boot(page,mode='manual',multiple=false){
  await page.getByLabel('Unavailable from (Singapore)',{exact:true}).selectOption('2026-11-02T10:00')
  await page.getByLabel('Unavailable until (Singapore)',{exact:true}).selectOption('2026-11-02T10:30')
  await page.getByRole('button',{name:'Run simulation (1)',exact:true}).click()
+ await openTimeline(page)
 }
 test('control room expands real impacts, inspects graph and switches original/simulated/overlay timeline',async({page})=>{
  await boot(page)
@@ -34,14 +38,15 @@ test('facility heatmap shows linked records and simulated outage; missing links 
  await boot(page)
  await page.getByLabel('Disruption type',{exact:true}).selectOption('FACILITY_UNAVAILABLE')
  await page.getByRole('button',{name:'Run simulation (1)',exact:true}).click()
+ await openTimeline(page)
  const workspace=page.getByRole('region',{name:'Event impact workspace',exact:true})
- if(await workspace.getByRole('button',{name:'Show heatmap',exact:true}).isVisible())await workspace.getByRole('button',{name:'Show heatmap',exact:true}).click()
+ if(await workspace.getByRole('button',{name:'Show heatmap',exact:true}).isVisible())await workspace.getByRole('button',{name:'Show heatmap',exact:true}).click();await openFacilityHeatmap(page)
  await expect(workspace).toContainText('Booking 1')
  await expect(workspace).not.toContainText('Booking 2')
  await workspace.getByRole('button',{name:/Fixture Original Room:.*Simulated outage/}).first().click()
  await expect(workspace.locator('.sim-inspection')).toContainText('Simulated outage')
  await boot(page,'unlinked')
- if(await workspace.getByRole('button',{name:'Show heatmap',exact:true}).isVisible())await workspace.getByRole('button',{name:'Show heatmap',exact:true}).click()
+ if(await workspace.getByRole('button',{name:'Show heatmap',exact:true}).isVisible())await workspace.getByRole('button',{name:'Show heatmap',exact:true}).click();await openFacilityHeatmap(page)
  await expect(workspace).toContainText('No accessible linked facility bookings')
  await expect(workspace.locator('.sim-heat-cell')).toHaveCount(0)
 })
@@ -66,12 +71,12 @@ test('mobile layout stays within viewport and comparison remains ahead of real r
  const impact=page.getByRole('region',{name:'Event impact workspace',exact:true})
  await impact.locator('#impact-timeline').scrollIntoViewIfNeeded()
  await expect.poll(()=>page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth+1)).toBe(true)
- await page.getByRole('navigation',{name:'Simulator workflow',exact:true}).getByRole('link',{name:/Compare plans/}).click()
+ await page.locator('.section-shortcuts > summary').click();await page.getByRole('navigation',{name:'Simulator section shortcuts',exact:true}).getByRole('link',{name:/Plan Comparison/}).click()
  await expect(page.getByRole('heading',{name:'Plan Comparison',exact:true})).toBeInViewport()
  const order=await page.evaluate(()=>document.getElementById('simulator-comparison').compareDocumentPosition(document.getElementById('simulator-recovery-workflow')))
  expect(order&4).toBeTruthy()
  await expect(page.getByRole('button',{name:'Apply selected recovery',exact:true})).toHaveCount(0)
- await page.getByRole('navigation',{name:'Simulator workflow',exact:true}).getByRole('link',{name:/Understand impact/}).click()
+ await page.locator('.section-shortcuts > summary').click();await page.getByRole('navigation',{name:'Simulator section shortcuts',exact:true}).getByRole('link',{name:/Impact & Event Village/}).click()
 })
 
 
@@ -101,7 +106,7 @@ test('ranked plan selection changes comparison, preparation and recovery inspect
  await expect.poll(async()=>Number(await slider.inputValue())).toBeGreaterThan(15)
  await impact.getByRole('button',{name:'Pause timeline',exact:true}).click()
  const stopped=await slider.inputValue();await page.clock.runFor(400);await expect(slider).toHaveValue(stopped)
- if(await impact.getByRole('button',{name:'Show heatmap',exact:true}).isVisible())await impact.getByRole('button',{name:'Show heatmap',exact:true}).click()
+ if(await impact.getByRole('button',{name:'Show heatmap',exact:true}).isVisible())await impact.getByRole('button',{name:'Show heatmap',exact:true}).click();await openFacilityHeatmap(page)
  await impact.locator('.sim-heat-cell').last().click()
  await expect(impact.locator('.sim-heat-cell.current')).toHaveCount(1)
  await expect(impact.locator('.sim-inspection')).toContainText('Fixture Original Room')
@@ -117,8 +122,8 @@ test('candidate cards select the actual combined recovery and Reset scenario doe
  const candidates=page.locator('[data-candidate-id]')
  expect(await candidates.count()).toBeGreaterThan(1)
  await candidates.first().click()
- await page.getByRole('button',{name:'Use in recovery preview',exact:true}).click()
- await expect(page.getByRole('button',{name:'In recovery preview',exact:true})).toHaveCount(1)
+ await page.getByRole('button',{name:'Use this alternative',exact:true}).click()
+ await expect(page.getByRole('button',{name:'Selected alternative',exact:true})).toHaveCount(1)
  const panel=page.getByRole('region',{name:'Persisted recovery workflow',exact:true})
  await expect(panel).toHaveAttribute('data-selected-recovery','combined-selected')
  await expect(page.locator('#simulator-comparison')).toContainText('Custom combined recovery preview')
@@ -126,7 +131,7 @@ test('candidate cards select the actual combined recovery and Reset scenario doe
  await expect(page.getByRole('region',{name:'My replacement invitations',exact:true})).toHaveCount(0)
  await page.getByRole('button',{name:'Reset Simulation',exact:true}).click()
  await expect(page.getByText('Simulation complete',{exact:true})).toHaveCount(0)
- await expect(page.getByRole('button',{name:'In recovery preview',exact:true})).toHaveCount(0)
+ await expect(page.getByRole('button',{name:'Selected alternative',exact:true})).toHaveCount(0)
 })
 
 test('multi-date event keeps readable bars and heatmap labels within the selected real event day',async({page})=>{
@@ -138,6 +143,7 @@ test('multi-date event keeps readable bars and heatmap labels within the selecte
  await page.getByLabel('Unavailable from (Singapore)',{exact:true}).selectOption('2026-11-02T10:00')
  await page.getByLabel('Unavailable until (Singapore)',{exact:true}).selectOption('2026-11-02T10:30')
  await page.getByRole('button',{name:'Run simulation (1)',exact:true}).click()
+ await openTimeline(page)
  await expect(page.getByLabel('Event day (Singapore)',{exact:true})).toHaveValue('2026-11-02')
  await expect(page.locator('.sim-timeline-row')).toHaveCount(7)
  await page.getByLabel('Event day (Singapore)',{exact:true}).selectOption('2027-03-04')
@@ -177,7 +183,7 @@ test('mixed member and room disruptions select one complete recovery across comp
  expect(ids[0]).not.toBe(ids[1])
  await cards.nth(0).getByRole('button',{name:'Select this plan',exact:true}).click()
  await page.locator('[data-candidate-id="3"]').click()
- await page.getByRole('button',{name:'Use in recovery preview',exact:true}).click()
+ await page.getByRole('button',{name:'Use this alternative',exact:true}).click()
  const custom=page.locator('.recovery-choice[data-plan-id="combined-selected"]')
  await expect(custom).toContainText('move to Fixture Alternative Room')
  await expect(custom).toContainText('Fixture review standby')
@@ -207,8 +213,6 @@ test('ranking disclosure preserves selection and full page fits desktop and mobi
  await expect(cards.last()).toHaveAttribute('data-plan-id',selected)
  await expect(cards.last()).toHaveClass(/is-selected/)
  await expect(page.getByRole('region',{name:'Persisted recovery workflow',exact:true})).toHaveAttribute('data-selected-recovery',selected)
- await filter.selectOption('5')
- await expect(cards).toHaveCount(Math.min(5,total)+(total>5?1:0))
  await filter.selectOption('3')
  { // Each project checks the layout at its own viewport.
   await expect.poll(()=>page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true)

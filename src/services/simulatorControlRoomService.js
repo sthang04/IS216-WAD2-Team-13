@@ -1,3 +1,4 @@
+// Purpose: Build the shared map, activity, timeline and heatmap presentation model from original and simulated records.
 import {simulatorBookingPeriod} from './simulatorFacilityEvidence.js'
 const same=(a,b)=>a!=null&&b!=null&&String(a)===String(b)
 const key=value=>String(value || '').trim().toLowerCase()

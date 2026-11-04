@@ -1,3 +1,4 @@
+// Purpose: Adapt real calendar evidence for simulator choices while preserving approval, ownership and time validation.
 // Decorate an existing room recommendation without ranking, removing or replacing it.
 // Calendar hints reuse normal booking actions and cannot upgrade a pending
 // transfer into an approved reservation for the recovery plan.

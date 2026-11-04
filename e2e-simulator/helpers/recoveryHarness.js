@@ -68,6 +68,8 @@ export async function bootRecovery(page,{acknowledge=true,invitationsEnabled=fal
  `}))
  await page.goto('/e2e-simulator/harness.html'+(lifecycle?'?lifecycle='+lifecycle:''))
  await page.getByRole('region',{name:'Persisted recovery workflow',exact:true}).scrollIntoViewIfNeeded()
+ // Actions: open saved records explicitly; the disclosure starts closed.
+ await page.locator('#simulator-saved-recoveries > summary').click()
  await page.locator('[data-saved-plan-id="00000000-0000-4000-8000-000000000777"]').click()
  const panel=page.getByRole('region',{name:'Persisted recovery workflow',exact:true})
  if(acknowledge){await panel.getByRole('tab',{name:/Organiser review/}).click();await panel.getByLabel('I manually checked personal availability, qualifications and facility suitability; incomplete data is not proof of availability.',{exact:true}).check();await panel.getByRole('tab',{name:/Apply \/ Undo/}).click()}

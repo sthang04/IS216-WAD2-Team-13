@@ -1,4 +1,5 @@
 <script setup>
+// Purpose: Compare original and proposed activity records without mutating the source schedule.
 import {computed} from 'vue'
 import {controlRoomTime} from '../services/simulatorControlRoomService.js'
 const props=defineProps({data:Object,segments:Array,recovery:Object,result:Object,before:Object,savedStatus:String})

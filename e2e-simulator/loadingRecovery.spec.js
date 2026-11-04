@@ -1,3 +1,5 @@
+// Purpose: fixture-backed loading Recovery browser regressions for simulator controls and state.
+// Use Setup -> Actions -> Assert; real Vue/engine code runs, but these tests do not prove live Supabase integration.
 import { test, expect } from '@playwright/test'
 
 // Browser E2E through the real Vue view and engine. All records are synthetic;

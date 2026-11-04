@@ -4,7 +4,7 @@ export const eventSelect=page=>page.getByLabel('Event',{exact:true})
 export async function runDelay(page){
  await page.getByLabel('Disruption type',{exact:true}).selectOption('SCHEDULE_DELAY')
  await page.getByLabel('Delay (minutes)',{exact:true}).fill('30')
- await page.getByRole('button',{name:'Run combined simulation (1)',exact:true}).click()
+ await page.getByRole('button',{name:'Run simulation (1)',exact:true}).click()
  await expect(page.getByText('Simulation complete',{exact:true})).toBeVisible()
 }
 export const room=(page,name)=>page.locator('article').filter({has:page.getByRole('heading',{name,exact:true})})

@@ -1,3 +1,4 @@
+// Purpose: Adapt canonical Day Ops UUID events/tasks and bigint members to the engine using explicit persisted mappings.
 /**
  * Adapt live Day Ops records to the simulator's established engine shape.
  * This module never saves a scenario, edits an operations task, or guesses a
@@ -265,8 +266,8 @@ export function adaptOpsSimulationData({
 }
 
 /** Read the same three canonical tables as opsService, preserving RLS and full
- * pagination. No guest sample plan, browser storage, or legacy demo fallback. */
-export async function readOpsSimulationData(client) {
+ * pagination. No guest sample plan or browser-storage fallback. */
+export async function readOpsSimulationData(client, {allowEmpty=false} = {}) {
   // Step 1: read saved operations records. Empty or failed live reads stay honest.
   const events = await readSimulatorRows(
     client,
@@ -274,6 +275,10 @@ export async function readOpsSimulationData(client) {
     undefined,
     'id,club_id,name,event_date,venue'
   )
+  if(!events.length && allowEmpty)return {
+    ...adaptOpsSimulationData({}),replacement_memberships:[],
+    member_replacement_coverage:{byEvent:{},rosterVerified:false,scheduleVerified:false}
+  }
   if (!events.length)
     throw Error(
       'No accessible Day Ops events found. Create an event in Day Ops or check club permissions.'

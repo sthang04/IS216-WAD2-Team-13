@@ -1,3 +1,4 @@
+// Purpose: Read complete authorized result sets and reject inconsistent counts, duplicate rows and failed pages.
 /**
  * Read every RLS-visible row without assuming the server's row cap. Each request
  * uses the same filters/order and asks for an exact count of visible rows.

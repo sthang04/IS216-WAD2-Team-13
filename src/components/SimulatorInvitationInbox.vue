@@ -1,4 +1,5 @@
 <script setup>
+// Purpose: Read real invitation terms and confirm exact accept/decline responses; delivery status is not acceptance.
 // This inbox records consent only. Assignment changes belong to the organizer's
 // separately authorized Apply operation; Telegram delivery is independent.
 import {ref,watch,onMounted,onUnmounted,nextTick} from 'vue'

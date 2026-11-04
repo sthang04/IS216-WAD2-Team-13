@@ -1,4 +1,5 @@
 <script setup>
+// Purpose: Edit disruption dates/times within the selected event using explicit Singapore calendar boundaries.
 import {computed, reactive, ref, watch} from 'vue'
 import {eventDates, scheduleRange, disruptionTimeOptions, formatPickerTime} from '../services/disruptionScheduleService.js'
 const props = defineProps({event:Object, start:String, end:String, disabled:Boolean, id:String, index:Number})
@@ -24,6 +25,7 @@ function permitted(key, value) {
 function dateUnavailable(key, date) {
  return !disruptionTimeOptions(props.event,date,props[key]).some(value => permitted(key,value))
 }
+// Recalculate valid time choices after changing the calendar date, keeping supported precise values when possible.
 function chooseDate(key, date) {
  if (!availableDates.value.includes(date) || dateUnavailable(key,date)) return
  dates[key] = date
@@ -36,6 +38,7 @@ function chooseDate(key, date) {
   feedback.value = 'Date changed. Choose an available ' + (key === 'start' ? 'From' : 'Until') + ' time for this date.'
  }
 }
+// Emit the selected event-bounded local timestamp; no schedule record is edited here.
 function chooseTime(key, value) {
  if (!options(key).includes(value) || !permitted(key,value)) {
   feedback.value = 'This time is unavailable. Until must be later than From and both must be within the event schedule.'

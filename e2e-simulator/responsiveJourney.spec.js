@@ -1,3 +1,6 @@
+// Purpose: fixture-backed responsive Journey browser regressions for simulator controls and state.
+// Use Setup -> Actions -> Assert; real Vue/engine code runs, but these tests do not prove live Supabase integration.
+import {openTimeline,openFacilityHeatmap} from './helpers/disclosures.js'
 import {test,expect} from '@playwright/test'
 import {bootRecovery} from './helpers/recoveryHarness.js'
 async function act(page,locator){if(await page.evaluate(()=>navigator.maxTouchPoints>0))await locator.tap();else await locator.click()}
@@ -12,7 +15,7 @@ async function bootSimulation(page){
  await page.getByLabel('Unavailable from (Singapore)',{exact:true}).selectOption('2026-11-02T10:00')
  await page.getByLabel('Unavailable until (Singapore)',{exact:true}).selectOption('2026-11-02T10:30')
  await act(page,page.getByRole('button',{name:'Run simulation (1)',exact:true}))
- await expect(page.getByText('Simulation complete',{exact:true})).toBeVisible()
+ await expect(page.getByText('Simulation complete',{exact:true})).toBeVisible();await openTimeline(page)
 }
 // Projects supply the viewport; avoid multiplying a second device matrix.
 test.describe('responsive workflow',()=>{
@@ -48,11 +51,11 @@ test.describe('responsive workflow',()=>{
   await act(page,heatmap.locator('.sim-heat-cell').last());await expect(heatmap.locator('.sim-inspection')).toBeVisible();await fits(page)
   await timeline.scrollIntoViewIfNeeded();
   const list=page.locator('[data-candidate-id]'),details=page.getByRole('region',{name:'Candidate details',exact:true})
-  await act(page,list.nth(1));await act(page,details.getByRole('button',{name:'Use in recovery preview',exact:true}))
+  await act(page,list.nth(1));await act(page,details.getByRole('button',{name:'Use this alternative',exact:true}))
   await expect(page.getByRole('region',{name:'Persisted recovery workflow',exact:true})).toHaveAttribute('data-selected-recovery','combined-selected')
   const listBox=await page.locator('.candidate-list').boundingBox(),detailBox=await details.boundingBox()
   expect(detailBox.y>listBox.y || detailBox.x>listBox.x).toBe(true)
-  await details.scrollIntoViewIfNeeded();await fits(page);if(width<768)expect(Math.round((await details.getByRole('button',{name:'In recovery preview',exact:true}).boundingBox()).height*100)/100).toBeGreaterThanOrEqual(44);
+  await details.scrollIntoViewIfNeeded();await fits(page);if(width<768)expect(Math.round((await details.getByRole('button',{name:'Selected alternative',exact:true}).boundingBox()).height*100)/100).toBeGreaterThanOrEqual(44);
   await page.getByLabel('Disruption type',{exact:true}).selectOption('FACILITY_UNAVAILABLE')
   await act(page,page.getByRole('button',{name:'Run simulation (1)',exact:true}))
   const option=page.locator('[data-facility-option]').first()

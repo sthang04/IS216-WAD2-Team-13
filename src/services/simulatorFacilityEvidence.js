@@ -1,3 +1,4 @@
+// Purpose: Interpret recorded booking intervals, inventory and suitability conservatively for recovery checks.
 // Read-only evidence for the existing ranking pipeline. Singapore booking dates
 // are local calendar dates, never UTC dates or the browser's local timezone.
 export function simulatorBookingPeriod(booking){

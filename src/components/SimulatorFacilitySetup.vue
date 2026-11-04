@@ -1,4 +1,5 @@
 <script setup>
+// Purpose: Discover and explicitly link approved original bookings using server-provided fingerprints and suitability confirmation.
 // Inspect event-to-booking links and explicitly associate an existing approved
 // booking. This panel does not create a reservation or approve a transfer.
 import {computed,ref,watch} from 'vue'

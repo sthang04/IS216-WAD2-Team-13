@@ -1,3 +1,5 @@
+// Purpose: fixture-backed session Entry browser regressions for simulator controls and state.
+// Use Setup -> Actions -> Assert; real Vue/engine code runs, but these tests do not prove live Supabase integration.
 import {setRawInterval} from './fixtures/disruptionInputs.js'
 import {test,expect} from '@playwright/test'
 async function boot(page,mode='route'){
@@ -15,6 +17,7 @@ async function clean(page){
  const eventId=await page.getByLabel('Event',{exact:true}).inputValue()
  await expect(page.getByLabel('Unavailable from (Singapore)',{exact:true})).toHaveValue(eventId==='990003'?'2026-11-03T10:00':'2026-11-02T10:00')
  await expect(page.locator('.sim-impact-workspace,.recovery-choice,#simulator-comparison')).toHaveCount(0)
+ const saved=page.locator('#simulator-saved-recoveries');if(!(await saved.evaluate(e=>e.open)))await saved.locator(':scope > summary').click()
  await expect(page.getByRole('region',{name:'Saved Recoveries',exact:true})).toContainText('Persisted fixture recovery')
 }
 async function run(page){

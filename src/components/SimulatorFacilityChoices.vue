@@ -1,4 +1,5 @@
 <script setup>
+// Purpose: Present evaluated facility/time alternatives with independent inspection, filtering and explicit preview selection.
 // Display evaluated venue/time alternatives per activity. Choosing a card emits
 // a preview selection; reservations and approvals stay in Facility Calendar.
 import {computed,ref,watch} from 'vue'
@@ -6,15 +7,30 @@ import SimulatorCalendarActions from './SimulatorCalendarActions.vue'
 import {controlRoomTime} from '../services/simulatorControlRoomService.js'
 const props=defineProps({recommendations:Array,options:Array,rankedPlans:Array,selected:{type:Array,default:()=>[]},data:Object,event:Object})
 const emit=defineEmits(['choose'])
-const expanded=ref({}),alternativeOrder=ref(new Map())
+const choiceLimits=ref({}),searches=ref({}),inspectedIds=ref({}),alternativeOrder=ref(new Map())
 // Capture the evaluated alternative order for each scenario. Selecting a room
 // replaces its individual plan with a custom plan; that rank change must not
 // move the card under the user's pointer. Recovery Plan Ranking remains live.
-watch([()=>props.options,()=>props.recommendations,()=>props.event?.id],()=>{const ranks=new Map((props.rankedPlans || []).map((p,i)=>[p.id,i]));const ordered=(props.options || []).map((o,i)=>({id:o.id,index:i,rank:ranks.get(o.id)??Infinity})).sort((a,b)=>a.rank-b.rank||a.index-b.index);alternativeOrder.value=new Map(ordered.map((o,i)=>[o.id,i]))},{immediate:true})
-watch(()=>props.event?.id,()=>{expanded.value={}})
-// Keep the chosen card in the compact list when a custom proposal's evaluated
-// rank moves below five; its disappearance would hide the selection feedback.
-const visibleChoices=group=>{if(expanded.value[String(group.segmentId)])return group.choices;const chosen=group.choices.filter(r=>props.selected.includes(r.option.id));const others=group.choices.filter(r=>!chosen.includes(r)).slice(0,Math.max(0,5-chosen.length));return group.choices.filter(r=>chosen.includes(r)||others.includes(r))}
+watch([()=>props.options,()=>props.recommendations,()=>props.event?.id],([options,recommendations,eventId],previous=[])=>{
+ // Re-evaluating the selected preview can change scores without creating a new
+ // scenario. Keep the existing source order while the same options remain.
+ const ids=(options || []).map(o=>o.id),existing=alternativeOrder.value
+ if(options===previous[0] && eventId===previous[2] && ids.length===existing.size && ids.every(id=>existing.has(id)))return
+ const ranks=new Map((props.rankedPlans || []).map((p,i)=>[p.id,i]));const ordered=(props.options || []).map((o,i)=>({id:o.id,index:i,rank:ranks.get(o.id)??Infinity})).sort((a,b)=>a.rank-b.rank||a.index-b.index);alternativeOrder.value=new Map(ordered.map((o,i)=>[o.id,i]))},{immediate:true})
+watch(()=>props.event?.id,()=>{choiceLimits.value={};searches.value={};inspectedIds.value={}})
+// Limit each activity's displayed shortlist only. Full evaluated alternatives,
+// their stable order and the selected recovery preview remain unchanged.
+// Search the complete evaluated list before applying Top 3. Filtering never
+// changes the inspected option or the explicitly chosen recovery alternative.
+const filteredChoices=group=>{const query=(searches.value[String(group.segmentId)] || '').trim().toLowerCase();return group.choices.filter(row=>[row.change.venueName || 'Schedule adjustment',row.option.title,scheduleLabel(row),...(row.fact?.equipment || [])].filter(Boolean).join(' ').toLowerCase().includes(query))}
+const visibleChoices=group=>choiceLimits.value[String(group.segmentId)]==='all'?filteredChoices(group):filteredChoices(group).slice(0,3)
+const selectedOutsideList=group=>group.choices.some(row=>props.selected.includes(row.option.id) && !visibleChoices(group).some(visible=>visible.option.id===row.option.id))
+
+// Inspecting an option only changes this panel; the action button explicitly
+// adds it to the recovery preview. Resolve IDs against current evaluated data.
+const inspectedChoice=group=>group.choices.find(row=>row.option.id===inspectedIds.value[String(group.segmentId)]) || group.choices.find(row=>props.selected.includes(row.option.id)) || group.choices[0]
+const inspectedChoices=group=>{const row=inspectedChoice(group);return row?[row]:[]}
+
 const score=value=>typeof value==='number'&&Number.isFinite(value)?value+'/100':'Score unavailable'
 // Join alternatives by activity, preserving evaluator evidence and hiding
 // rooms already rejected by the shared facility checks.
@@ -52,15 +68,23 @@ function scheduleLabel(row){if(scheduleUnchanged(row))return 'Schedule unchanged
  <section aria-label="Facility and schedule choices">
   <h6 class="fw-bold">Facility and schedule alternatives</h6><p class="small text-muted">Choose one coherent alternative per activity. Options for different activities can be combined. Booking approval and suitability must still be verified.</p>
   <p v-if="!groups.length" class="small">No facility or schedule recovery suggestion was generated from accessible records.</p>
-  <section v-for="group in groups" :key="group.segmentId" data-testid="facility-recovery" class="mb-3">
-   <h6>{{ group.segmentTitle || 'Affected activity' }}</h6>
-   <article v-for="row in visibleChoices(group)" :key="row.option.id" class="facility-choice" :class="{chosen:selected.includes(row.option.id)}" :data-facility-option="row.option.id" :data-testid="row.change.venueName?'facility-alternative':undefined">
+  <section v-for="group in groups" :key="group.segmentId" data-testid="facility-recovery" class="facility-choice-group mb-3">
+   <header class="facility-group-heading"><h6>{{ group.segmentTitle || 'Affected activity' }}</h6><p class="facility-group-context">{{ group.choices.length }} evaluated alternatives &middot; Facility and schedule recovery</p></header>
+   <label class="visually-hidden" :for="'facility-search-'+group.segmentId">Search facility and schedule alternatives for {{ group.segmentTitle || 'affected activity' }}</label><input :id="'facility-search-'+group.segmentId" v-model="searches[String(group.segmentId)]" class="form-control facility-search" type="search" placeholder="Search alternatives">
+   <div v-if="group.choices.length" class="facility-choice-controls"><span class="small text-muted">{{ visibleChoices(group).length }} of {{ filteredChoices(group).length }} options shown</span><label :for="'facility-limit-'+group.segmentId">Show <select :id="'facility-limit-'+group.segmentId" :value="choiceLimits[String(group.segmentId)] || 3" @change="choiceLimits[String(group.segmentId)]=$event.target.value" class="form-select form-select-sm" :aria-label="'Number of facility and schedule alternatives shown for '+(group.segmentTitle || 'affected activity')"><option :value="3">Top 3</option><option value="all">All options</option></select></label></div>
+   <div class="facility-shortlist" :aria-label="'Alternatives for '+(group.segmentTitle || 'affected activity')">
+    <button v-for="row in visibleChoices(group)" :key="row.option.id" type="button" class="facility-shortlist-option" :class="{inspected:inspectedChoice(group)?.option.id===row.option.id}" :aria-pressed="inspectedChoice(group)?.option.id===row.option.id" @click="inspectedIds[String(group.segmentId)]=row.option.id">
+     <span><strong>{{ row.change.venueName || 'Schedule adjustment' }}</strong><small>{{ row.change.venueName ? scheduleLabel(row) : row.option.title }} &middot; {{ selected.includes(row.option.id)?'Selected alternative':inspectedChoice(group)?.option.id===row.option.id?'Viewing details':'View details' }}</small></span><strong class="facility-shortlist-score">{{ score(row.plan?.score) }}</strong>
+    </button>
+   </div>
+   <p v-if="group.choices.length && !visibleChoices(group).length" class="small" role="status">No alternatives match your search.</p>
+   <article v-for="row in inspectedChoices(group)" :key="row.option.id" class="facility-choice" :class="{chosen:selected.includes(row.option.id)}" :data-facility-option="row.option.id" :data-testid="row.change.venueName?'facility-alternative':undefined">
     <header class="facility-heading"><div><h3>{{ row.change.venueName || 'Schedule adjustment' }}</h3><p>Alternative for {{ group.segmentTitle || 'affected activity' }}</p></div><div class="facility-score" aria-label="Overall recovery score"><strong v-if="hasScore(row.plan?.score)">{{ row.plan.score }}<small>/100</small></strong><strong v-else class="score-unavailable">Score unavailable</strong><span>Recovery score</span></div></header>
     <div v-if="row.change.venueName" class="facility-badges"><span :class="{'has-conflict':row.conflicts.length}">{{ row.conflicts.length?'Known facility conflict':'Availability unverified' }}</span><span>Approval required</span></div>
     <dl v-if="row.change.venueName" class="facility-facts"><div><dt><svg aria-hidden="true" viewBox="0 0 24 24"><circle cx="8" cy="7" r="3"/><path d="M2 21v-4a6 6 0 0 1 12 0v4m2-17a3 3 0 0 1 0 6m1 4a5 5 0 0 1 5 5v2"/></svg>Capacity</dt><dd>{{ row.fact?.capacity ?? 'Unverified' }}</dd></div><div><dt title="Recorded assignee minimum"><svg aria-hidden="true" viewBox="0 0 24 24"><circle cx="9" cy="6" r="3"/><path d="M3 21v-5a6 6 0 0 1 12 0v5m2-9 2 2 4-5"/></svg>Staff minimum</dt><dd>{{ row.fact?.minimumCapacity ?? 'Unverified' }}</dd></div></dl>
     <p class="facility-schedule"><svg aria-hidden="true" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 6v6l4 2"/></svg>{{ scheduleLabel(row) }}</p>
     <section class="facility-rationale" :aria-label="row.change.venueName?'Facility evidence':'Schedule evidence'"><h4>{{ row.change.venueName?'Why this facility?':'Why this schedule?' }}</h4><ul v-if="row.change.venueName"><li><span class="evidence-symbol" :class="listed(row)?'recorded':'unverified'" aria-hidden="true">{{ listed(row)?'\u2713':'i' }}</span>{{ listed(row)?'Listed in facility inventory':'Inventory evidence unavailable' }}</li><li><svg aria-hidden="true" viewBox="0 0 24 24"><circle cx="8" cy="7" r="3"/><path d="M2 21v-4a6 6 0 0 1 12 0v4m2-17a3 3 0 0 1 0 6m1 4a5 5 0 0 1 5 5v2"/></svg>Recorded capacity: {{ row.fact?.capacity ?? 'Unverified' }}</li><li><span class="evidence-symbol unverified" aria-hidden="true">!</span>{{ row.conflicts.length?'Known conflict requires review':'Booking and suitability not verified' }}</li></ul><p v-else>{{ row.option.title }}. Final schedule validation is required.</p></section>
-    <details class="facility-verification" open><summary>{{ row.change.venueName?'Facility & verification details':'Schedule & verification details' }}<svg aria-hidden="true" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg></summary><div class="facility-details-body">
+    <details class="facility-verification"><summary>{{ row.change.venueName?'Facility & verification details':'Schedule & verification details' }}<svg aria-hidden="true" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg></summary><div class="facility-details-body">
      <template v-if="row.change.venueName"><h5>Equipment</h5><div class="facility-equipment"><span v-for="item in equipment(row)" :key="item">{{ item }}</span><p v-if="!equipment(row).length">Equipment unverified.</p></div><div class="facility-divider"></div><h5>Still needs checking</h5><ul class="facility-checks"><li><span aria-hidden="true">&#9432;</span>Audience capacity, equipment, layout and club eligibility</li><li><span aria-hidden="true">&#9432;</span>Actual booking and approval status</li><li><span aria-hidden="true">&#9432;</span>Calendar visibility may be incomplete</li></ul></template>
      <details class="recorded-facility-evidence"><summary>Recorded suitability and scheduling evidence</summary><p v-if="row.change.venueName">Capacity: {{ row.fact?.capacity ?? 'Unverified' }}; recorded assignee minimum: {{ row.fact?.minimumCapacity ?? 'Unverified' }}.</p><p>{{ row.fact?.suitability || 'Suitability requires verification.' }}</p><p>{{ row.fact?.reason }}</p><p>{{ row.fact?.status }}</p><p v-for="(c,i) in row.conflicts" :key="i">{{ c.message }}</p><p v-if="!row.conflicts.length">No disqualifying facility conflict reported in accessible checks; visibility may be incomplete.</p><p v-for="(c,i) in row.option.changes" :key="i">Proposed timing: {{ c.starts_at || 'unchanged' }} to {{ c.ends_at || 'unchanged' }}.</p></details>
      <p class="facility-limits">{{ row.change.venueName?'No detected conflict does not confirm room availability or approval. No booking has been created by this preview.':'Preview only. Final timing and existing booking requirements still apply.' }}</p>
@@ -68,7 +92,7 @@ function scheduleLabel(row){if(scheduleUnchanged(row))return 'Schedule unchanged
     </div></details>
     <button type="button" class="btn btn-pulse-primary facility-use-button" :aria-pressed="selected.includes(row.option.id)" @click="emit('choose',row.option.id)">{{ selected.includes(row.option.id)?'Selected alternative':'Use this alternative' }}</button><p class="facility-preview-note">Recovery preview only &middot; {{ row.change.venueName?'Booking not confirmed':'Schedule not applied' }}</p>
    </article>
-   <button v-if="group.choices.length>5" type="button" class="btn btn-outline-secondary btn-sm mb-2" :aria-expanded="!!expanded[String(group.segmentId)]" @click="expanded[String(group.segmentId)]=!expanded[String(group.segmentId)]">{{ expanded[String(group.segmentId)]?'Show less':'Show all ('+group.choices.length+')' }}</button>
+   <p v-if="selectedOutsideList(group)" class="small text-muted">A selected alternative is outside this list. Choose All options or adjust your search to find it; your recovery preview is retained.</p>
    <p v-if="!group.alternatives?.length && !group.choices.length" class="small text-warning">No eligible alternative facility in accessible records. Review later times or contact the facility administrator.</p>
    <p v-if="group.advice && !group.choices.length" class="small text-muted">{{ group.advice }}</p>
    <details v-if="group.excludedAlternatives?.length" class="small"><summary>Alternatives excluded by existing checks ({{ group.excludedAlternatives.length }})</summary><p v-for="a in group.excludedAlternatives" :key="a.venue">{{ a.venue }}: {{ a.rejectedReasons.join(' ') }}</p></details>
@@ -76,5 +100,25 @@ function scheduleLabel(row){if(scheduleUnchanged(row))return 'Schedule unchanged
  </section>
 </template>
 <style scoped>
+.facility-search{min-height:44px;margin-top:1rem}
+
+.facility-choice-group{border:1px solid var(--pulse-border);border-radius:1.1rem;padding:1rem;min-width:0}.facility-shortlist{display:grid;gap:.6rem;margin:.75rem 0 1.25rem}.facility-shortlist-option{display:flex;align-items:start;justify-content:space-between;gap:.75rem;width:100%;min-height:44px;text-align:left;padding:.8rem;border:1px solid var(--pulse-border);border-radius:.75rem;background:var(--pulse-card-bg,#fff);color:var(--pulse-ink);font-size:.8rem}.facility-shortlist-option>span{min-width:0}.facility-shortlist-option small{display:block;margin-top:.35rem;font-size:.7rem;color:var(--pulse-ink-muted);overflow-wrap:anywhere}.facility-shortlist-option.inspected{border-color:var(--pulse-primary);box-shadow:inset 3px 0 var(--pulse-primary);background:var(--pulse-primary-light)}.facility-shortlist-score{flex-shrink:0;font-size:.8rem}.facility-choice-group .facility-choice{background:#fcfcfc}
+
 .facility-choice{container-type:inline-size;border:1px solid #dedede;border-radius:1.4rem;background:#fff;color:#181818;padding:1.1rem 1rem .65rem;margin:.75rem 0;overflow-wrap:anywhere;font-size:.78rem}.facility-choice.chosen{border-color:var(--pulse-primary);box-shadow:inset 3px 0 var(--pulse-primary);background:#fff}.facility-heading{display:flex;align-items:start;justify-content:space-between;gap:1rem}.facility-heading>div:first-child{min-width:0}.facility-heading h3{font-size:1rem;font-weight:650;margin:0 0 .35rem;line-height:1.3}.facility-heading p{font-size:.65rem;color:#666;line-height:1.4;margin:0}.facility-score{flex-shrink:0;text-align:right;white-space:nowrap}.facility-score>strong{font-size:1.1rem;font-weight:650;line-height:1.2}.facility-score small{font-size:.65rem;font-weight:500;color:#666}.facility-score>span{display:block;font-size:.6rem;color:#666;margin-top:.2rem}.facility-score .score-unavailable{font-size:.75rem}.facility-badges{display:flex;gap:.35rem;flex-wrap:wrap;margin:.65rem 0 1.1rem}.facility-badges>span{background:#ffe5d9;color:#bd4b16;font-size:.65rem;padding:.2rem .4rem;border-radius:1rem;line-height:1.2}.facility-badges>.has-conflict{background:var(--pulse-primary-light);color:var(--pulse-primary)}.facility-facts{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:1rem;margin:0 0 1rem;padding:.35rem .5rem}.facility-facts dt{display:flex;align-items:center;gap:.4rem;font-size:.65rem;font-weight:400;color:#666}.facility-facts dd{font-size:1rem;font-weight:550;margin:.55rem 0 0}.facility-choice svg{width:14px;height:14px;flex-shrink:0;fill:none;stroke:#666;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round}.facility-schedule{display:flex;align-items:center;gap:.45rem;font-size:.75rem;margin:0 0 1rem}.facility-rationale{border-top:1px solid #ededed;padding:1rem 0 .6rem}.facility-rationale h4{font-size:.85rem;font-weight:600;margin:0 0 .8rem}.facility-rationale ul,.facility-checks{padding:0;margin:0;list-style:none}.facility-rationale li,.facility-checks li{display:flex;align-items:baseline;gap:.55rem;margin:.65rem 0;font-size:.72rem;line-height:1.4}.evidence-symbol{display:inline-grid;place-items:center;width:12px;height:12px;flex:0 0 auto;border:1px solid currentColor;border-radius:50%;font-size:.55rem;line-height:1}.recorded{color:#258a61}.unverified{color:#ad7414}.facility-verification>summary{display:flex;justify-content:space-between;align-items:center;gap:.6rem;list-style:none;font-size:.78rem;font-weight:550;cursor:pointer;padding:.3rem 0 .65rem}.facility-verification>summary::-webkit-details-marker{display:none}.facility-verification[open]>summary svg{transform:rotate(180deg)}.facility-details-body{border:1px solid #dedede;border-radius:.8rem;padding:.8rem .65rem}.facility-details-body h5{font-size:.75rem;font-weight:550;margin:0 0 .5rem}.facility-equipment{display:flex;flex-wrap:wrap;gap:.3rem}.facility-equipment>span{font-size:.63rem;line-height:1.3;background:#ededed;color:#333;border-radius:.35rem;padding:.15rem .35rem}.facility-equipment p{font-size:.7rem;color:#666;margin:0}.facility-divider{border-top:1px solid #ededed;margin:1rem 0}.facility-checks{margin-bottom:.8rem}.facility-checks li{font-size:.65rem}.recorded-facility-evidence{margin:.75rem 0;color:#666;font-size:.65rem}.recorded-facility-evidence>summary{cursor:pointer}.recorded-facility-evidence p{margin:.5rem 0}.facility-limits{font-size:.62rem;color:#777;line-height:1.5;margin:.9rem 0 .5rem}.facility-details-body :deep(.btn){font-size:.65rem;padding:.25rem .5rem;border-radius:1rem;color:#555;border-color:#d7d7d7;min-height:28px}.facility-details-body :deep(.border-start){border:0!important;padding-left:0!important}.facility-use-button{width:100%;margin-top:.65rem;padding:.5rem 1rem;line-height:1.4;border-radius:2rem;font-size:.75rem;font-weight:600}.facility-preview-note{text-align:center;font-size:.58rem;color:#777;line-height:1.4;margin:.6rem 0 0}summary:focus-visible,button:focus-visible{outline:2px solid var(--pulse-primary);outline-offset:3px}@media(max-width:767px){.facility-use-button,.facility-details-body :deep(.btn){min-height:44px}}
+.facility-choice-controls{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:.5rem;margin:.65rem 0}.facility-choice-controls label{display:inline-flex;align-items:center;gap:.4rem;font-size:.8rem;white-space:nowrap}.facility-choice-controls select{width:auto;min-height:44px}
+/* Match the replacement card's header, search and shortlist rhythm. */
+.facility-choice-group{padding:1.75rem;border-radius:1.5rem}
+.facility-group-heading h6{font-size:1.15rem;line-height:1.4;font-weight:750;margin:0}
+.facility-group-context{color:var(--pulse-ink-muted);font-size:.95rem;margin:1rem 0 0}
+.facility-search{height:50px;font-size:1rem;border-radius:.75rem;margin-top:1rem;margin-bottom:.65rem}
+.facility-shortlist{gap:.65rem;margin:0 0 1.25rem}
+.facility-shortlist-option{padding:1rem;border-radius:.9rem;font-size:1rem;line-height:1.4}
+.facility-shortlist-option small{font-size:.85rem;line-height:1.5;margin-top:.4rem}
+.facility-shortlist-score{font-size:1rem;line-height:1.4}
+@media(max-width:767px){.facility-choice-group{padding:1rem;border-radius:1.1rem}}
+.facility-shortlist{margin-bottom:1.25rem}
+.facility-choice-group .facility-choice{display:flex;flex-direction:column;min-height:32rem;margin-top:0;padding:1.25rem}
+.facility-use-button{margin-top:auto}
+.facility-verification{margin-bottom:.65rem}
+@media(max-width:767px){.facility-choice-group .facility-choice{min-height:0}}
 </style>

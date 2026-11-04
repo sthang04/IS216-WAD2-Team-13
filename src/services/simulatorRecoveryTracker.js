@@ -1,3 +1,4 @@
+// Purpose: Derive recovery status from persisted consent and booking evidence, keeping unknown and blocked states explicit.
 import {workflowReadiness,effectiveInvitationStatus,invitationTerms} from './simulatorWorkflowService.js'
 const same=(a,b)=>a!=null&&b!=null&&String(a)===String(b)
 const canonical=v=>Array.isArray(v)?v.map(canonical):v && typeof v==='object'?Object.fromEntries(Object.keys(v).sort().map(k=>[k,canonical(v[k])])):v

@@ -1,3 +1,4 @@
+// Purpose: Evaluate copied recovery proposals against member, dependency, timing and booking evidence, then rank existing scores.
 import {opsPeriodOnEventDate} from './simulatorOpsDataService.js'
 import {simulatorBookingPeriod} from './simulatorFacilityEvidence.js'
 import { recommendMemberReplacements } from './recoveryRecommendationService.js'

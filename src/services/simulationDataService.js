@@ -1,3 +1,4 @@
+// Purpose: Read authorized live event, member and booking evidence; never replace a failed Supabase read with demo records.
 /*
   PULSE — WHAT-IF SIMULATOR DATA SERVICE
 
@@ -20,7 +21,7 @@
 */
 
 import { supabase, isSupabaseConfigured } from '../supabase'
-import { readOpsSimulationData } from './simulatorOpsDataService.js'
+import { readUnifiedSimulationData } from './simulatorEventCatalogService.js'
 import { readSimulatorRows } from './simulatorPaginationService.js'
 
 
@@ -77,9 +78,9 @@ export async function loadLiveSimulationData() {
     )
   }
 
-  // Steps 1 and 2: Day Ops owns event, crew and task records. The adapter keeps
-  // UUID provenance and accepts only persisted dependency/booking mappings.
-  const operational = await readOpsSimulationData(supabase)
+  // Keep standalone event records visible alongside canonical Day Ops events.
+  // Verified source mappings prevent a projection appearing as a second event.
+  const operational = await readUnifiedSimulationData(supabase)
   const events = operational.events
   const eventSegments = operational.event_segments
   const facilityLinks = operational.segment_facility_bookings
@@ -167,8 +168,7 @@ export async function loadLiveSimulationData() {
   // ==========================================
 
   // Normalize live records into the shared simulation engine input shape.
-  // This allows simulationService.js to work with either
-  // authorized operations records without importing test fixtures.
+  // The engine receives authorized records from both sources without fixtures.
 
   return {
     ...operational,

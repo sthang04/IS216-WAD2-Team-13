@@ -1,3 +1,5 @@
+// Purpose: fixture-backed refinements Workflow browser regressions for simulator controls and state.
+// Use Setup -> Actions -> Assert; real Vue/engine code runs, but these tests do not prove live Supabase integration.
 import {test,expect} from '@playwright/test'
 import {bootRecovery} from './helpers/recoveryHarness.js'
 const stage=(panel,name)=>panel.getByRole('tablist',{name:'Recovery stages'}).getByRole('tab').filter({hasText:name})

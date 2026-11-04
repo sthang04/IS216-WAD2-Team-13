@@ -1,3 +1,4 @@
+// Purpose: Load and normalize authorized event rosters, preserving per-event coverage and excluding private contact fields.
 /**
  * Read the simulator-specific, server-authorised roster through the shared
  * Supabase client. Tests inject a mock client; this module creates no client.

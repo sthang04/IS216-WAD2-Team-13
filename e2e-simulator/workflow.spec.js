@@ -1,3 +1,5 @@
+// Purpose: fixture-backed workflow browser regressions for simulator controls and state.
+// Use Setup -> Actions -> Assert; real Vue/engine code runs, but these tests do not prove live Supabase integration.
 import {test,expect} from '@playwright/test'
 
 // Real Chromium UI, mocked loader. No production data or live workflow calls.

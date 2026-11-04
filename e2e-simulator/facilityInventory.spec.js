@@ -1,3 +1,5 @@
+// Purpose: fixture-backed facility Inventory browser regressions for simulator controls and state.
+// Use Setup -> Actions -> Assert; real Vue/engine code runs, but these tests do not prove live Supabase integration.
 import {test,expect} from '@playwright/test'
 // Isolated inventory fixture, NOT a live assertion about Event 900001 or Sports Hall.
 test('active unbooked Sports Hall renders as a ranked tentative replacement in the real simulator',async({page})=>{
@@ -14,6 +16,7 @@ test('active unbooked Sports Hall renders as a ranked tentative replacement in t
  await expect(card).toContainText('Sports Hall')
  await expect(card).toContainText('booking approval required')
  await expect(card).toContainText('club eligibility')
+ await card.locator('.facility-verification > summary').click()
  await card.getByText('Recorded suitability and scheduling evidence',{exact:true}).click()
  await expect(card.getByRole('link',{name:'View / Request facility',exact:true})).toBeVisible()
  await expect(page.getByRole('button',{name:'Apply selected recovery',exact:true})).toHaveCount(0)

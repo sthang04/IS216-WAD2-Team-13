@@ -1,3 +1,5 @@
+// Purpose: fixture-backed local Apply Undo browser regressions for simulator controls and state.
+// Use Setup -> Actions -> Assert; real Vue/engine code runs, but these tests do not prove live Supabase integration.
 import {test,expect} from '@playwright/test'
 // IN-MEMORY RPC RESPONSES ONLY. This tests real Vue handlers and the real adapter,
 // not Supabase persistence or database authorization. All external traffic is blocked.

@@ -1,3 +1,4 @@
+// Purpose: Discover and confirm original booking links through authorized, fingerprint-checked server RPCs.
 // Separate from recovery-plan booking attachment. Never insert links in Vue.
 import {simulatorWorkflowActivation} from './simulatorWorkflowActivation.js'
 // Deployment opt-in only: the server separately checks its release gate, the
