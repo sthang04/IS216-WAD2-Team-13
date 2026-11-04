@@ -1,0 +1,15 @@
+[33m15e3e26[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmain[m[33m, [m[1;31morigin/sarah/compiled-desktop-main[m[33m, [m[1;31morigin/main[m[33m, [m[1;31morigin/HEAD[m[33m)[m HEAD@{0}: checkout: moving from Jerica/New-UI to main
+[33m2bf11b8[m[33m ([m[1;32mJerica/New-UI[m[33m)[m HEAD@{1}: commit: final frontend updates to simulator and playwright test for simulator
+[33mb724fb6[m HEAD@{2}: commit: updated the simulation to match the newest day ops
+[33m47ca568[m HEAD@{3}: commit (merge): Merge branch 'main' of https://github.com/sthang04/IS216-WAD2-Team-13 into Jerica/New-UI
+[33me44dfbf[m HEAD@{4}: commit: e2e playwright
+[33m622b6d5[m HEAD@{5}: commit: New UI
+[33m033871c[m[33m ([m[1;31morigin/Jerica/UI[m[33m, [m[1;32mJerica/UI[m[33m)[m HEAD@{6}: checkout: moving from Jerica/UIV2 to Jerica/New-UI
+[33mf31e613[m[33m ([m[1;31morigin/Jerica/UIV2[m[33m, [m[1;32mJerica/UIV2[m[33m)[m HEAD@{7}: merge origin/main: Fast-forward
+[33m5019460[m[33m ([m[1;31morigin/Jerica/WorkingOnAllPlaywright[m[33m)[m HEAD@{8}: checkout: moving from Jerica/UI to Jerica/UIV2
+[33m033871c[m[33m ([m[1;31morigin/Jerica/UI[m[33m, [m[1;32mJerica/UI[m[33m)[m HEAD@{9}: commit: feat: improve simulator disruption date and time selection
+[33m5019460[m[33m ([m[1;31morigin/Jerica/WorkingOnAllPlaywright[m[33m)[m HEAD@{10}: checkout: moving from Jerica/Doing-All-Playwright to Jerica/UI
+[33m4b1f4c0[m[33m ([m[1;31morigin/Jerica/Doing-All-Playwright[m[33m, [m[1;32mJerica/Doing-All-Playwright[m[33m)[m HEAD@{11}: commit: Add comprehensive Playwright E2E coverage for PULSE
+[33m5019460[m[33m ([m[1;31morigin/Jerica/WorkingOnAllPlaywright[m[33m)[m HEAD@{12}: checkout: moving from Jerica/WorkingOnAllPlaywright to Jerica/Doing-All-Playwright
+[33mca8bb05[m[33m ([m[1;32mJerica/WorkingOnAllPlaywright[m[33m)[m HEAD@{13}: checkout: moving from Jerica/WorkingOnAllPlaywright to Jerica/WorkingOnAllPlaywright
+[33mca8bb05[m[33m ([m[1;32mJerica/WorkingOnAllPlaywright[m[33m)[m HEAD@{14}: checkout: moving from Jerica/UI to Jerica/WorkingOnAllPlaywright
