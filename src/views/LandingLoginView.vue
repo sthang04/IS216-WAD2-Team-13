@@ -268,13 +268,12 @@ async function completeLogin(loginEmail, loginPassword) {
       loadingStageText.value = 'Preparing Real-Time CCA Operations Dashboard...'
     }, 2000)
 
-    // Wait for auth promise + snappy 3.0s reading time (3 rounds of facts)
-    const [persona] = await Promise.all([
-      authPromise,
-      new Promise(resolve => setTimeout(resolve, 3000))
-    ])
+    // Await authentication result directly without artificial delay
+    const persona = await authPromise
 
-    clearInterval(progressInterval)
+    if (progressInterval) clearInterval(progressInterval)
+    if (roundTimer1) clearTimeout(roundTimer1)
+    if (roundTimer2) clearTimeout(roundTimer2)
     authProgress.value = 100
     loadingStageText.value = 'Authentication Complete ✓'
 
@@ -302,7 +301,7 @@ async function completeLogin(loginEmail, loginPassword) {
     setTimeout(() => {
       isAuthenticating.value = false
       emit('login', persona)
-    }, 350)
+    }, 150)
 
   } catch (err) {
     if (progressInterval) clearInterval(progressInterval)
