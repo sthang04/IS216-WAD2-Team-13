@@ -1404,7 +1404,7 @@ function parseNoticeWithAi() {
                 <small class="text-muted" style="font-size: 0.725rem;">Intelligent On-Call Standby Matching & Telegram Notice Extraction</small>
               </div>
             </div>
-            <button type="button" class="btn-close" @click="showAiCopilotModal = false"></button>
+            <button type="button" class="btn-close" aria-label="Close" @click="showAiCopilotModal = false"></button>
           </div>
 
           <!-- Tab Switcher -->

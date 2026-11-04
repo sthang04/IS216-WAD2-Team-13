@@ -756,7 +756,7 @@ onMounted(async () => {
           <div class="d-flex align-items-center gap-2">
             <strong>Notice:</strong> {{ toast }}
           </div>
-          <button type="button" class="btn-close" @click="toast = ''"></button>
+          <button type="button" class="btn-close" aria-label="Close notice" @click="toast = ''"></button>
         </div>
  
         <!-- Guest banner: every page is view-only -->
