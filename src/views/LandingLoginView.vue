@@ -752,7 +752,7 @@ async function handleManualLogin() {
             <div class="mt-4 pt-3 border-top">
               <button 
                 type="button" 
-                class="btn w-100 rounded-3 d-flex align-items-center justify-content-between demo-toggle-bar text-start"
+                class="btn w-100 rounded-3 d-flex align-items-center justify-content-between demo-toggle-bar text-start overflow-hidden"
                 :class="showDemoLogins ? 'demo-toggle-active' : 'demo-toggle-inactive'"
                 style="padding: 11px 16px; border-radius: 12px;"
                 @click="showDemoLogins = !showDemoLogins"
@@ -761,8 +761,8 @@ async function handleManualLogin() {
                   <span class="badge rounded-pill demo-badge flex-shrink-0" style="font-size: 0.72rem; font-weight: 700; padding: 5px 12px;">
                     1-Click
                   </span>
-                  <span class="fw-bold text-dark text-start" style="font-size: 0.82rem; letter-spacing: -0.01em; white-space: nowrap;">
-                    Click here for 1-Click Login for different personas
+                  <span class="fw-bold text-dark text-start" style="font-size: 0.82rem; letter-spacing: -0.01em; line-height: 1.3;">
+                    Click here for 1-Click Login<span class="d-none d-sm-inline"> for different personas</span>
                   </span>
                 </div>
                 <div class="d-flex align-items-center small text-muted flex-shrink-0 ms-2" style="font-size: 0.74rem; font-weight: 500; gap: 6px;">
@@ -1167,7 +1167,8 @@ async function handleManualLogin() {
     padding-right: 0.5rem !important;
     justify-content: flex-start !important;
     overflow-x: hidden !important;
-    max-width: 100vw !important;
+    max-width: 100% !important;
+    width: 100% !important;
   }
   .liquid-glass-card {
     padding: 1.25rem 1rem !important;

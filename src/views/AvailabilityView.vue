@@ -813,7 +813,7 @@ function exportConfirmed() {
           <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3 px-1">
             <div class="d-flex align-items-center gap-2">
               <button type="button" class="btn btn-sm btn-outline-secondary px-2 py-0" aria-label="Previous week" @click="shiftWeek(-1)">‹</button>
-              <div class="fw-bold small text-center" style="min-width: 170px;">{{ weekLabel(weekStart) }}</div>
+              <div class="fw-bold small text-center" style="min-width: 130px;">{{ weekLabel(weekStart) }}</div>
               <button type="button" class="btn btn-sm btn-outline-secondary px-2 py-0" aria-label="Next week" @click="shiftWeek(1)">›</button>
               <button
                 v-if="weekStart.getTime() !== THIS_WEEK.getTime()"

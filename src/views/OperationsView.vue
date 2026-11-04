@@ -1474,7 +1474,7 @@ function clearLate(person) {
 .ops-label { font-size: 0.65rem; letter-spacing: 0.04em; }
 .ops-small { font-size: 0.72rem; }
 .ops-clock { font-variant-numeric: tabular-nums; white-space: nowrap; flex-shrink: 0; } /* digits don't jiggle while sliding */
-.ops-slider { min-width: 160px; }
+.ops-slider { min-width: 90px; }
 
 /* Big cards here hold the timeline, so they shouldn't jump on hover */
 .ops-static-card:hover { transform: none; }
@@ -1582,7 +1582,7 @@ function clearLate(person) {
 .ops-chip { display: inline-block; padding: 0.2rem 0.55rem; border-radius: 0.5rem; font-weight: 600; }
 
 /* Full grid: names on the left, time across; scrolls sideways on small screens */
-.ops-grid-scroll { overflow-x: auto; }
+.ops-grid-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; max-width: 100%; }
 .ops-grid { min-width: 1250px; }
 .ops-grid-row { display: flex; align-items: stretch; border-bottom: 1px solid #eef0f3; }
 .ops-grid-name {

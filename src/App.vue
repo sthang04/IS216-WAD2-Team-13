@@ -397,14 +397,14 @@ onMounted(async () => {
             </a>
  
             <!-- Case A: Admin Mode -->
-            <div v-if="isAdmin" class="badge bg-danger px-3 py-2" style="border-radius: 0.65rem; font-size: 0.75rem;">
-              OSL Facility Administration
+            <div v-if="isAdmin" class="badge bg-danger px-2 px-sm-3 py-2 text-truncate" style="border-radius: 0.65rem; font-size: 0.75rem; max-width: 150px;">
+              <span class="d-none d-sm-inline">OSL Facility </span>Admin<span class="d-none d-sm-inline">istration</span>
             </div>
  
             <!-- Case B: Dev Mode (All 24 CCAs Unlocked) -->
             <div v-else-if="isDev" class="d-flex align-items-center gap-2">
               <div class="input-group input-group-sm">
-                <span class="input-group-text bg-white border-end-0 text-muted" style="border-radius: 0.65rem 0 0 0.65rem;">
+                <span class="input-group-text bg-white border-end-0 text-muted d-none d-sm-flex" style="border-radius: 0.65rem 0 0 0.65rem;">
                   <span style="font-size: 0.725rem; font-weight: 700; text-transform: uppercase; color: var(--pulse-purple-transit);">Dev Scope:</span>
                 </span>
                 <select 
@@ -423,14 +423,14 @@ onMounted(async () => {
             </div>
  
             <!-- Case C: Guest (View Only, no club to act for) -->
-            <div v-else-if="isGuest" class="badge bg-light text-muted border px-3 py-2" style="border-radius: 0.65rem; font-size: 0.75rem;">
-              Guest • View Only
+            <div v-else-if="isGuest" class="badge bg-light text-muted border px-2 px-sm-3 py-2 text-truncate" style="border-radius: 0.65rem; font-size: 0.75rem; max-width: 140px;">
+              Guest<span class="d-none d-sm-inline"> • View Only</span>
             </div>
  
             <!-- Case D: Regular Club ExCo (Strictly Scoped to their CCA) -->
             <div v-else class="d-flex align-items-center">
               <div class="input-group input-group-sm">
-                <span class="input-group-text bg-white border-end-0 text-muted" style="border-radius: 0.65rem 0 0 0.65rem;">
+                <span class="input-group-text bg-white border-end-0 text-muted d-none d-sm-flex" style="border-radius: 0.65rem 0 0 0.65rem;">
                   <span style="font-size: 0.725rem; font-weight: 700; text-transform: uppercase; color: var(--pulse-primary);">Club:</span>
                 </span>
                 <select 

@@ -573,7 +573,7 @@ function exportCalendarICS() {
       <div class="d-flex flex-wrap justify-content-between align-items-center gap-2">
         <div class="d-flex align-items-center gap-2">
           <button type="button" class="btn btn-sm btn-outline-secondary px-2 py-0" aria-label="Previous day" @click="shiftDay(-1)">‹</button>
-          <div class="fw-bold small text-center" style="min-width: 230px;">{{ selectedDateLabel }}</div>
+          <div class="fw-bold small text-center" style="min-width: 140px;">{{ selectedDateLabel }}</div>
           <button type="button" class="btn btn-sm btn-outline-secondary px-2 py-0" aria-label="Next day" @click="shiftDay(1)">›</button>
         </div>
         <div class="d-flex align-items-center gap-2">
