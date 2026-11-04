@@ -396,10 +396,13 @@ const grid = computed(() => HOURS.map((hour) => weekDates.value.map((day) => {
   const iso = toISO(day)
   const free = freeBySlot.value[`${iso}|${hour}`] || []
   const othersInClass = baselineMemberIds.value.filter((id) => icsEventAt(clubBaselines.value[id] || [], day, hour))
+  const slotTimestamp = new Date(`${iso}T${String(hour).padStart(2, '0')}:00:00+08:00`).getTime()
+  const isPast = slotTimestamp < (now.value + clockOffset.value)
   return {
     key: `${iso}|${hour}`,
     iso,
     hour,
+    isPast,
     myClass: icsEventAt(myBaseline.value.events, day, hour),
     othersInClass,
     free,
@@ -425,6 +428,7 @@ const canVote = computed(() => !props.readOnly && amParticipant.value && votingO
 
 function cellTitle(cell) {
   const parts = [`${shortLabel(parseISO(cell.iso))} ${hourLabel(cell.hour)}`]
+  if (cell.isPast) parts.push('(Past slot — voting closed)')
   if (isOpenRequest.value) parts.push(`${cell.free.length}/${totalParticipants.value} free`)
   if (cell.free.length) parts.push('Free: ' + cell.free.map((id) => nameOf.value[id] || 'Member').join(', '))
   if (cell.othersInClass.length) parts.push('In class: ' + cell.othersInClass.map((id) => nameOf.value[id] || 'Member').join(', '))
@@ -433,6 +437,10 @@ function cellTitle(cell) {
 
 async function toggleCell(cell) {
   if (!canVote.value) return
+  if (cell.isPast) {
+    showToast('Cannot vote on past time slots.', 'warning')
+    return
+  }
   const nowFree = !cell.mine
   // Show the change straight away; the realtime update / reload confirms it
   const before = snapshot.value.availability
@@ -884,11 +892,12 @@ function exportConfirmed() {
                       class="slot rounded-2 position-relative"
                       :class="[
                         heatClass(cell) || (cell.othersInClass.length ? 'slot-baseline' : ''),
-                        { 'slot-mine': cell.mine, 'slot-clickable': canVote }
+                        { 'slot-mine': cell.mine, 'slot-clickable': canVote && !cell.isPast, 'slot-past opacity-50': cell.isPast }
                       ]"
                       :title="cellTitle(cell)"
-                      :role="canVote ? 'button' : null"
-                      :aria-pressed="canVote ? cell.mine : null"
+                      :role="canVote && !cell.isPast ? 'button' : null"
+                      :aria-pressed="canVote && !cell.isPast ? cell.mine : null"
+                      :aria-disabled="cell.isPast ? 'true' : null"
                       @click="toggleCell(cell)"
                     >
                       <span v-if="heatClass(cell)" class="slot-count">{{ cell.free.length }}/{{ totalParticipants }}</span>
@@ -1511,4 +1520,5 @@ function exportConfirmed() {
 .meeting-menu-item:disabled { color: #94a3b8; cursor: not-allowed; }
 .meeting-menu-why { display: block; font-size: 0.65rem; font-weight: 600; }
 .edit-backdrop { background: rgba(15, 23, 42, 0.55); z-index: 1055; }
+.slot-past { cursor: not-allowed !important; background-color: #f8fafc; }
 </style>

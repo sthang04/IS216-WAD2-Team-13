@@ -709,7 +709,7 @@ onMounted(async () => {
             @click="currentView = 'schedule'"
           >
             <span class="pill-icon">📋</span>
-            <span>Schedule</span>
+            <span>My Schedule</span>
           </button>
           <button 
             v-if="canOpenView(activePersona, 'heatmap')"
@@ -739,7 +739,7 @@ onMounted(async () => {
             @click="currentView = 'risk'"
           >
             <span class="pill-icon">🛡️</span>
-            <span>Risk</span>
+            <span>Risk Sandbox</span>
           </button>
         </div>
       </nav>
