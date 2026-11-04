@@ -611,9 +611,23 @@ async function answerNoneWork() {
 
 const nudging = ref(null) // member id being nudged, or 'all'
 
+const NUDGE_GAP_MS = 15 * 60 * 1000 // the server allows one nudge per person every 15 minutes
+
 function recentlyNudged(p) {
-  return p.last_nudged_at && (now.value + clockOffset.value) - new Date(p.last_nudged_at).getTime() < 15 * 60 * 1000
+  return p.last_nudged_at && (now.value + clockOffset.value) - new Date(p.last_nudged_at).getTime() < NUDGE_GAP_MS
 }
+
+// "Nudged 3 min ago · again in 12 min"
+function nudgedText(p) {
+  const ago = Math.max(0, Math.floor(((now.value + clockOffset.value) - new Date(p.last_nudged_at).getTime()) / 60000))
+  const wait = Math.max(1, Math.ceil(NUDGE_GAP_MS / 60000) - ago)
+  return `Nudged ${ago === 0 ? 'just now' : `${ago} min ago`} · again in ${wait} min`
+}
+
+const allPendingNudged = computed(() => {
+  const others = pending.value.filter((p) => p.member_id !== myId.value)
+  return others.length > 0 && others.every((p) => recentlyNudged(p))
+})
 
 async function nudge(memberId = null) {
   if (blockedForGuest()) return
@@ -853,7 +867,12 @@ function exportConfirmed() {
                     </div>
 
                     <!-- Your own class (from your timetable) -->
-                    <div v-else-if="cell.myClass" class="pulse-class-pill rounded-2" :title="cellTitle(cell)">
+                    <div
+                      v-else-if="cell.myClass"
+                      class="pulse-class-pill rounded-2"
+                      :title="`${cellTitle(cell)}\nYou're in class, so you can't mark this hour`"
+                      aria-disabled="true"
+                    >
                       <span class="pulse-class-name">{{ cell.myClass }}</span>
                       <!-- Others in class at the same time would otherwise be hidden under your own class -->
                       <span v-if="cell.othersInClass.length" class="slot-class-extra">+{{ cell.othersInClass.length }} in class</span>
@@ -1078,8 +1097,8 @@ function exportConfirmed() {
               >
                 <div class="small">
                   <strong class="d-block">{{ p.full_name }}{{ p.member_id === myId ? ' (you)' : '' }}</strong>
-                  <span v-if="!p.telegram_linked" class="text-muted member-meta">Telegram not linked</span>
-                  <span v-else-if="recentlyNudged(p)" class="text-muted member-meta">Nudged recently</span>
+                  <span v-if="recentlyNudged(p)" class="d-block text-success fw-semibold member-meta">{{ nudgedText(p) }}</span>
+                  <span v-if="!p.telegram_linked" class="d-block text-muted member-meta">Telegram not linked</span>
                 </div>
                 <button
                   v-if="isOrganiser && votingOpen && p.member_id !== myId"
@@ -1088,7 +1107,8 @@ function exportConfirmed() {
                   :disabled="nudging !== null || recentlyNudged(p)"
                   @click="nudge(p.member_id)"
                 >
-                  Nudge via Telegram
+                  <span v-if="nudging === p.member_id" class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>
+                  {{ recentlyNudged(p) ? 'Nudged ✓' : 'Nudge via Telegram' }}
                 </button>
               </div>
 
@@ -1096,10 +1116,11 @@ function exportConfirmed() {
                 v-if="isOrganiser && votingOpen"
                 type="button"
                 class="btn btn-outline-secondary btn-sm w-100 py-2 fw-bold mt-1"
-                :disabled="nudging !== null"
+                :disabled="nudging !== null || allPendingNudged"
                 @click="nudge(null)"
               >
-                Nudge Pending Participants
+                <span v-if="nudging === 'all'" class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>
+                {{ allPendingNudged ? 'All pending participants nudged ✓' : 'Nudge Pending Participants' }}
               </button>
             </div>
           </div>
@@ -1321,7 +1342,12 @@ function exportConfirmed() {
   background: repeating-linear-gradient(135deg, #e2e8f0 0 6px, #cbd5e1 6px 12px);
   border-color: #94a3b8;
 }
-.pulse-class-pill:hover { background: repeating-linear-gradient(135deg, #cbd5e1 0 6px, #b6c2d2 6px 12px); }
+/* Not clickable: you're in class. Undo the shared pill's hover so it doesn't look pressable. */
+.pulse-class-pill { cursor: not-allowed; user-select: none; }
+.pulse-class-pill:hover {
+  background: repeating-linear-gradient(135deg, #e2e8f0 0 6px, #cbd5e1 6px 12px);
+  border-color: #94a3b8;
+}
 .pulse-class-pill .pulse-class-name { background: rgba(255, 255, 255, 0.85); border-radius: 0.35rem; padding: 0 0.3rem; }
 .slot-class-extra { font-size: 0.58rem; font-weight: 700; color: #64748b; white-space: nowrap; }
 /* Make room for the "+N in class" tag: one line of class name */
