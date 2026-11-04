@@ -6,7 +6,7 @@ import { fetchCalendar, resetDemoData, singaporeToday, formatDate, formatTime, C
 import { approveTransfer, rejectTransfer } from './services/transferService';
 import { DEMO_PERSONAS, ALL_CLUBS, GUEST_PERSONA } from './services/authProfiles';
 import {
-  enterGuest, restoreSession, signOut,
+  restoreSession, signOut,
   canOpenView, canResetDemo as canResetDemoFor, homeView,
 } from './services/authService';
 import { session as facilitySession, initSession, setActiveClub, resolveClubId } from './services/sessionState';
@@ -287,11 +287,7 @@ function handleUserLogin(persona) {
   toastType.value = 'success'
 }
  
-function handleGuestExplore() {
-  applySession(enterGuest())
-  toast.value = 'Browsing as a guest: you can view venues, but only signed-in ExCos can release or claim.'
-  toastType.value = 'info'
-}
+
  
 // New ExCo finished sign-up (already signed in by authService)
 function handleSignUpDone(persona) {
@@ -390,7 +386,6 @@ onMounted(async () => {
     <div v-else-if="!isLoggedIn || currentView === 'landing'">
       <LandingLoginView 
         @login="handleUserLogin"
-        @explore="handleGuestExplore"
         @signup="showSignUp = true"
       />
     </div>
@@ -438,10 +433,7 @@ onMounted(async () => {
               </span>
             </div>
  
-            <!-- Case C: Guest (View Only, no club to act for) -->
-            <div v-else-if="isGuest" class="badge bg-light text-muted border px-2 px-sm-3 py-2 text-truncate" style="border-radius: 0.65rem; font-size: 0.75rem; max-width: 140px;">
-              Guest<span class="d-none d-sm-inline"> • View Only</span>
-            </div>
+
  
             <!-- Case D: Regular Club ExCo (Strictly Scoped to their CCA) -->
             <div v-else class="d-flex align-items-center">
@@ -658,7 +650,7 @@ onMounted(async () => {
                   class="btn btn-sm btn-link text-danger text-start px-3 py-1 text-decoration-none"
                   @click="handleSignOut"
                 >
-                  {{ isGuest ? 'Exit Guest Mode' : 'Sign Out to Landing' }}
+                  Sign Out to Landing
                 </button>
               </div>
             </div>
@@ -782,11 +774,7 @@ onMounted(async () => {
           <button type="button" class="btn-close" aria-label="Close notice" @click="toast = ''"></button>
         </div>
  
-        <!-- Guest banner: every page is view-only -->
-        <div v-if="isGuest" class="alert alert-light border d-flex flex-wrap justify-content-between align-items-center gap-2 py-2 mb-3" style="border-radius: 0.85rem; font-size: 0.8rem;">
-          <span><strong>Guest view (read-only).</strong> You can browse every page, but only signed-in CCA ExCos can make changes.</span>
-          <button type="button" class="btn btn-sm btn-pulse-primary rounded-pill px-3" @click="handleSignOut">Sign in</button>
-        </div>
+
  
         <!-- VIEW 0: OSL Administrative Console (Chloe Ang - OSL Staff Advisor) -->
         <div v-show="currentView === 'admin'">

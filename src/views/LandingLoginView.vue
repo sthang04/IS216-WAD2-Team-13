@@ -7,7 +7,7 @@ import LandingFeatureDemo from '../components/LandingFeatureDemo.vue';
 import PulseWordmark from '../components/PulseWordmark.vue';
 import { playLoginSuccessChime } from '../utils/soundEffects';
 
-const emit = defineEmits(['login', 'explore', 'signup']);
+const emit = defineEmits(['login', 'signup']);
 
 const email = ref('')
 const password = ref('')
@@ -755,10 +755,7 @@ async function handleManualLogin() {
               </button>
             </div>
 
-            <!-- Guest browsing uses the existing read-only persona; it grants no ExCo permissions. -->
-            <button type="button" class="btn btn-link guest-link w-100 mt-3" @click="emit('explore')">
-              Explore live facility calendar as guest
-            </button>
+
             <!-- Collapsible 1-Click Persona Drawer -->
             <div class="mt-4 pt-3 border-top">
               <button 
@@ -1523,13 +1520,7 @@ input:-webkit-autofill:active {
   box-shadow: 0 4px 12px rgba(225, 29, 72, 0.12);
 }
 
-.guest-link {
-  transition: color 0.15s ease;
-}
 
-.guest-link:hover {
-  color: var(--pulse-primary, #e11d48) !important;
-}
 
 /* ==========================================================================
    Interactive Auth Loading Screen Overlay
