@@ -398,13 +398,13 @@ onMounted(async () => {
         <div class="container-fluid d-flex flex-nowrap align-items-center justify-content-between gap-1 gap-sm-2 gap-lg-3">
           
           <!-- Left: Logo & Community Switcher (Scoped per persona) -->
-          <div class="d-flex align-items-center gap-2 gap-sm-3 flex-shrink-1 min-w-0">
-            <a href="#" class="pulse-brand-logo text-decoration-none" @click.prevent="router.push('/facilities')">
+          <div class="d-flex align-items-center gap-2 gap-sm-3 flex-shrink-0">
+            <a href="#" class="pulse-brand-logo text-decoration-none flex-shrink-0" @click.prevent="router.push('/facilities')">
               <div class="pulse-logo-badge">
                 <span>P</span>
                 <span class="pulse-logo-dot"></span>
               </div>
-              <span>Pulse</span>
+              <span class="d-none d-sm-inline">Pulse</span>
             </a>
  
             <!-- Case A: Admin Mode -->
@@ -413,39 +413,44 @@ onMounted(async () => {
             </div>
  
             <!-- Case B: Dev Mode (All 24 CCAs Unlocked) -->
-            <div v-else-if="isDev" class="d-flex align-items-center gap-2">
+            <div v-else-if="isDev" class="d-flex align-items-center gap-1.5 flex-shrink-0">
               <div class="input-group input-group-sm">
-                <span class="input-group-text bg-white border-end-0 text-muted d-none d-sm-flex" style="border-radius: 0.65rem 0 0 0.65rem;">
-                  <span style="font-size: 0.725rem; font-weight: 700; text-transform: uppercase; color: var(--pulse-purple-transit);">Dev Scope:</span>
+                <span class="input-group-text bg-white border-end-0 text-muted d-none d-md-flex px-2" style="border-radius: 0.65rem 0 0 0.65rem;">
+                  <span style="font-size: 0.7rem; font-weight: 700; text-transform: uppercase; color: var(--pulse-purple-transit);">Dev Scope:</span>
                 </span>
                 <select 
                   id="clubSwitcher" 
                   v-model="selectedClub" 
-                  class="form-select form-select-sm border-start-0 fw-bold" 
-                  style="border-radius: 0 0.65rem 0.65rem 0; max-width: 190px;"
+                  class="form-select form-select-sm fw-bold club-switcher-select" 
+                  style="border-radius: 0.65rem;"
+                  :style="isDev ? 'border-top-left-radius: 0; border-bottom-left-radius: 0;' : ''"
                   @change="toast = ''"
                 >
                   <option v-for="club in ALL_CLUBS" :key="club" :value="club">{{ club }}</option>
                 </select>
               </div>
-              <span class="badge bg-purple text-white px-2 py-1 d-none d-xl-inline" style="background-color: var(--pulse-purple-transit); font-size: 0.65rem;">
+              <span class="badge bg-purple text-white px-2 py-1 d-none d-xxl-inline" style="background-color: var(--pulse-purple-transit); font-size: 0.65rem;">
                 All 24 CCAs Unlocked
               </span>
             </div>
- 
 
- 
-            <!-- Case D: Regular Club ExCo (Strictly Scoped to their CCA) -->
-            <div v-else class="d-flex align-items-center">
-              <div class="input-group input-group-sm">
-                <span class="input-group-text bg-white border-end-0 text-muted d-none d-sm-flex" style="border-radius: 0.65rem 0 0 0.65rem;">
-                  <span style="font-size: 0.725rem; font-weight: 700; text-transform: uppercase; color: var(--pulse-primary);">Club:</span>
+            <!-- Case C: Regular Club ExCo (Strictly Scoped to their CCA) -->
+            <div v-else class="d-flex align-items-center flex-shrink-0">
+              <!-- If single CCA, show a sleek verified badge instead of an awkward 1-item dropdown -->
+              <div v-if="allowedClubs.length <= 1" class="d-flex align-items-center gap-1.5 px-2 px-sm-2.5 py-1 bg-white border shadow-2xs rounded-pill">
+                <span class="pulse-cca-dot" aria-hidden="true"></span>
+                <span class="fw-bold text-dark text-nowrap" style="font-size: 0.78rem;">{{ selectedClub }}</span>
+              </div>
+              <!-- If multiple CCAs, show clean dropdown -->
+              <div v-else class="input-group input-group-sm">
+                <span class="input-group-text bg-white border-end-0 text-muted d-none d-md-flex px-2" style="border-radius: 0.65rem 0 0 0.65rem;">
+                  <span style="font-size: 0.7rem; font-weight: 700; text-transform: uppercase; color: var(--pulse-primary);">Club:</span>
                 </span>
                 <select 
                   id="clubSwitcher" 
                   v-model="selectedClub" 
-                  class="form-select form-select-sm border-start-0 fw-bold" 
-                  style="border-radius: 0 0.65rem 0.65rem 0; max-width: 180px;"
+                  class="form-select form-select-sm fw-bold club-switcher-select" 
+                  style="border-radius: 0.65rem;"
                   @change="toast = ''"
                 >
                   <option v-for="club in allowedClubs" :key="club" :value="club">{{ club }}</option>
@@ -456,15 +461,13 @@ onMounted(async () => {
  
           <!-- Center: Navigation Tabs (Role-tailored) -->
           <!-- OSL Admin View: Administrative Oversight & Governance -->
-          <nav v-if="isAdmin" class="d-none d-lg-flex align-items-center gap-1 pulse-header-nav">
+          <nav v-if="isAdmin" class="d-none d-lg-flex align-items-center gap-1 pulse-header-nav flex-shrink-1">
             <button
               type="button"
               class="pulse-nav-pill"
               :class="{ active: currentView === 'facilities' && !isOslReviewRoute }"
               @click="router.push('/facilities')"
-            >
-              Master Facility Calendar
-            </button>
+            ><span class="d-none d-xxl-inline">Master </span>Facility Calendar</button>
             <button
               type="button"
               class="pulse-nav-pill"
@@ -476,51 +479,41 @@ onMounted(async () => {
           </nav>
  
           <!-- Student ExCo View: Complete 5-Feature Operational Suite -->
-          <nav v-else class="d-none d-lg-flex align-items-center gap-1 pulse-header-nav">
+          <nav v-else class="d-none d-lg-flex align-items-center gap-1 pulse-header-nav flex-shrink-1">
             <button 
               type="button" 
               class="pulse-nav-pill" 
               :class="{ active: currentView === 'facilities' }"
               @click="currentView = 'facilities'"
-            >
-              Master Facility Calendar
-            </button>
+            ><span class="d-none d-xxl-inline">Master </span>Facility Calendar</button>
             <button 
               v-if="canOpenView(activePersona, 'schedule')"
               type="button" 
               class="pulse-nav-pill" 
               :class="{ active: currentView === 'schedule' }"
               @click="currentView = 'schedule'"
-            >
-              Personal Schedule
-            </button>
+            ><span class="d-none d-xxl-inline">Personal </span>Schedule</button>
             <button 
               v-if="canOpenView(activePersona, 'heatmap')"
               type="button" 
               class="pulse-nav-pill" 
               :class="{ active: currentView === 'heatmap' }"
               @click="currentView = 'heatmap'"
-            >
-              Availability Heatmap
-            </button>
+            ><span class="d-none d-xxl-inline">Availability </span>Heatmap</button>
             <button 
               v-if="canOpenView(activePersona, 'operations')"
               type="button" 
               class="pulse-nav-pill" 
               :class="{ active: currentView === 'operations' }"
               @click="currentView = 'operations'"
-            >
-              Day-of Operations
-            </button>
+            ><span class="d-none d-xxl-inline">Day-of </span>Operations</button>
             <button 
               v-if="canOpenView(activePersona, 'risk')"
               type="button" 
               class="pulse-nav-pill" 
               :class="{ active: currentView === 'risk' }"
               @click="currentView = 'risk'"
-            >
-              Event Risk Planning
-            </button>
+            ><span class="d-none d-xxl-inline">Event </span>Risk Planning</button>
           </nav>
  
           <!-- Right: Presentation Utility Bar (API Mode, Reset, Role & Sign Out) -->
@@ -762,12 +755,12 @@ onMounted(async () => {
         <!-- Global Toast Alert -->
         <div 
           v-if="toast" 
-          class="alert alert-dismissible fade show shadow-sm mb-4" 
+          class="alert alert-dismissible fade show shadow-sm mb-3 py-2 px-3" 
           :class="`alert-${toastType}`" 
           role="alert"
           style="border-radius: 0.85rem;"
         >
-          <div class="d-flex align-items-start gap-2 pe-4">
+          <div class="d-flex align-items-center gap-2 pe-4" style="font-size: 0.825rem;">
             <strong class="text-nowrap flex-shrink-0">Notice:</strong>
             <span class="flex-grow-1">{{ toast }}</span>
           </div>

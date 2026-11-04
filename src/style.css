@@ -960,20 +960,20 @@ body {
   display: flex;
   align-items: center;
   justify-content: flex-start;
-  width: max-content;
-  min-width: 100%;
-  gap: 0.35rem;
+  width: 100%;
+  gap: 0.25rem;
 }
 
 .pulse-mobile-pill {
-  flex: 0 0 auto;
+  flex: 1 1 0;
+  min-width: 0;
   display: inline-flex;
   flex-direction: row;
   align-items: center;
   justify-content: center;
-  gap: 0.3rem;
-  padding: 0.32rem 0.65rem;
-  font-size: 0.72rem;
+  gap: 0.2rem;
+  padding: 0.32rem 0.25rem;
+  font-size: 0.71rem;
   font-weight: 600;
   border-radius: 999px;
   border: 1px solid #e2e8f0;
@@ -983,6 +983,28 @@ body {
   transition: all 0.15s ease;
   user-select: none;
   white-space: nowrap;
+}
+
+/* Sleek Community / Scope Selectors & Badges */
+.club-switcher-select {
+  width: auto;
+  min-width: 140px;
+  max-width: 190px;
+}
+@media (min-width: 768px) {
+  .club-switcher-select {
+    min-width: 165px;
+    max-width: 240px;
+  }
+}
+
+.pulse-cca-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background-color: #10b981;
+  display: inline-block;
+  flex-shrink: 0;
 }
 
 .pulse-mobile-pill:active {
