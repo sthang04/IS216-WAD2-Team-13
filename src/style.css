@@ -1013,20 +1013,9 @@ body {
     padding-bottom: 80px !important;
   }
 
-  /* Compact floating mascot on mobile placed above the bottom navigation */
+  /* On mobile responsive viewports (<992px), hide the floating mascot so it never covers calendar slots, touch chips, or action buttons */
   .pip-container {
-    bottom: 74px !important;
-    right: 14px !important;
-  }
-
-  .pip-button {
-    width: 62px !important;
-    height: 62px !important;
-  }
-
-  .pip-cat {
-    width: 58px !important;
-    height: 58px !important;
+    display: none !important;
   }
   
   /* Compact mobile header row */

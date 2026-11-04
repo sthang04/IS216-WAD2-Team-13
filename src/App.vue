@@ -700,26 +700,29 @@ onMounted(async () => {
             type="button" 
             class="pulse-mobile-pill" 
             :class="{ active: currentView === 'facilities' }"
+            aria-label="Facilities"
             @click="currentView = 'facilities'"
           >
             <span class="pill-icon" aria-hidden="true">🏛️</span>
-            <span>Facilities</span>
+            <span>Venues</span>
           </button>
           <button 
             v-if="canOpenView(activePersona, 'schedule')"
             type="button" 
             class="pulse-mobile-pill" 
             :class="{ active: currentView === 'schedule' }"
+            aria-label="My Schedule"
             @click="currentView = 'schedule'"
           >
             <span class="pill-icon" aria-hidden="true">📋</span>
-            <span>My Schedule</span>
+            <span>Schedule</span>
           </button>
           <button 
             v-if="canOpenView(activePersona, 'heatmap')"
             type="button" 
             class="pulse-mobile-pill" 
             :class="{ active: currentView === 'heatmap' }"
+            aria-label="Heatmap"
             @click="currentView = 'heatmap'"
           >
             <span class="pill-icon" aria-hidden="true">🟢</span>
@@ -730,20 +733,22 @@ onMounted(async () => {
             type="button" 
             class="pulse-mobile-pill" 
             :class="{ active: currentView === 'operations' }"
+            aria-label="Day-of Ops"
             @click="currentView = 'operations'"
           >
             <span class="pill-icon" aria-hidden="true">⚡</span>
-            <span>Day-of Ops</span>
+            <span>Day Ops</span>
           </button>
           <button 
             v-if="canOpenView(activePersona, 'risk')"
             type="button" 
             class="pulse-mobile-pill" 
             :class="{ active: currentView === 'risk' }"
+            aria-label="Risk Sandbox"
             @click="currentView = 'risk'"
           >
             <span class="pill-icon" aria-hidden="true">🛡️</span>
-            <span>Risk Sandbox</span>
+            <span>Risk</span>
           </button>
         </div>
       </nav>
