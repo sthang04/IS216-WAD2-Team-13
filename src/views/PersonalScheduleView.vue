@@ -44,10 +44,38 @@ function blockedForGuest() {
   return true
 }
 
-const selectedCategory = ref('All'); // 'All', 'CCA', 'Academic', 'Personal', 'Duty'
+const selectedCategory = ref('All'); // 'All', 'CCA', 'Academic', 'Adhoc'
 const showModal = ref(false);
 const isEditing = ref(false);
 const editingId = ref(null);
+
+// ---- Day being viewed (switch to a future day to prefill it in advance) ----
+const selectedDate = ref('2026-10-23');
+
+function parseISO(s) {
+  const [y, m, d] = s.split('-').map(Number)
+  return new Date(y, m - 1, d)
+}
+function toISO(dt) {
+  return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`
+}
+function shiftDay(n) {
+  if (!selectedDate.value) return
+  const dt = parseISO(selectedDate.value)
+  dt.setDate(dt.getDate() + n)
+  selectedDate.value = toISO(dt)
+}
+const selectedDateLabel = computed(() => {
+  if (!selectedDate.value) return 'Pick a date'
+  return parseISO(selectedDate.value).toLocaleDateString('en-SG', {
+    weekday: 'long', day: 'numeric', month: 'long', year: 'numeric'
+  })
+})
+
+// 'Adhoc' is stored in the data, 'Ad hoc' is what people see
+function categoryLabel(cat) {
+  return cat === 'Adhoc' ? 'Ad hoc' : cat
+}
 
 // Official SMU Buildings for OneMap API Geocoding
 const SMU_BUILDINGS = [
@@ -61,7 +89,7 @@ const SMU_BUILDINGS = [
 ];
 
 // Initial Schedule Events with structured building names & room details
-const scheduleEvents = ref([
+const defaultEvents = [
   {
     id: 1,
     title: 'IS216 Web Application Development II (G1)',
@@ -75,7 +103,6 @@ const scheduleEvents = ref([
     venue: 'Seminar Room 2.1, SCIS1',
     role: 'Undergraduate Student',
     status: 'Completed',
-    transitNote: 'Central Campus • SCIS1 Level 2',
     notes: 'Sprint presentation dry-run and Vue component architecture lab.',
     isCustom: false
   },
@@ -91,14 +118,13 @@ const scheduleEvents = ref([
     venue: 'Main Hall Stage B1, Li Ka Shing Library',
     role: 'Floor Positioning Lead',
     status: 'In Progress',
-    transitNote: 'Via Campus Concourse',
     notes: 'Verify wireless stage monitor feeds and tape marks for hip-hop ensemble.',
     isCustom: false
   },
   {
     id: 3,
     title: 'Act 2 Audio & Lighting Programming',
-    category: 'Duty',
+    category: 'Adhoc',
     date: '2026-10-23',
     startTime: '19:30',
     endTime: '20:10',
@@ -107,7 +133,6 @@ const scheduleEvents = ref([
     venue: 'Audio & Lighting Booth B1, Li Ka Shing Library',
     role: 'Stage Crew Coordinator',
     status: 'Not Started',
-    transitNote: 'Adjacent to Main Hall Stage',
     notes: 'Coordinate cue triggers with SoundFoundry live band technicians.',
     isCustom: false
   },
@@ -123,14 +148,13 @@ const scheduleEvents = ref([
     venue: 'Main Hall Stage B1, Li Ka Shing Library',
     role: 'Full Cast Floor Runner',
     status: 'Not Started',
-    transitNote: 'Backstage Holding Room B1.2',
     notes: 'All cast members to standby at wings by 20:00.',
     isCustom: false
   },
   {
     id: 5,
     title: 'Eurhythmix ExCo Debrief & Safety Check',
-    category: 'Duty',
+    category: 'Adhoc',
     date: '2026-10-23',
     startTime: '22:00',
     endTime: '22:30',
@@ -139,18 +163,49 @@ const scheduleEvents = ref([
     venue: 'Studio L7.2 (Dance), Connexion',
     role: 'Honorary General Secretary',
     status: 'Not Started',
-    transitNote: 'Via Linkbridge from LKS to Connexion L7',
     notes: 'Verify studio equipment inventory and lock up keys per SSU Clause 9.2(c).',
     isCustom: false
   }
-]);
+];
 
-// ---- OneMap walking time calculation using official building names ----
+// ---- Saving: events are stored in this browser (localStorage) so they survive a page refresh ----
+const storageKey = computed(() => `pulse-schedule-${props.activePersona.email || props.activePersona.name}`)
+
+function loadSavedEvents() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(storageKey.value))
+    if (Array.isArray(saved)) return saved
+  } catch (e) { /* ignore corrupted or blocked storage */ }
+  return null
+}
+
+function sampleEvents() {
+  return JSON.parse(JSON.stringify(defaultEvents)) // a fresh copy of the sample data
+}
+
+// Start from the saved schedule if there is one, otherwise the sample data
+const scheduleEvents = ref(loadSavedEvents() ?? sampleEvents())
+
+// Save whenever anything changes (add, edit, delete, status toggle)
+watch(scheduleEvents, (events) => {
+  try { localStorage.setItem(storageKey.value, JSON.stringify(events)) } catch (e) { /* storage full or blocked */ }
+}, { deep: true })
+
+// If the logged-in persona changes, load that persona's own saved schedule
+watch(storageKey, () => { scheduleEvents.value = loadSavedEvents() ?? sampleEvents() })
+
+// All events, in order of date then start time
 const sortedEvents = computed(() =>
   [...scheduleEvents.value].sort((a, b) =>
     (a.date + a.startTime).localeCompare(b.date + b.startTime))
 )
 
+// Only the events on the day being viewed
+const dayEvents = computed(() =>
+  sortedEvents.value.filter(e => e.date === selectedDate.value)
+)
+
+// ---- OneMap walking time calculation using official building names ----
 function minutesBetween(end, start) {
   const toMin = t => parseInt(t.slice(0, 2)) * 60 + parseInt(t.slice(3))
   return toMin(start) - toMin(end)
@@ -158,7 +213,7 @@ function minutesBetween(end, start) {
 
 const walkInfo = ref({})            // eventId -> { minutes, metres, gapMinutes, prevVenue, sameVenue?, unavailable? }
 const isLoadingWalk = ref(false)
-let loadCounter = 0                 
+let loadCounter = 0
 
 async function loadWalkTimes() {
   const thisLoad = ++loadCounter
@@ -169,14 +224,14 @@ async function loadWalkTimes() {
     const prev = list[i]
     if (prev.date !== cur.date) return null
     const gapMinutes = minutesBetween(prev.endTime, cur.startTime)
-    
-    // Crucial: Use .building for OneMap API resolution, fallback to .venue
+
+    // Use .building for OneMap resolution, fall back to .venue
     const prevBuilding = prev.building || prev.venue
     const curBuilding = cur.building || cur.venue
 
     const base = { gapMinutes, prevVenue: prev.venue }
 
-    // If both events are in the same building, distance is 0
+    // If both events are in the same building, no walking needed
     if (prevBuilding === curBuilding) {
       return [cur.id, { ...base, sameVenue: true, minutes: 0, metres: 0 }]
     }
@@ -214,23 +269,22 @@ function transitTight(event) {
 const eventForm = ref({
   title: '',
   category: 'CCA',
-  date: '2026-10-23',
+  date: selectedDate.value,
   startTime: '17:15',
   endTime: '18:15',
   building: 'SMU Connexion',
   room: 'Studio L7.2 (Dance)',
   role: 'Participant',
-  transitNote: '',
   notes: ''
 });
 
-// Category Filtered Schedule
+// Events shown in the list: the viewed day, filtered by category
 const filteredEvents = computed(() => {
-  if (selectedCategory.value === 'All') return scheduleEvents.value;
-  return scheduleEvents.value.filter(e => e.category === selectedCategory.value);
+  if (selectedCategory.value === 'All') return dayEvents.value;
+  return dayEvents.value.filter(e => e.category === selectedCategory.value);
 });
 
-// Conflict Detection
+// Conflict Detection: academic classes that overlap with CCA slots on the same day
 const conflictingEventIds = computed(() => {
   const conflicts = new Set();
   const academics = scheduleEvents.value.filter(e => e.category === 'Academic');
@@ -253,9 +307,16 @@ const conflictingEventIds = computed(() => {
   return conflicts;
 });
 
-// Active assignment highlight
+// Only show the clash banner if the viewed day has a clash
+const dayHasConflict = computed(() =>
+  dayEvents.value.some(e => conflictingEventIds.value.has(e.id))
+)
+
+// Active assignment highlight (for the viewed day)
 const activeAssignment = computed(() => {
-  return scheduleEvents.value.find(e => e.status === 'In Progress') || scheduleEvents.value.find(e => e.status === 'Not Started') || scheduleEvents.value[0];
+  return dayEvents.value.find(e => e.status === 'In Progress')
+    || dayEvents.value.find(e => e.status === 'Not Started')
+    || dayEvents.value[0];
 });
 
 function toggleEventStatus(event) {
@@ -281,13 +342,12 @@ function openAddModal() {
   eventForm.value = {
     title: '',
     category: 'CCA',
-    date: '2026-10-23',
+    date: selectedDate.value, // defaults to the day you are viewing
     startTime: '17:15',
     endTime: '18:15',
     building: 'SMU Connexion',
     room: 'Studio L7.2 (Dance)',
     role: `${props.activePersona.cca || 'Eurhythmix'} Member`,
-    transitNote: '',
     notes: ''
   };
   showModal.value = true;
@@ -306,7 +366,6 @@ function openEditModal(event) {
     building: event.building || 'SMU Connexion',
     room: event.room || event.venue,
     role: event.role,
-    transitNote: event.transitNote || '',
     notes: event.notes || ''
   };
   showModal.value = true;
@@ -333,16 +392,19 @@ function saveEvent() {
       toastMsg.value = `Updated: "${eventForm.value.title}" successfully modified.`;
     }
   } else {
-    const newId = Date.now();
     scheduleEvents.value.push({
-      id: newId,
+      id: Date.now(),
       ...eventForm.value,
       venue: combinedVenue,
       status: 'Not Started',
       isCustom: true
     });
-    scheduleEvents.value.sort((a, b) => a.startTime.localeCompare(b.startTime));
     toastMsg.value = `Added: "${eventForm.value.title}" scheduled on your calendar.`;
+  }
+
+  // If the event was saved on a different day, jump to that day so you can see it
+  if (eventForm.value.date && eventForm.value.date !== selectedDate.value) {
+    selectedDate.value = eventForm.value.date;
   }
 
   closeModal();
@@ -358,40 +420,60 @@ function deleteEvent(id) {
   setTimeout(() => { toastMsg.value = ''; }, 4000);
 }
 
+// Escape commas, semicolons and new lines so they don't break the .ics file
+function icsEscape(text) {
+  return String(text || '')
+    .replace(/\\/g, '\\\\')
+    .replace(/;/g, '\\;')
+    .replace(/,/g, '\\,')
+    .replace(/\r?\n/g, '\\n');
+}
+
+// Singapore time -> UTC, e.g. '2026-10-23' + '18:30' -> '20261023T103000Z'
+function toIcsUtc(date, time) {
+  const [y, m, d] = date.split('-').map(Number);
+  const [hh, mm] = time.split(':').map(Number);
+  const utc = new Date(Date.UTC(y, m - 1, d, hh - 8, mm));
+  return utc.toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '');
+}
+
 function exportCalendarICS() {
-  let icsContent = "BEGIN:VCALENDAR\nVERSION:2.0\nPRODID:-//SMU Pulse//Personal Schedule v2.0//EN\nCALSCALE:GREGORIAN\nMETHOD:PUBLISH\n";
+  const now = new Date().toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '');
+
+  const lines = [
+    'BEGIN:VCALENDAR',
+    'VERSION:2.0',
+    'PRODID:-//SMU Pulse//Personal Schedule//EN',
+    'CALSCALE:GREGORIAN',
+    'METHOD:PUBLISH'
+  ];
 
   for (const ev of scheduleEvents.value) {
-    const dateStr = ev.date.replace(/-/g, '');
-    const startStr = ev.startTime.replace(/:/g, '') + '00';
-    const endStr = ev.endTime.replace(/:/g, '') + '00';
-
-    icsContent += "BEGIN:VEVENT\n";
-    icsContent += `UID:pulse-sched-${ev.id}@smu.edu.sg\n`;
-    icsContent += `DTSTAMP:20261021T120000Z\n`;
-    icsContent += `DTSTART;TZID=Asia/Singapore:${dateStr}T${startStr}\n`;
-    icsContent += `DTEND;TZID=Asia/Singapore:${dateStr}T${endStr}\n`;
-    icsContent += `SUMMARY:${ev.title}\n`;
-    icsContent += `LOCATION:${ev.venue}\n`;
-    icsContent += `DESCRIPTION:Role: ${ev.role} | Category: ${ev.category} | Notes: ${ev.notes || 'None'}\n`;
-    icsContent += `STATUS:CONFIRMED\n`;
-    icsContent += "END:VEVENT\n";
+    lines.push('BEGIN:VEVENT');
+    lines.push(`UID:pulse-sched-${ev.id}@smu.edu.sg`);
+    lines.push(`DTSTAMP:${now}`);
+    lines.push(`DTSTART:${toIcsUtc(ev.date, ev.startTime)}`);
+    lines.push(`DTEND:${toIcsUtc(ev.date, ev.endTime)}`);
+    lines.push(`SUMMARY:${icsEscape(ev.title)}`);
+    lines.push(`LOCATION:${icsEscape(ev.venue)}`);
+    lines.push(`DESCRIPTION:${icsEscape(`Role: ${ev.role} | Category: ${categoryLabel ? categoryLabel(ev.category) : ev.category} | Notes: ${ev.notes || 'None'}`)}`);
+    lines.push('END:VEVENT');
   }
+  lines.push('END:VCALENDAR');
 
-  icsContent += "END:VCALENDAR";
-
-  const blob = new Blob([icsContent], { type: 'text/calendar;charset=utf-8;' });
+  // Calendar files must use Windows-style line endings (\r\n)
+  const blob = new Blob([lines.join('\r\n') + '\r\n'], { type: 'text/calendar;charset=utf-8' });
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
   link.href = url;
-  link.setAttribute('download', `${props.activePersona.name.replace(/\s+/g, '_')}_SMU_Schedule.ics`);
+  link.download = `${props.activePersona.name.replace(/\s+/g, '_')}_SMU_Schedule.ics`;
   document.body.appendChild(link);
   link.click();
   document.body.removeChild(link);
-  URL.revokeObjectURL(url);
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
 
-  toastMsg.value = 'Schedule exported! .ics file ready to import into OASIS or Apple/Google Calendar.';
-  setTimeout(() => { toastMsg.value = ''; }, 4500);
+  toastMsg.value = `Exported ${scheduleEvents.value.length} events. Open the file for Apple Calendar, or import it in Google Calendar (Settings > Import & export).`;
+  setTimeout(() => { toastMsg.value = ''; }, 6000);
 }
 </script>
 
@@ -412,7 +494,7 @@ function exportCalendarICS() {
         </div>
         <h3 class="fw-bold mb-1">Hi {{ activePersona.name }}, here is your daily schedule & assignments.</h3>
         <p class="text-muted small mb-0">
-          {{ activePersona.cca }} • Academic Timetable & Rehearsal Schedule • Friday, 23 October 2026
+          {{ activePersona.cca }} • Academic Timetable & Rehearsal Schedule • {{ selectedDateLabel }}
         </p>
       </div>
 
@@ -459,6 +541,23 @@ function exportCalendarICS() {
         <span class="small fw-semibold">{{ toastMsg }}</span>
       </div>
       <button type="button" class="btn-close" @click="toastMsg = ''"></button>
+    </div>
+
+    <!-- Day Navigation: switch days to view or prefill them in advance -->
+    <div class="card border-0 shadow-sm p-2 mb-4" style="border-radius: 0.75rem; background-color: var(--pulse-card-bg);">
+      <div class="d-flex flex-wrap justify-content-between align-items-center gap-2">
+        <div class="d-flex align-items-center gap-2">
+          <button type="button" class="btn btn-sm btn-outline-secondary px-2 py-0" aria-label="Previous day" @click="shiftDay(-1)">‹</button>
+          <div class="fw-bold small text-center" style="min-width: 230px;">{{ selectedDateLabel }}</div>
+          <button type="button" class="btn btn-sm btn-outline-secondary px-2 py-0" aria-label="Next day" @click="shiftDay(1)">›</button>
+        </div>
+        <div class="d-flex align-items-center gap-2">
+          <span class="text-muted d-none d-md-inline" style="font-size: 0.7rem;">
+            Switch to a future day, then use Add Event to prefill it.
+          </span>
+          <input v-model="selectedDate" type="date" class="form-control form-control-sm" style="width: auto;" />
+        </div>
+      </div>
     </div>
 
     <div class="row g-4">
@@ -523,9 +622,6 @@ function exportCalendarICS() {
               </span>
               <span v-if="transitTight(activeAssignment)" class="badge bg-warning text-dark ms-1">⚠ Tight</span>
             </div>
-            <div v-if="activeAssignment.transitNote" class="text-white-50 small mt-1">
-              Directions: <span class="text-white">{{ activeAssignment.transitNote }}</span>
-            </div>
           </div>
 
           <!-- Action: Status Toggle -->
@@ -543,8 +639,19 @@ function exportCalendarICS() {
 
         </div>
 
-        <!-- Academic & Rehearsal Clash Detector -->
-        <div v-if="conflictingEventIds.size > 0" class="card border-0 shadow-sm p-3 mb-4" style="background-color: #fffbeb; border-left: 4px solid #f59e0b !important; border-radius: 0.75rem;">
+        <!-- Shown when the viewed day has no events yet -->
+        <div v-else class="pulse-card p-4 shadow-sm mb-4 text-center">
+          <h6 class="fw-bold mb-1">Nothing scheduled yet</h6>
+          <p class="text-muted small mb-3">
+            There are no events on {{ selectedDateLabel }}. Add some now to prefill the day.
+          </p>
+          <button type="button" class="btn btn-sm btn-danger fw-bold" @click="openAddModal">
+            Add Event / Class
+          </button>
+        </div>
+
+        <!-- Academic & Rehearsal Clash Detector (only if the viewed day has a clash) -->
+        <div v-if="dayHasConflict" class="card border-0 shadow-sm p-3 mb-4" style="background-color: #fffbeb; border-left: 4px solid #f59e0b !important; border-radius: 0.75rem;">
           <div class="d-flex align-items-start gap-2">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#d97706" stroke-width="2" class="flex-shrink-0 mt-1">
               <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
@@ -557,17 +664,6 @@ function exportCalendarICS() {
                 An academic lecture overlaps with an allocated CCA rehearsal slot. Pulse has flagged this to the ExCo for an excused late arrival buffer.
               </p>
             </div>
-          </div>
-        </div>
-
-        <!-- Facility Alerts Card -->
-        <div class="pulse-card p-4 shadow-sm">
-          <h6 class="fw-bold mb-2">Connected Facility Alerts</h6>
-          <div class="p-3 rounded-3 bg-success bg-opacity-10 border border-success-subtle small mb-2">
-            <strong>Studio L7.2 Transfer:</strong> Officially verified and confirmed for SoundFoundry &rarr; Eurhythmix under Ref BK-20271017-000053.
-          </div>
-          <div class="p-3 rounded-3 bg-light border small text-muted">
-            <strong>SSU Notice:</strong> All training blocks are locked >48h in advance, protecting your club against empty room demerits.
           </div>
         </div>
 
@@ -587,7 +683,7 @@ function exportCalendarICS() {
                 :class="selectedCategory === 'All' ? 'btn-danger text-white fw-bold' : 'btn-light text-muted'"
                 @click="selectedCategory = 'All'"
               >
-                All Events ({{ scheduleEvents.length }})
+                All Events ({{ dayEvents.length }})
               </button>
               <button
                 type="button"
@@ -595,7 +691,7 @@ function exportCalendarICS() {
                 :class="selectedCategory === 'CCA' ? 'btn-danger text-white fw-bold' : 'btn-light text-muted'"
                 @click="selectedCategory = 'CCA'"
               >
-                CCA Rehearsals
+                CCA
               </button>
               <button
                 type="button"
@@ -603,20 +699,20 @@ function exportCalendarICS() {
                 :class="selectedCategory === 'Academic' ? 'btn-danger text-white fw-bold' : 'btn-light text-muted'"
                 @click="selectedCategory = 'Academic'"
               >
-                Academic Classes
+                Academic
               </button>
               <button
                 type="button"
                 class="btn btn-sm py-1 px-3 rounded-pill"
-                :class="selectedCategory === 'Duty' ? 'btn-danger text-white fw-bold' : 'btn-light text-muted'"
-                @click="selectedCategory = 'Duty'"
+                :class="selectedCategory === 'Adhoc' ? 'btn-danger text-white fw-bold' : 'btn-light text-muted'"
+                @click="selectedCategory = 'Adhoc'"
               >
-                Crew Duties
+                Ad hoc
               </button>
             </div>
 
             <span class="text-muted small px-2">
-              {{ scheduleEvents.filter(e => e.status === 'Completed').length }}/{{ scheduleEvents.length }} Done
+              {{ dayEvents.filter(e => e.status === 'Completed').length }}/{{ dayEvents.length }} Done
             </span>
 
           </div>
@@ -624,6 +720,10 @@ function exportCalendarICS() {
 
         <!-- Schedule Items List -->
         <div class="d-flex flex-column gap-3">
+
+          <div v-if="filteredEvents.length === 0" class="pulse-card p-4 shadow-sm text-center text-muted small">
+            No events to show for this day{{ selectedCategory !== 'All' ? ' in this category' : '' }}.
+          </div>
 
           <div
             v-for="event in filteredEvents"
@@ -646,10 +746,9 @@ function exportCalendarICS() {
                   <span class="badge" :class="{
                     'bg-primary': event.category === 'Academic',
                     'bg-danger': event.category === 'CCA',
-                    'bg-success': event.category === 'Duty',
-                    'bg-secondary': event.category === 'Personal'
+                    'bg-success': event.category === 'Adhoc'
                   }" style="font-size: 0.65rem;">
-                    {{ event.category }}
+                    {{ categoryLabel(event.category) }}
                   </span>
                   <span v-if="conflictingEventIds.has(event.id)" class="badge bg-warning text-dark border border-warning" style="font-size: 0.65rem;">
                     Clash Detected
@@ -682,16 +781,13 @@ function exportCalendarICS() {
               </button>
             </div>
 
-            <!-- Transit & Notes -->
-            <div v-if="walkInfo[event.id] || event.transitNote || event.notes" class="p-2 rounded bg-light border small text-muted mb-2" style="font-size: 0.725rem;">
+            <!-- Transit (calculated by OneMap) & Notes -->
+            <div v-if="walkInfo[event.id] || event.notes" class="p-2 rounded bg-light border small text-muted mb-2" style="font-size: 0.725rem;">
               <div v-if="walkInfo[event.id]" class="mb-1" :class="{ 'text-danger fw-bold': transitTight(event) }">
                 <strong class="text-secondary">Transit:</strong>
                 {{ transitText(event) }}
                 <span v-if="!walkInfo[event.id].sameVenue"> • {{ walkInfo[event.id].gapMinutes }} min gap</span>
                 <span v-if="transitTight(event)"> ⚠ Not enough time</span>
-              </div>
-              <div v-if="event.transitNote" class="mb-1">
-                <strong class="text-secondary">Directions:</strong> {{ event.transitNote }}
               </div>
               <div v-if="event.notes">
                 <strong class="text-secondary">Notes:</strong> {{ event.notes }}
@@ -761,10 +857,9 @@ function exportCalendarICS() {
                 <div class="col-6">
                   <label class="form-label small fw-bold text-dark">Category:</label>
                   <select v-model="eventForm.category" class="form-select form-select-sm" required>
-                    <option value="CCA">CCA Rehearsal</option>
-                    <option value="Academic">Academic Class</option>
-                    <option value="Duty">Crew / Logistics Duty</option>
-                    <option value="Personal">Personal / Study Block</option>
+                    <option value="CCA">CCA</option>
+                    <option value="Academic">Academic</option>
+                    <option value="Adhoc">Ad hoc</option>
                   </select>
                 </div>
                 <div class="col-6">
@@ -784,7 +879,7 @@ function exportCalendarICS() {
                 </div>
               </div>
 
-              <!-- SMU Building Search & Selection for OneMap Route Calculation -->
+              <!-- SMU Building Selection for OneMap Route Calculation -->
               <div class="mb-3">
                 <label class="form-label small fw-bold text-dark">SMU Building (OneMap Searchable):</label>
                 <select v-model="eventForm.building" class="form-select form-select-sm fw-bold text-primary" required>
@@ -817,16 +912,6 @@ function exportCalendarICS() {
                     placeholder="e.g. Lead Dancer, Student"
                   />
                 </div>
-              </div>
-
-              <div class="mb-3">
-                <label class="form-label small fw-bold text-dark">Directions (optional):</label>
-                <input
-                  v-model="eventForm.transitNote"
-                  type="text"
-                  class="form-control form-control-sm"
-                  placeholder="e.g. Via Campus Concourse"
-                />
               </div>
 
               <div class="mb-2">
