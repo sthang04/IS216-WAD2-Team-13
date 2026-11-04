@@ -33,7 +33,7 @@ insert into app_config (key, value, description) values
   ('calendar_end_date',      '"2026-12-31"',            'Last date Pulse shows bookings for.'),
   ('waitlist_offer_minutes', '30',                      'How long a waitlisted club holds an offer.'),
   ('offer_reminder_minutes', '5',                       'Send a reminder when this many minutes remain on an offer.'),
-  ('pulse_base_url',         '"http://localhost:5173"', 'Used to build links inside emails and Telegram messages.'),
+  ('pulse_base_url',         '"https://is-216-wad-2-team-13.vercel.app"', 'Used to build links inside emails and Telegram messages.'),
   ('osl_signoff_hours',      '48',                      'SSU Clause 9.1(c): OSL must sign off a transfer at least this many hours before the booking starts.'),
   ('osl_reminder_hours',     '24',                      'Remind OSL this many hours before the sign-off deadline.'),
   ('demo_persona_emails',    '["rachel.tan.2024@scis.smu.edu.sg","darren.koh.2024@business.smu.edu.sg","chloe.osl@smu.edu.sg","marcus.lim.2024@socsc.smu.edu.sg"]', 'The core demo personas (same emails as the team login screen).'),

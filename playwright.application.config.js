@@ -1,4 +1,4 @@
-﻿import {defineConfig} from '@playwright/test'
+import {defineConfig} from '@playwright/test'
 
 // Test-only server: no real credentials, workflow activation, or server reuse.
 export default defineConfig({

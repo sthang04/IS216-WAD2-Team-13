@@ -1021,8 +1021,7 @@ onUnmounted(() => {
     height: 72px;
   }
   .pip-speech {
-    right: 67px;
-    bottom: 48px;
+    display: none !important;
   }
   .pip-panel {
     bottom: 85px;

@@ -101,6 +101,9 @@ const queueNote = computed(() => {
           <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>
           {{ action.label }}
         </span>
+        <span v-else-if="action.type === 'blocked_conflict'" class="badge bg-light text-muted border py-1 px-2" :title="action.hint">
+          ⚠️ {{ action.label }}
+        </span>
         <button
           v-else
           type="button"

@@ -1058,6 +1058,11 @@ body {
     word-break: break-word;
     max-width: 100% !important;
   }
+
+  /* Hide Pip mascot speech bubble on mobile so it never blocks cards or buttons */
+  .pip-speech {
+    display: none !important;
+  }
 }
 
 /* Keep Pip (fixed, bottom-right, ~115px wide) off the page content: reserve a right

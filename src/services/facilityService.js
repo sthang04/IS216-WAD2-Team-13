@@ -347,6 +347,14 @@ export function bookingActions(booking, options) {
  
   // Released by another CCA
   if (booking.status === STATUSES.PROPOSED) {
+    if (options.conflictingBooking) {
+      actions.push({
+        type: 'blocked_conflict',
+        label: 'Time conflict',
+        hint: 'Your CCA already holds ' + (options.conflictingBooking.facility_name || 'a facility') + ' at this time. Double booking is not permitted.'
+      })
+      return actions
+    }
     if (booking.offered_club_id === options.clubId) {
       actions.push({ type: 'claim', label: 'Accept offer', variant: 'claim' })
       return actions
@@ -360,6 +368,12 @@ export function bookingActions(booking, options) {
   // Otherwise: join or leave the waitlist
   if (options.waitlistEntry) {
     actions.push({ type: 'leave', label: 'Leave waitlist (#' + options.waitlistEntry.queue_position + ')', variant: 'warning' })
+  } else if (options.conflictingBooking) {
+    actions.push({
+      type: 'blocked_conflict',
+      label: 'Time conflict',
+      hint: 'Your CCA already holds ' + (options.conflictingBooking.facility_name || 'a facility') + ' at this time. Double booking is not permitted.'
+    })
   } else {
     actions.push({ type: 'join', label: 'Join waitlist', variant: 'outline' })
   }

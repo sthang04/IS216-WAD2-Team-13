@@ -301,12 +301,24 @@ const entryByBooking = computed(() => {
 // booking_id -> the buttons that booking shows
 const actionsByBooking = computed(() => {
   const result = {}
+  const activeId = session.value.activeClubId
+  const myCurrentBookings = bookings.value.filter((b) =>
+    (b.owner_club_id === activeId && b.status === STATUSES.BOOKED) ||
+    (b.claiming_club_id === activeId && b.status === STATUSES.PENDING)
+  )
   bookings.value.forEach((booking) => {
+    const conflict = myCurrentBookings.find((mine) =>
+      mine.booking_id !== booking.booking_id &&
+      mine.booking_date === booking.booking_date &&
+      mine.start_time < booking.end_time &&
+      mine.end_time > booking.start_time
+    )
     result[booking.booking_id] = bookingActions(booking, {
-      clubId: session.value.activeClubId,
+      clubId: activeId,
       canManage: canManageActiveClub.value,
       isOslAdmin: session.value.isOslAdmin,
-      waitlistEntry: entryByBooking.value[booking.booking_id]
+      waitlistEntry: entryByBooking.value[booking.booking_id],
+      conflictingBooking: conflict || null
     })
   })
   return result
