@@ -1,8 +1,11 @@
 <script setup>
-import { ref, computed, watch } from 'vue';
+import { ref, computed, watch, nextTick } from 'vue';
+import { useRoute } from 'vue-router';
+import SimulatorInvitationInbox from '../components/SimulatorInvitationInbox.vue';
 import { getWalkTime } from '../services/onemap';
 
 const props = defineProps({
+  active: { type: Boolean, default: true },
   apiMode: { type: Boolean, default: false },
   readOnly: { type: Boolean, default: false },
   activePersona: {
@@ -16,6 +19,22 @@ const props = defineProps({
   }
 });
 
+// Simulator linked code
+// App.vue keeps panes mounted with v-show. Scroll only after this member page
+// becomes visible, including a deep link opened before session restoration.
+const route=useRoute()
+watch([()=>route.hash,()=>props.active],async([hash,active])=>{
+ if(active && !props.readOnly && hash==='#simulator-invitation-inbox'){
+  await nextTick()
+  const inbox=document.getElementById('simulator-invitation-inbox')
+  if(inbox)inbox.style.scrollMarginTop=((document.querySelector('header')?.getBoundingClientRect().height || 0)+16)+'px'
+  inbox?.scrollIntoView({block:'start'})
+  inbox?.focus({preventScroll:true})
+ }
+},{immediate:true,flush:'post'})
+const isCheckedIn = ref(false);
+const isLocating = ref(false);
+const checkInMsg = ref('');
 const toastMsg = ref('');
 
 // Guests can look around but not make changes
@@ -401,45 +420,67 @@ function deleteEvent(id) {
   setTimeout(() => { toastMsg.value = ''; }, 4000);
 }
 
+// Escape commas, semicolons and new lines so they don't break the .ics file
+function icsEscape(text) {
+  return String(text || '')
+    .replace(/\\/g, '\\\\')
+    .replace(/;/g, '\\;')
+    .replace(/,/g, '\\,')
+    .replace(/\r?\n/g, '\\n');
+}
+
+// Singapore time -> UTC, e.g. '2026-10-23' + '18:30' -> '20261023T103000Z'
+function toIcsUtc(date, time) {
+  const [y, m, d] = date.split('-').map(Number);
+  const [hh, mm] = time.split(':').map(Number);
+  const utc = new Date(Date.UTC(y, m - 1, d, hh - 8, mm));
+  return utc.toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '');
+}
+
 function exportCalendarICS() {
-  let icsContent = "BEGIN:VCALENDAR\nVERSION:2.0\nPRODID:-//SMU Pulse//Personal Schedule v2.0//EN\nCALSCALE:GREGORIAN\nMETHOD:PUBLISH\n";
+  const now = new Date().toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '');
+
+  const lines = [
+    'BEGIN:VCALENDAR',
+    'VERSION:2.0',
+    'PRODID:-//SMU Pulse//Personal Schedule//EN',
+    'CALSCALE:GREGORIAN',
+    'METHOD:PUBLISH'
+  ];
 
   for (const ev of scheduleEvents.value) {
-    const dateStr = ev.date.replace(/-/g, '');
-    const startStr = ev.startTime.replace(/:/g, '') + '00';
-    const endStr = ev.endTime.replace(/:/g, '') + '00';
-
-    icsContent += "BEGIN:VEVENT\n";
-    icsContent += `UID:pulse-sched-${ev.id}@smu.edu.sg\n`;
-    icsContent += `DTSTAMP:20261021T120000Z\n`;
-    icsContent += `DTSTART;TZID=Asia/Singapore:${dateStr}T${startStr}\n`;
-    icsContent += `DTEND;TZID=Asia/Singapore:${dateStr}T${endStr}\n`;
-    icsContent += `SUMMARY:${ev.title}\n`;
-    icsContent += `LOCATION:${ev.venue}\n`;
-    icsContent += `DESCRIPTION:Role: ${ev.role} | Category: ${categoryLabel(ev.category)} | Notes: ${ev.notes || 'None'}\n`;
-    icsContent += `STATUS:CONFIRMED\n`;
-    icsContent += "END:VEVENT\n";
+    lines.push('BEGIN:VEVENT');
+    lines.push(`UID:pulse-sched-${ev.id}@smu.edu.sg`);
+    lines.push(`DTSTAMP:${now}`);
+    lines.push(`DTSTART:${toIcsUtc(ev.date, ev.startTime)}`);
+    lines.push(`DTEND:${toIcsUtc(ev.date, ev.endTime)}`);
+    lines.push(`SUMMARY:${icsEscape(ev.title)}`);
+    lines.push(`LOCATION:${icsEscape(ev.venue)}`);
+    lines.push(`DESCRIPTION:${icsEscape(`Role: ${ev.role} | Category: ${categoryLabel ? categoryLabel(ev.category) : ev.category} | Notes: ${ev.notes || 'None'}`)}`);
+    lines.push('END:VEVENT');
   }
+  lines.push('END:VCALENDAR');
 
-  icsContent += "END:VCALENDAR";
-
-  const blob = new Blob([icsContent], { type: 'text/calendar;charset=utf-8;' });
+  // Calendar files must use Windows-style line endings (\r\n)
+  const blob = new Blob([lines.join('\r\n') + '\r\n'], { type: 'text/calendar;charset=utf-8' });
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
   link.href = url;
-  link.setAttribute('download', `${props.activePersona.name.replace(/\s+/g, '_')}_SMU_Schedule.ics`);
+  link.download = `${props.activePersona.name.replace(/\s+/g, '_')}_SMU_Schedule.ics`;
   document.body.appendChild(link);
   link.click();
   document.body.removeChild(link);
-  URL.revokeObjectURL(url);
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
 
-  toastMsg.value = 'Schedule exported! .ics file ready to import into OASIS or Apple/Google Calendar.';
-  setTimeout(() => { toastMsg.value = ''; }, 4500);
+  toastMsg.value = `Exported ${scheduleEvents.value.length} events. Open the file for Apple Calendar, or import it in Google Calendar (Settings > Import & export).`;
+  setTimeout(() => { toastMsg.value = ''; }, 6000);
 }
 </script>
 
 <template>
   <div class="py-2">
+    <SimulatorInvitationInbox v-if="!readOnly" />
+    
 
     <!-- Top Header & Actions -->
     <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-4">

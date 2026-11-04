@@ -1,5 +1,5 @@
 <script setup>
-import { computed } from 'vue'
+import { computed, ref, onMounted, onUnmounted, watch } from 'vue'
 import { OTHER_CCA_FILTER } from '../services/facilityService'
 
 // Options come from the facilities table, not from hard-coded metadata.
@@ -34,6 +34,65 @@ const equipmentOptions = computed(() => [...new Set(props.facilities.flatMap(f =
 function update(key, value) {
   emit('update:filters', { ...props.filters, [key]: value })
 }
+
+// Dynamic Animated Typewriter Placeholder for Search Box
+const searchPlaceholderQueries = [
+  "Search 'Dance Studio A'…",
+  "Search 'Li Ka Shing B1'…",
+  "Search 'Sprung Floor'…",
+  "Search 'Samba Masala'…",
+  "Search 'Acoustic Room'…",
+  "Search 'Mirrors'…",
+  "Search 'ACC Concourse'…"
+]
+const currentSearchPlaceholder = ref('')
+let searchPlaceholderTimer = null
+let sqIndex = 0
+let scIndex = 0
+let sqDeleting = false
+
+function tickSearchPlaceholder() {
+  if (props.filters?.search && props.filters.search.length > 0) return
+
+  const target = searchPlaceholderQueries[sqIndex]
+  if (!sqDeleting) {
+    scIndex++
+    currentSearchPlaceholder.value = target.substring(0, scIndex)
+    if (scIndex >= target.length) {
+      sqDeleting = true
+      searchPlaceholderTimer = setTimeout(tickSearchPlaceholder, 1800)
+      return
+    }
+    searchPlaceholderTimer = setTimeout(tickSearchPlaceholder, 40)
+  } else {
+    scIndex--
+    currentSearchPlaceholder.value = target.substring(0, scIndex)
+    if (scIndex <= 0) {
+      sqDeleting = false
+      sqIndex = (sqIndex + 1) % searchPlaceholderQueries.length
+      searchPlaceholderTimer = setTimeout(tickSearchPlaceholder, 380)
+      return
+    }
+    searchPlaceholderTimer = setTimeout(tickSearchPlaceholder, 22)
+  }
+}
+
+watch(() => props.filters?.search, (newVal) => {
+  if (!newVal) {
+    if (searchPlaceholderTimer) clearTimeout(searchPlaceholderTimer)
+    scIndex = 0
+    sqDeleting = false
+    searchPlaceholderTimer = setTimeout(tickSearchPlaceholder, 250)
+  }
+})
+
+onMounted(() => {
+  searchPlaceholderTimer = setTimeout(tickSearchPlaceholder, 400)
+})
+
+onUnmounted(() => {
+  if (searchPlaceholderTimer) clearTimeout(searchPlaceholderTimer)
+})
 </script>
 
 <template>
@@ -81,14 +140,51 @@ function update(key, value) {
     </div>
 
     <div class="mt-3 pt-3 border-top">
-      <input
-        type="search"
-        class="form-control pulse-search"
-        placeholder="Search facility, CCA or equipment…"
-        aria-label="Search facility, CCA or equipment"
-        :value="filters.search"
-        @input="update('search', $event.target.value)"
-      />
+      <div class="pulse-apple-search-box position-relative">
+        <svg class="pulse-search-icon position-absolute" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+          <circle cx="11" cy="11" r="8"></circle>
+          <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+        </svg>
+        <input
+          type="search"
+          class="form-control pulse-search pulse-apple-input"
+          :placeholder="filters.search ? '' : (currentSearchPlaceholder || 'Search facility, CCA or equipment…')"
+          aria-label="Search facility, CCA or equipment"
+          :value="filters.search"
+          @input="update('search', $event.target.value)"
+        />
+        <button
+          v-if="filters.search"
+          type="button"
+          class="btn btn-link position-absolute end-0 top-50 translate-middle-y text-muted pe-3 p-0 border-0 text-decoration-none"
+          title="Clear search"
+          aria-label="Clear search"
+          @click="update('search', '')"
+        >
+          ✕
+        </button>
+      </div>
+
+      <!-- Quick Suggestion Chips (Apple-style fast filters) -->
+      <div class="d-flex flex-wrap align-items-center gap-1 mt-2 ps-1">
+        <span class="text-muted small fw-semibold me-1" style="font-size: 0.72rem;">Suggested:</span>
+        <button
+          v-for="chip in [
+            { label: 'Dance Studios', val: 'Dance' },
+            { label: 'Connexion', val: 'Connexion' },
+            { label: 'Band & Acoustic', val: 'Acoustic' },
+            { label: 'Mirrors', val: 'Mirrors' },
+            { label: 'ACC Concourse', val: 'ACC' }
+          ]"
+          :key="chip.label"
+          type="button"
+          class="btn btn-sm pulse-search-chip"
+          :class="{ active: filters.search === chip.val }"
+          @click="update('search', filters.search === chip.val ? '' : chip.val)"
+        >
+          {{ chip.label }}
+        </button>
+      </div>
     </div>
   </section>
 </template>
