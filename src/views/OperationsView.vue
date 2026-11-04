@@ -381,17 +381,19 @@ function sortedBlocks(person) {
 }
 
 /* ================================================================== */
-/* 5. CLOCK                                                            */
-/*    On the event day it follows the real time ("live").              */
-/*    Before the day it's a preview time you move with ◀ ▶, and        */
-/*    check-in and delays don't apply yet.                             */
+/* 5. CLOCK & SLIDER TIME CONTROL                                      */
 /* ================================================================== */
 
 const showClock = ref(toMinutes('17:00'))
 const today = ref(todayIso())
-const followLive = ref(true) // event day: keep the clock on the real time
+const followLive = ref(true)
 
-// 'today' | 'upcoming' | 'past'
+// Update clock when sliding the time range input
+function onSliderInput(e) {
+  followLive.value = false
+  showClock.value = Number(e.target.value)
+}
+
 const eventDay = computed(() => {
   if (!event.value) return 'upcoming'
   if (event.value.date === today.value) return 'today'
@@ -399,14 +401,6 @@ const eventDay = computed(() => {
 })
 const isEventDay = computed(() => eventDay.value === 'today')
 
-const daysAway = computed(() => {
-  if (!event.value) return 0
-  const [y, m, d] = event.value.date.split('-').map(Number)
-  const [ty, tm, td] = today.value.split('-').map(Number)
-  return Math.round((new Date(y, m - 1, d) - new Date(ty, tm - 1, td)) / 86400000)
-})
-
-// Event day: the real time. Otherwise: a preview a bit into the day.
 function resetClock() {
   followLive.value = true
   if (isEventDay.value) {
@@ -787,8 +781,8 @@ function callTime(person) {
 
 // 'in' | 'late' | 'due' | 'missing', as at the clock. Before the event day nobody is missing yet.
 function checkInStatus(p) {
-  if (!isEventDay.value) return p.checkedInAt !== null ? 'in' : 'due'
   if (p.checkedInAt !== null && p.checkedInAt <= showClock.value) return 'in'
+  if (!isEventDay.value) return 'due'
   if (p.late) return 'late'
   const call = callTime(p)
   if (call === null || showClock.value < call) return 'due'
@@ -796,6 +790,11 @@ function checkInStatus(p) {
 }
 
 const STATUS_ORDER = { missing: 0, late: 1, due: 2, in: 3 }
+
+const sortedCrewForCheckIn = computed(() => {
+  return [...crew.value].sort((a, b) => STATUS_ORDER[checkInStatus(a)] - STATUS_ORDER[checkInStatus(b)])
+})
+
 const needsAttention = computed(() =>
   crew.value
     .filter(p => checkInStatus(p) !== 'in')
@@ -1069,11 +1068,20 @@ function parseNoticeWithAi() {
             <span v-else>Preview time</span>
           </div>
           <div class="d-flex align-items-center gap-2">
-            <button type="button" class="btn btn-sm btn-light border px-2" aria-label="15 minutes earlier" @click="moveClock(-15)">◀</button>
-            <span class="fw-bold fs-5 ops-clock">{{ formatTime(showClock) }}</span>
-            <button type="button" class="btn btn-sm btn-light border px-2" aria-label="15 minutes later" @click="moveClock(15)">▶</button>
-            <button v-if="isEventDay && !followLive" type="button" class="btn btn-link btn-sm p-0 ops-small" @click="resetClock">Back to now</button>
-          </div>
+              <!-- Interactive Range Slider -->
+              <input
+                type="range"
+                class="form-range flex-grow-1"
+                :min="dayStart"
+                :max="dayEnd"
+                step="15"
+                :value="showClock"
+                @input="onSliderInput"
+              />
+              <button v-if="isEventDay && !followLive" type="button" class="btn btn-outline-danger btn-sm py-0 px-2 ops-small fw-bold text-nowrap" @click="resetClock">
+                Live
+              </button>
+            </div>
         </div>
         <div class="col-12 col-md">
           <div class="text-muted text-uppercase fw-bold ops-label">
@@ -1229,44 +1237,63 @@ function parseNoticeWithAi() {
       <!-- Crew check-in -->
       <div class="col-lg-4">
         <div class="pulse-card ops-static-card p-3 p-md-4 shadow-sm">
-          <h5 class="fw-bold mb-1">Crew check-in</h5>
-          <p v-if="isEventDay" class="text-muted small mb-3">Each person is due at their first task. Anyone missing or late shows first.</p>
-          <p v-else class="text-muted small mb-3">Opens on {{ event ? formatDate(event.date) : 'the event day' }}. Each person will be due at their first task.</p>
+          <div class="d-flex justify-content-between align-items-center mb-2">
+            <h5 class="fw-bold mb-0">Crew check-in</h5>
+            <span class="badge bg-success rounded-pill px-2 py-1" style="font-size: 0.7rem;">
+              {{ checkedIn.length }} / {{ crew.length }} Checked In
+            </span>
+          </div>
+          <p v-if="isEventDay" class="text-muted small mb-3">Green cards indicate checked-in ExCos. Missing or late members stay pinned at the top.</p>
 
-          <div v-if="!needsAttention.length" class="alert alert-success py-2 small mb-3">All {{ crew.length }} checked in ✓</div>
-
+          <!-- List of all crew members sorted by status -->
           <div class="d-flex flex-column gap-2 mb-3">
-            <div v-for="p in needsAttention" :key="p.name" class="p-3 rounded-3 border bg-light d-flex flex-column gap-1">
+            <div
+              v-for="p in sortedCrewForCheckIn"
+              :key="p.name"
+              class="p-3 rounded-3 border transition-all"
+              :class="checkInStatus(p) === 'in' ? 'bg-success bg-opacity-10 border-success' : 'bg-light'"
+            >
               <div class="d-flex justify-content-between align-items-center">
-                <strong class="small">{{ p.name }}</strong>
-                <span v-if="checkInStatus(p) === 'missing'" class="badge bg-danger" style="font-size: 0.65rem;">Missing</span>
-                <span v-else-if="checkInStatus(p) === 'late'" class="badge bg-warning text-dark" style="font-size: 0.65rem;">Running late</span>
-                <span v-else class="badge bg-light text-muted border" style="font-size: 0.65rem;">{{ callTime(p) === null ? 'No tasks yet' : `Due ${formatTime(callTime(p))}` }}</span>
-              </div>
-              <div class="text-muted ops-small">{{ p.role }}<template v-if="p.phone"> • {{ p.phone }}</template></div>
-              <div v-if="checkInStatus(p) === 'late'" class="text-secondary ops-small fw-semibold d-flex align-items-center gap-2">
-                {{ p.late }}
-                <button type="button" class="btn btn-link p-0 text-muted text-decoration-none lh-1" :title="`${p.name} isn't late`" :aria-label="`Clear late for ${p.name}`" @click="clearLate(p)">✕</button>
-              </div>
-              <div v-else-if="checkInStatus(p) === 'missing'" class="text-danger ops-small fw-semibold">Was due at {{ formatTime(callTime(p)) }}, not checked in</div>
+                <strong class="small" :class="checkInStatus(p) === 'in' ? 'text-success fw-bold' : ''">
+                  {{ p.name }}
+                </strong>
 
-              <div v-if="checkInStatus(p) !== 'due'" class="d-flex gap-2 mt-1">
+                <!-- Status Badges -->
+                <span v-if="checkInStatus(p) === 'in'" class="badge bg-success rounded-pill" style="font-size: 0.65rem;">
+                  ✓ Checked In {{ p.checkedInAt ? `@ ${formatTime(p.checkedInAt)}` : '' }}
+                </span>
+                <span v-else-if="checkInStatus(p) === 'missing'" class="badge bg-danger" style="font-size: 0.65rem;">Missing</span>
+                <span v-else-if="checkInStatus(p) === 'late'" class="badge bg-warning text-dark" style="font-size: 0.65rem;">Running late</span>
+                <span v-else class="badge bg-light text-muted border" style="font-size: 0.65rem;">
+                  {{ callTime(p) === null ? 'No tasks yet' : `Due ${formatTime(callTime(p))}` }}
+                </span>
+              </div>
+
+              <div class="text-muted ops-small mt-1">{{ p.role }}<template v-if="p.phone"> • {{ p.phone }}</template></div>
+
+              <div v-if="checkInStatus(p) === 'late'" class="text-secondary ops-small fw-semibold d-flex align-items-center gap-2 mt-1">
+                {{ p.late }}
+                <button type="button" class="btn btn-link p-0 text-muted text-decoration-none lh-1" :aria-label="`Clear late for ${p.name}`" @click="clearLate(p)">✕</button>
+              </div>
+              <div v-else-if="checkInStatus(p) === 'missing'" class="text-danger ops-small fw-semibold mt-1">
+                Was due at {{ formatTime(callTime(p)) }}, not checked in
+              </div>
+
+              <!-- Action Buttons -->
+              <div v-if="checkInStatus(p) !== 'in'" class="d-flex gap-2 mt-2">
                 <button type="button" class="btn btn-sm btn-outline-success flex-grow-1 py-1 ops-small fw-bold" @click="checkInPerformer(p)">Check in</button>
                 <button v-if="checkInStatus(p) === 'missing'" type="button" class="btn btn-sm btn-outline-warning text-dark py-1 ops-small fw-bold" @click="reportLateETA(p)">Running late</button>
                 <button type="button" class="btn btn-sm btn-outline-dark py-1 ops-small fw-bold" @click="triggerStandbyForPerformer(p)">Standby</button>
               </div>
+              <div v-else class="d-flex justify-content-end mt-2">
+                <button type="button" class="btn btn-link btn-sm p-0 text-muted ops-small text-decoration-none" @click="undoCheckIn(p)">
+                  Undo check-in
+                </button>
+              </div>
             </div>
           </div>
 
-          <div v-if="checkedIn.length" class="ops-small text-muted mb-3 d-flex flex-wrap align-items-center gap-1">
-            <span class="fw-semibold text-success me-1">✓ Checked in:</span>
-            <span v-for="p in checkedIn" :key="p.memberId" class="badge rounded-pill bg-light text-dark border fw-normal d-inline-flex align-items-center gap-1">
-              {{ p.name }}
-              <button type="button" class="btn btn-link p-0 text-muted text-decoration-none lh-1" :title="`Undo check-in for ${p.name}`" :aria-label="`Undo check-in for ${p.name}`" @click="undoCheckIn(p)">✕</button>
-            </span>
-          </div>
-
-          <div class="ops-small text-muted text-center">
+          <div class="ops-small text-muted text-center border-top pt-2">
             Emergency: Campus Security <strong>+65 6828 0345</strong>
           </div>
         </div>
@@ -1770,5 +1797,13 @@ function parseNoticeWithAi() {
   border: 1px solid rgba(255, 255, 255, 0.9);
   z-index: 1;
 }
-.ops-now-line { position: absolute; top: 0; bottom: 0; width: 2px; background-color: #dc3545; z-index: 2; }
+.ops-now-line {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  background-color: #dc3545;
+  z-index: 2;
+  box-shadow: 0 0 6px rgba(220, 53, 69, 0.5);
+}
 </style>
