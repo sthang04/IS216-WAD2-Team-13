@@ -134,18 +134,27 @@ function personaFromRows(rows, email) {
   if (demo) {
     sector = demo.sector
     smartSearches = demo.smartSearches
+    if (demo.roleLabel) {
+      roleLabel = demo.roleLabel
+    }
+    if (demo.cca && !ccas.includes(demo.cca)) {
+      ccas.unshift(demo.cca)
+    }
   }
- 
+
+  const primaryCca = (demo && demo.cca) ? demo.cca : first.club_name
+  const finalClubs = ccas.length > 0 ? ccas : (demo ? demo.allowedClubs : [primaryCca])
+
   return {
     id: 'member:' + first.member_id,
     memberId: Number(first.member_id),
-    name: first.full_name || email,
+    name: (demo && demo.name) ? demo.name : (first.full_name || email),
     email: email,
-    role: role,
+    role: (demo && demo.role) ? demo.role : role,
     roleLabel: roleLabel,
-    cca: first.club_name,
-    allowedClubs: ccas,
-    isDev: false,
+    cca: primaryCca,
+    allowedClubs: (demo && demo.allowedClubs && demo.isDev) ? demo.allowedClubs : finalClubs,
+    isDev: (demo && demo.isDev) || false,
     sector: sector,
     smartSearches: smartSearches,
     positions: positions,

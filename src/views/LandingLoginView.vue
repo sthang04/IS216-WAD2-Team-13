@@ -804,7 +804,7 @@ async function handleManualLogin() {
                           <strong class="d-block text-dark text-truncate" style="font-size: 0.76rem;">Rachel Tan</strong>
                           <small class="text-muted d-block text-truncate" style="font-size: 0.66rem;">Eurhythmix ExCo</small>
                         </div>
-                        <span class="badge bg-danger bg-opacity-10 text-danger border flex-shrink-0" style="font-size: 0.65rem;">Arts</span>
+                        <span class="badge bg-danger bg-opacity-10 text-danger border flex-shrink-0" style="font-size: 0.65rem;">Logistics</span>
                       </button>
                     </div>
 
@@ -820,7 +820,7 @@ async function handleManualLogin() {
                           <strong class="d-block text-dark text-truncate" style="font-size: 0.76rem;">Darren Koh</strong>
                           <small class="text-muted d-block text-truncate" style="font-size: 0.66rem;">Samba Masala ExCo</small>
                         </div>
-                        <span class="badge bg-warning bg-opacity-25 text-dark border flex-shrink-0" style="font-size: 0.65rem;">Samba</span>
+                        <span class="badge bg-warning bg-opacity-25 text-dark border flex-shrink-0" style="font-size: 0.65rem;">Logistics</span>
                       </button>
                     </div>
 
@@ -836,7 +836,7 @@ async function handleManualLogin() {
                           <strong class="d-block text-dark text-truncate" style="font-size: 0.76rem;">Marcus Lim</strong>
                           <small class="text-muted d-block text-truncate" style="font-size: 0.66rem;">Eurhythmix Marketing</small>
                         </div>
-                        <span class="badge bg-danger bg-opacity-10 text-danger border flex-shrink-0" style="font-size: 0.65rem;">Mktg</span>
+                        <span class="badge bg-danger bg-opacity-10 text-danger border flex-shrink-0" style="font-size: 0.65rem;">Marketing</span>
                       </button>
                     </div>
 
@@ -852,7 +852,7 @@ async function handleManualLogin() {
                           <strong class="d-block text-dark text-truncate" style="font-size: 0.76rem;">Chloe Ang</strong>
                           <small class="text-muted d-block text-truncate" style="font-size: 0.66rem;">OSL Facility Admin</small>
                         </div>
-                        <span class="badge bg-dark text-white flex-shrink-0" style="font-size: 0.65rem;">Staff</span>
+                        <span class="badge bg-dark text-white flex-shrink-0" style="font-size: 0.65rem;">OSL Admin</span>
                       </button>
                     </div>
 
@@ -868,7 +868,7 @@ async function handleManualLogin() {
                           <strong class="d-block text-dark text-truncate" style="font-size: 0.76rem;">Dev Administrator</strong>
                           <small class="text-muted d-block text-truncate" style="font-size: 0.66rem;">All CCAs Super-Admin</small>
                         </div>
-                        <span class="badge text-white flex-shrink-0" style="background-color: var(--pulse-purple-transit); font-size: 0.65rem;">Dev</span>
+                        <span class="badge text-white flex-shrink-0" style="background-color: var(--pulse-purple-transit); font-size: 0.65rem;">Super Admin</span>
                       </button>
                     </div>
                   </div>
