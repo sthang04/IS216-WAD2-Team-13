@@ -86,9 +86,10 @@ create temp table demo_meetings (key text, id bigint) on commit drop;
 with organiser as (
   select (select member_id from demo_members where full_name = 'Mei Chen') as mei
 ), ins as (
-  insert into public.meeting_requests (club_id, organiser_member_id, title, week_start, vote_deadline, status,
+  insert into public.meeting_requests (club_id, organiser_member_id, title, agenda, week_start, vote_deadline, status,
                                        confirmed_date, confirmed_start_hour, confirmed_end_hour, venue, confirmed_at)
   select (select id from public.clubs where short_name = 'Eurhythmix'), o.mei, 'ExCo Weekly Sync',
+         E'1. Arts Festival run-of-show\n2. Costume fittings schedule\n3. Budget update',
          date '2026-11-02', timestamptz '2026-11-03 12:00+08', 'CONFIRMED',
          date '2026-11-05', 19, 21, 'SMU Connexion Meeting Room 3', timestamptz '2026-11-03 12:30+08'
     from organiser o

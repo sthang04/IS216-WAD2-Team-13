@@ -5,7 +5,7 @@ import { session, activeClubName, setActiveClub } from '../services/sessionState
 import { parseIcs, icsEventAt } from '../services/icsBaseline';
 import {
   fetchMeetingSnapshot, fetchClubRoster, createMeeting, setAvailability, submitNoAvailability,
-  nudgeParticipants, confirmMeeting, cancelMeeting,
+  nudgeParticipants, confirmMeeting, cancelMeeting, updateParticipants, updateAgenda,
   fetchMyBaseline, fetchClubBaselines, saveMyBaseline, clearMyBaseline, listenForMeetings
 } from '../services/meetingService';
 
@@ -164,7 +164,7 @@ function selectMeeting(id) {
   showCreateForm.value = false
   showConfirmForm.value = false
   selectedMeetingId.value = id
-  loadMeeting(id)
+  return loadMeeting(id)
 }
 
 /* ================================================================== */
@@ -231,6 +231,10 @@ const countdownText = computed(() => {
   return days > 0 ? `${days}d ${hms}` : hms
 })
 
+function closeMenuOnEscape(event) {
+  if (event.key === 'Escape') closeMenu()
+}
+
 onMounted(() => {
   clock = setInterval(() => {
     const wasOpen = votingOpen.value
@@ -238,6 +242,10 @@ onMounted(() => {
     // The deadline just passed: the server closes voting, so reload to show it
     if (wasOpen && !votingOpen.value) loadMeeting()
   }, 1000)
+  window.addEventListener('click', closeMenu)
+  window.addEventListener('scroll', closeMenu, true)
+  window.addEventListener('resize', closeMenu)
+  window.addEventListener('keydown', closeMenuOnEscape)
 })
 
 onBeforeUnmount(() => {
@@ -245,7 +253,114 @@ onBeforeUnmount(() => {
   clearTimeout(refreshTimer)
   clearTimeout(toastTimer)
   if (stopListening) stopListening()
+  window.removeEventListener('click', closeMenu)
+  window.removeEventListener('scroll', closeMenu, true)
+  window.removeEventListener('resize', closeMenu)
+  window.removeEventListener('keydown', closeMenuOnEscape)
 })
+
+/* ================================================================== */
+/* 6b. RIGHT-CLICK A MEETING: edit participants / agenda (organiser)   */
+/* ================================================================== */
+const menu = ref({ open: false, x: 0, y: 0, meeting: null })
+
+// Same rules as the server: people while voting is open, agenda until the meeting starts
+function editRules(w) {
+  const serverNow = now.value + clockOffset.value
+  const startsAt = w.status === 'CONFIRMED'
+    ? new Date(`${w.confirmed_date}T${hourLabel(w.confirmed_start_hour)}:00+08:00`).getTime()
+    : weekEnd(weekKey.value).getTime()
+  return {
+    people: !!w.is_organiser && w.status === 'COLLECTING' && new Date(w.vote_deadline).getTime() > serverNow,
+    peopleWhy: !w.is_organiser ? 'Only the organiser can edit' : w.status === 'CONFIRMED' ? 'Meeting already confirmed' : 'Voting has closed',
+    agenda: !!w.is_organiser && startsAt > serverNow,
+    agendaWhy: !w.is_organiser ? 'Only the organiser can edit' : 'The meeting has started'
+  }
+}
+
+function openMenu(event, w) {
+  if (props.readOnly) return
+  const width = 230
+  const height = 130
+  menu.value = {
+    open: true,
+    x: Math.min(event.clientX, window.innerWidth - width - 8),
+    y: Math.min(event.clientY, window.innerHeight - height - 8),
+    meeting: w
+  }
+}
+
+function closeMenu() {
+  if (menu.value.open) menu.value = { ...menu.value, open: false }
+}
+
+const menuRules = computed(() => (menu.value.meeting ? editRules(menu.value.meeting) : {}))
+
+// Edit dialogs
+const editing = ref(null) // 'people' | 'agenda' | null
+const editMeeting = ref(null)
+const editMemberIds = ref([])
+const editAgenda = ref('')
+const isSaving = ref(false)
+
+async function startEdit(kind) {
+  const w = menu.value.meeting
+  closeMenu()
+  if (!w || blockedForGuest()) return
+  // Load that meeting so we know who is in it right now
+  if (meeting.value?.id !== w.id) await selectMeeting(w.id)
+  editMeeting.value = meeting.value
+  editMemberIds.value = snapshot.value.participants.map((p) => p.member_id)
+  editAgenda.value = meeting.value?.agenda || ''
+  editing.value = kind
+}
+
+function closeEdit() {
+  editing.value = null
+  editMeeting.value = null
+}
+
+function toggleEditMember(id) {
+  if (id === myId.value) return // the organiser always takes part
+  editMemberIds.value = editMemberIds.value.includes(id)
+    ? editMemberIds.value.filter((x) => x !== id)
+    : [...editMemberIds.value, id]
+}
+
+function editSelectSubcommittee(name) {
+  const ids = roster.value.filter((m) => m.subcommittee === name).map((m) => m.member_id)
+  editMemberIds.value = [...new Set([...ids, myId.value])]
+}
+
+const editSelectedCount = computed(() => new Set([...editMemberIds.value, myId.value]).size)
+
+async function saveEdit() {
+  if (blockedForGuest() || !editMeeting.value) return
+  isSaving.value = true
+  try {
+    if (editing.value === 'people') {
+      if (editSelectedCount.value < 2) {
+        showToast('Pick at least one other participant.', 'warning')
+        return
+      }
+      const result = await updateParticipants(editMeeting.value.id, editMemberIds.value)
+      const parts = []
+      if (result.added) parts.push(`${result.added} added (sent the request on Telegram)`)
+      if (result.removed) parts.push(`${result.removed} removed`)
+      showToast(parts.length ? `Participants updated: ${parts.join(', ')}.` : 'No changes to the participants.')
+    } else {
+      await updateAgenda(editMeeting.value.id, editAgenda.value.trim())
+      showToast('Agenda updated. Participants were notified.')
+    }
+    const id = editMeeting.value.id
+    closeEdit()
+    await selectMeeting(id)
+  } catch (err) {
+    showToast(err.message, 'danger')
+  } finally {
+    isSaving.value = false
+  }
+}
 
 /* ================================================================== */
 /* 7. THE CALENDAR GRID                                                */
@@ -270,11 +385,10 @@ const baselineMemberIds = computed(() => {
   return ids.filter((id) => id !== myId.value)
 })
 
-// Title of a confirmed meeting this week at that hour, or ''
+// The confirmed meeting this week at that hour, or null
 function confirmedAt(iso, hour) {
-  const m = (snapshot.value.weekMeetings || []).find((w) => w.status === 'CONFIRMED' && w.confirmed_date === iso &&
-    hour >= w.confirmed_start_hour && hour < w.confirmed_end_hour)
-  return m ? m.title : ''
+  return (snapshot.value.weekMeetings || []).find((w) => w.status === 'CONFIRMED' && w.confirmed_date === iso &&
+    hour >= w.confirmed_start_hour && hour < w.confirmed_end_hour) || null
 }
 
 // Everything one cell needs, worked out once per change
@@ -386,7 +500,7 @@ async function removeTimetable() {
 /* ================================================================== */
 const showCreateForm = ref(false)
 const isSubmitting = ref(false)
-const form = ref({ title: '', week: '', deadline: '', memberIds: [] })
+const form = ref({ title: '', agenda: '', week: '', deadline: '', memberIds: [] })
 
 // This week and the next 7
 const weekOptions = computed(() => Array.from({ length: 8 }, (_, i) => {
@@ -416,6 +530,7 @@ function openCreateForm() {
   const week = weekStart.value >= THIS_WEEK ? weekKey.value : toISO(THIS_WEEK)
   form.value = {
     title: `${activeClubName.value || 'ExCo'} Meeting`,
+    agenda: '',
     week,
     deadline: defaultDeadline(week),
     memberIds: roster.value.map((m) => m.member_id)
@@ -458,6 +573,7 @@ async function submitCreate() {
     const newId = await createMeeting({
       clubId: clubId.value,
       title: form.value.title.trim(),
+      agenda: form.value.agenda.trim(),
       weekStart: form.value.week,
       voteDeadline: deadline.toISOString(),
       memberIds: form.value.memberIds
@@ -630,6 +746,7 @@ function exportConfirmed() {
     `DTSTART:${toUtcStamp(m.confirmed_date, m.confirmed_start_hour)}`,
     `DTEND:${toUtcStamp(m.confirmed_date, m.confirmed_end_hour)}`,
     `SUMMARY:${m.title}`,
+    m.agenda ? `DESCRIPTION:${m.agenda.replace(/\r?\n/g, '\\n')}` : '',
     m.venue ? `LOCATION:${m.venue}` : '',
     'END:VEVENT',
     'END:VCALENDAR'
@@ -698,7 +815,8 @@ function exportConfirmed() {
 
             <!-- Legend -->
             <div class="d-flex flex-wrap align-items-center gap-3 legend">
-              <span><span class="legend-swatch swatch-class"></span>Class</span>
+              <span><span class="legend-swatch swatch-own-class"></span>Your class</span>
+              <span><span class="legend-swatch swatch-class"></span>Others in class (not you)</span>
               <template v-if="isOpenRequest">
                 <span><span class="legend-swatch avail-red"></span>Below 50% free</span>
                 <span><span class="legend-swatch avail-amber"></span>50–75%</span>
@@ -725,8 +843,13 @@ function exportConfirmed() {
 
                   <td v-for="cell in row" :key="cell.key" class="p-1">
                     <!-- Confirmed meeting -->
-                    <div v-if="cell.confirmed" class="slot slot-meeting rounded-2" :title="cell.confirmed">
-                      <span class="slot-name">{{ cell.confirmed }}</span>
+                    <div
+                      v-if="cell.confirmed"
+                      class="slot slot-meeting rounded-2"
+                      :title="`${cell.confirmed.title}${cell.confirmed.is_organiser ? ' (right-click to edit)' : ''}`"
+                      @contextmenu.prevent="openMenu($event, cell.confirmed)"
+                    >
+                      <span class="slot-name">{{ cell.confirmed.title }}</span>
                     </div>
 
                     <!-- Your own class (from your timetable) -->
@@ -751,7 +874,7 @@ function exportConfirmed() {
                     >
                       <span v-if="heatClass(cell)" class="slot-count">{{ cell.free.length }}/{{ totalParticipants }}</span>
                       <span v-else-if="cell.othersInClass.length" class="slot-baseline-text">
-                        {{ cell.othersInClass.length === 1 ? 'Class' : `${cell.othersInClass.length} Classes` }}
+                        {{ cell.othersInClass.length === 1 ? '1 Class' : `${cell.othersInClass.length} Classes` }}
                       </span>
                       <span v-if="cell.mine" class="slot-you">You</span>
                     </div>
@@ -784,10 +907,13 @@ function exportConfirmed() {
               type="button"
               class="match-card text-start d-flex justify-content-between align-items-center gap-2"
               :class="{ selected: !showCreateForm && meeting && meeting.id === w.id }"
+              :title="w.is_organiser ? 'Right-click to edit' : null"
               @click="selectMeeting(w.id)"
+              @contextmenu.prevent="openMenu($event, w)"
             >
               <span class="small">
                 <strong class="d-block">{{ w.title }}</strong>
+                <span v-if="w.agenda" class="d-block agenda-preview">{{ w.agenda }}</span>
                 <span v-if="w.status === 'CONFIRMED'" class="text-muted member-meta">
                   {{ shortLabel(parseISO(w.confirmed_date)) }}, {{ hourLabel(w.confirmed_start_hour) }} – {{ hourLabel(w.confirmed_end_hour) }}
                 </span>
@@ -823,6 +949,16 @@ function exportConfirmed() {
 
             <label class="form-label small fw-bold text-muted mb-1" for="meetingTitle">Title</label>
             <input id="meetingTitle" v-model="form.title" type="text" maxlength="120" class="form-control form-control-sm mb-3" />
+
+            <label class="form-label small fw-bold text-muted mb-1" for="meetingAgenda">Agenda (optional)</label>
+            <textarea
+              id="meetingAgenda"
+              v-model="form.agenda"
+              rows="3"
+              maxlength="1000"
+              class="form-control form-control-sm mb-3"
+              placeholder="e.g. 1. Arts Fest run-of-show  2. Costume fittings  3. Budget"
+            ></textarea>
 
             <label class="form-label small fw-bold text-muted mb-1" for="meetingWeek">Meeting week</label>
             <select id="meetingWeek" v-model="form.week" class="form-select form-select-sm mb-3">
@@ -893,7 +1029,11 @@ function exportConfirmed() {
                 {{ votingOpen ? 'Collecting' : meeting.status === 'EXPIRED' ? 'Expired' : 'Voting closed' }}
               </span>
             </div>
-            <div class="text-muted small mb-3">Organised by {{ meeting.organiser_name }}</div>
+            <div class="text-muted small" :class="meeting.agenda ? 'mb-2' : 'mb-3'">Organised by {{ meeting.organiser_name }}</div>
+            <div v-if="meeting.agenda" class="agenda-box rounded-3 p-2 mb-3">
+              <div class="small fw-bold text-muted text-uppercase mb-1">Agenda</div>
+              <div class="small agenda-text">{{ meeting.agenda }}</div>
+            </div>
 
             <div class="deadline-box rounded-3 p-3 mb-3" :class="{ urgent: votingOpen && secondsLeft < 3600 }">
               <div class="small fw-bold text-muted text-uppercase">{{ votingOpen ? 'Voting closes in' : 'Voting closed' }}</div>
@@ -1059,6 +1199,10 @@ function exportConfirmed() {
             <div>{{ hourLabel(meeting.confirmed_start_hour) }} – {{ hourLabel(meeting.confirmed_end_hour) }}</div>
             <div v-if="meeting.venue" class="small text-muted mt-1">{{ meeting.venue }}</div>
           </div>
+          <div v-if="meeting.agenda" class="agenda-box rounded-3 p-2 mb-3">
+            <div class="small fw-bold text-muted text-uppercase mb-1">Agenda</div>
+            <div class="small agenda-text">{{ meeting.agenda }}</div>
+          </div>
           <div class="small text-muted mb-3">
             Organised by {{ meeting.organiser_name }} · {{ totalParticipants }} participants
           </div>
@@ -1071,12 +1215,114 @@ function exportConfirmed() {
 
       </div>
     </div>
+
+    <!-- Right-click menu on a meeting -->
+    <div
+      v-if="menu.open"
+      class="meeting-menu shadow rounded-3"
+      role="menu"
+      :style="{ left: menu.x + 'px', top: menu.y + 'px' }"
+      @click.stop
+      @contextmenu.prevent
+    >
+      <div class="meeting-menu-title text-truncate">{{ menu.meeting.title }}</div>
+      <button type="button" role="menuitem" class="meeting-menu-item" :disabled="!menuRules.people" @click="startEdit('people')">
+        Edit participants
+        <span v-if="!menuRules.people" class="meeting-menu-why">{{ menuRules.peopleWhy }}</span>
+      </button>
+      <button type="button" role="menuitem" class="meeting-menu-item" :disabled="!menuRules.agenda" @click="startEdit('agenda')">
+        Edit agenda
+        <span v-if="!menuRules.agenda" class="meeting-menu-why">{{ menuRules.agendaWhy }}</span>
+      </button>
+    </div>
+
+    <!-- Edit participants / agenda -->
+    <template v-if="editing && editMeeting">
+      <div class="modal-backdrop fade show edit-backdrop" @click="closeEdit"></div>
+      <div class="modal fade show d-block" tabindex="-1" role="dialog" aria-modal="true" style="z-index: 1060;" @click.self="closeEdit">
+        <div class="modal-dialog modal-dialog-centered">
+          <form class="modal-content border-0 shadow-lg rounded-4" style="background-color: var(--pulse-card-bg);" @submit.prevent="saveEdit">
+            <div class="modal-header px-4 py-3">
+              <div>
+                <h6 class="modal-title fw-bold mb-0">{{ editing === 'people' ? 'Edit participants' : 'Edit agenda' }}</h6>
+                <div class="small text-muted">{{ editMeeting.title }}</div>
+              </div>
+              <button type="button" class="btn-close" aria-label="Close" @click="closeEdit"></button>
+            </div>
+
+            <div class="modal-body px-4">
+              <template v-if="editing === 'people'">
+                <div class="d-flex justify-content-between align-items-center mb-1">
+                  <span class="small fw-bold text-muted">Participants</span>
+                  <span class="small text-muted">{{ editSelectedCount }} selected</span>
+                </div>
+                <div class="d-flex flex-wrap gap-1 mb-2">
+                  <button type="button" class="pulse-chip pulse-chip-sm border-0" @click="editMemberIds = roster.map((m) => m.member_id)">Everyone</button>
+                  <button
+                    v-for="s in subcommittees"
+                    :key="s"
+                    type="button"
+                    class="pulse-chip pulse-chip-sm border-0"
+                    @click="editSelectSubcommittee(s)"
+                  >
+                    {{ s }}
+                  </button>
+                </div>
+                <div class="member-list border rounded-3">
+                  <label
+                    v-for="m in roster"
+                    :key="m.member_id"
+                    class="d-flex align-items-center gap-2 px-2 py-1 member-row"
+                    :class="{ 'text-muted': m.is_me }"
+                  >
+                    <input
+                      type="checkbox"
+                      class="form-check-input mt-0"
+                      :checked="m.is_me || editMemberIds.includes(m.member_id)"
+                      :disabled="m.is_me"
+                      @change="toggleEditMember(m.member_id)"
+                    />
+                    <span class="small flex-grow-1">
+                      <strong>{{ m.full_name }}</strong>{{ m.is_me ? ' (you)' : '' }}
+                      <span class="d-block text-muted member-meta">{{ m.role_name }}{{ m.subcommittee ? ` · ${m.subcommittee}` : '' }}</span>
+                    </span>
+                  </label>
+                </div>
+                <p class="small text-muted mt-2 mb-0">People you add get the request on Telegram. People you remove lose their votes.</p>
+              </template>
+
+              <template v-else>
+                <label class="form-label small fw-bold text-muted mb-1" for="editAgenda">Agenda</label>
+                <textarea id="editAgenda" v-model="editAgenda" rows="5" maxlength="1000" class="form-control form-control-sm"></textarea>
+                <p class="small text-muted mt-2 mb-0">Participants are notified in Pulse. Leave empty to remove the agenda.</p>
+              </template>
+            </div>
+
+            <div class="modal-footer px-4 py-3">
+              <button type="button" class="btn btn-sm btn-outline-secondary" @click="closeEdit">Cancel</button>
+              <button type="submit" class="btn btn-sm btn-pulse-primary px-3 fw-bold" :disabled="isSaving">
+                <span v-if="isSaving" class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>
+                Save
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </template>
   </div>
 </template>
 
 <style scoped>
 .scheduler-grid { min-width: 640px; table-layout: fixed; }
-.pulse-class-pill { overflow: hidden; padding: 0 0.25rem; }
+/* Your own class: striped darker grey (others' classes are plain light grey, see .slot-baseline) */
+.pulse-class-pill {
+  overflow: hidden;
+  padding: 0 0.25rem;
+  background: repeating-linear-gradient(135deg, #e2e8f0 0 6px, #cbd5e1 6px 12px);
+  border-color: #94a3b8;
+}
+.pulse-class-pill:hover { background: repeating-linear-gradient(135deg, #cbd5e1 0 6px, #b6c2d2 6px 12px); }
+.pulse-class-pill .pulse-class-name { background: rgba(255, 255, 255, 0.85); border-radius: 0.35rem; padding: 0 0.3rem; }
 .slot-class-extra { font-size: 0.58rem; font-weight: 700; color: #64748b; white-space: nowrap; }
 /* Make room for the "+N in class" tag: one line of class name */
 .pulse-class-pill:has(.slot-class-extra) .pulse-class-name { -webkit-line-clamp: 1; line-clamp: 1; }
@@ -1113,7 +1359,7 @@ function exportConfirmed() {
 .slot-mine.avail-green { background: #22c55e; color: #fff; }
 
 .slot-baseline { background: #f1f5f9; border-color: #cbd5e1; }
-.slot-baseline-text { font-size: 0.7rem; font-weight: 800; color: #475569; }
+.slot-baseline-text { font-size: 0.68rem; font-weight: 800; color: #475569; }
 
 .slot-mine {
   outline: 2px solid #334155;
@@ -1159,6 +1405,7 @@ function exportConfirmed() {
   border-radius: 3px;
   border: 1px solid #e2e8f0;
 }
+.swatch-own-class { background: repeating-linear-gradient(135deg, #e2e8f0 0 3px, #cbd5e1 3px 6px); border-color: #94a3b8; }
 .swatch-class { background: #f1f5f9; border-color: #cbd5e1; }
 .swatch-empty { background: #fff; }
 .swatch-mine { background: #fff; outline: 2px solid #334155; outline-offset: -2px; }
@@ -1180,6 +1427,20 @@ function exportConfirmed() {
 }
 .deadline-box.urgent .countdown { color: var(--pulse-primary, #e11d48); }
 
+.agenda-preview {
+  font-size: 0.7rem;
+  color: #475569;
+  white-space: pre-line;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+  margin: 1px 0 2px;
+}
+.agenda-box { background: #f8fafc; border: 1px solid #e2e8f0; }
+.agenda-text { white-space: pre-line; overflow-wrap: anywhere; }
+
 .confirmed-box { background: var(--pulse-green-bg, #f0fdf4); border: 1px solid var(--pulse-green-border, #bbf7d0); }
 
 .match-card {
@@ -1191,4 +1452,37 @@ function exportConfirmed() {
 }
 .match-card:hover { border-color: #86efac; }
 .match-card.selected { border-color: #16a34a; background: rgba(22, 163, 74, 0.08); }
+
+/* Right-click menu on a meeting */
+.meeting-menu {
+  position: fixed;
+  z-index: 1070;
+  width: 230px;
+  padding: 0.35rem;
+  background: var(--pulse-card-bg, #fff);
+  border: 1px solid var(--pulse-border, #e2e8f0);
+}
+.meeting-menu-title {
+  font-size: 0.7rem;
+  font-weight: 800;
+  color: #64748b;
+  text-transform: uppercase;
+  padding: 0.25rem 0.5rem 0.35rem;
+}
+.meeting-menu-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  border: 0;
+  background: transparent;
+  border-radius: 0.5rem;
+  padding: 0.4rem 0.5rem;
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--pulse-ink, #0f172a);
+}
+.meeting-menu-item:hover:not(:disabled) { background: var(--pulse-primary-light, #fff1f2); color: var(--pulse-primary, #e11d48); }
+.meeting-menu-item:disabled { color: #94a3b8; cursor: not-allowed; }
+.meeting-menu-why { display: block; font-size: 0.65rem; font-weight: 600; }
+.edit-backdrop { background: rgba(15, 23, 42, 0.55); z-index: 1055; }
 </style>
