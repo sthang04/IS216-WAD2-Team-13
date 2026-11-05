@@ -4,7 +4,7 @@ import { useRoute } from 'vue-router';
 import { session, activeClubName, setActiveClub } from '../services/sessionState';
 import { parseIcs, icsEventAt } from '../services/icsBaseline';
 import {
-  fetchMeetingSnapshot, fetchClubRoster, createMeeting, setAvailability, submitNoAvailability,
+  fetchMeetingSnapshot, fetchClubRoster, createMeeting, setAvailability, submitNoAvailability, clearMeetingResponse,
   nudgeParticipants, confirmMeeting, cancelMeeting, updateParticipants, updateAgenda,
   fetchMyBaseline, fetchClubBaselines, saveMyBaseline, clearMyBaseline, listenForMeetings
 } from '../services/meetingService';
@@ -457,7 +457,7 @@ let voteQueue = Promise.resolve()
 let votesSaving = 0
 
 function toggleCell(cell) {
-  if (!canVote.value) return
+  if (!canVote.value || responseSaving.value) return
   if (cell.isPast) {
     showToast('Cannot vote on past time slots.', 'warning')
     return
@@ -630,14 +630,37 @@ const myResponse = computed(() => snapshot.value.participants.find((p) => p.memb
 const mySlotCount = computed(() => snapshot.value.availability.filter((a) => a.member_id === myId.value).length)
 const isOrganiser = computed(() => !!meeting.value?.is_organiser)
 
+const responseSaving = ref(false)
+
 async function answerNoneWork() {
   if (blockedForGuest()) return
   try {
+    if (responseSaving.value || !canVote.value) return
+    responseSaving.value = true
+    await voteQueue
     await submitNoAvailability(meeting.value.id)
     await loadMeeting()
-    showToast('Response saved: none of these times work for you.')
+    showToast('Response saved: none of these days work for you.')
   } catch (err) {
     showToast(err.message, 'danger')
+  } finally {
+    responseSaving.value = false
+  }
+}
+
+async function undoResponse() {
+  if (blockedForGuest() || responseSaving.value || !canVote.value) return
+  responseSaving.value = true
+  const meetingId = meeting.value.id
+  try {
+    await voteQueue
+    await clearMeetingResponse(meetingId)
+    await loadMeeting()
+    showToast('Response cleared. You can select your available times again.')
+  } catch (err) {
+    showToast(err.message, 'danger')
+  } finally {
+    responseSaving.value = false
   }
 }
 
@@ -1113,17 +1136,20 @@ function exportConfirmed() {
               <div class="d-flex justify-content-between align-items-center small mb-2">
                 <span class="text-muted">Your response</span>
                 <strong :class="myResponse?.responded_at ? 'text-success' : 'text-warning-emphasis'">
-                  {{ myResponse?.responded_at ? (mySlotCount ? `${mySlotCount} hour${mySlotCount === 1 ? '' : 's'} free` : 'None work') : 'Not yet' }}
+                  {{ myResponse?.responded_at ? (mySlotCount ? `${mySlotCount} hour${mySlotCount === 1 ? '' : 's'} free` : 'None of these days work') : 'Not yet' }}
                 </strong>
               </div>
               <button
-                v-if="votingOpen && !readOnly && (!myResponse?.responded_at || mySlotCount > 0)"
+                v-if="canVote"
                 type="button"
-                class="btn btn-sm btn-outline-secondary w-100"
-                @click="answerNoneWork"
+                class="btn btn-outline-secondary bg-white text-secondary w-100 py-2 fw-bold"
+                :disabled="responseSaving"
+                :aria-pressed="!!myResponse?.responded_at && mySlotCount === 0"
+                @click="myResponse?.responded_at && mySlotCount === 0 ? undoResponse() : answerNoneWork()"
               >
-                None of these times work
+                {{ responseSaving ? 'Saving...' : myResponse?.responded_at && mySlotCount === 0 ? 'Undo' : 'None of these days work' }}
               </button>
+              <p v-if="canVote" class="small text-muted mt-2 mb-0">Click to mark all days as unavailable. Click again to clear this response and choose available times.</p>
             </template>
           </div>
 
