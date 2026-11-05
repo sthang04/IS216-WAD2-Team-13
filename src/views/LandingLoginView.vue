@@ -322,11 +322,7 @@ async function completeLogin(loginEmail, loginPassword) {
 
 async function handleManualLogin() {
   if (!email.value.trim()) {
-    // If empty when clicking Sign In, auto-fill default persona Darren Koh so evaluation is effortless
-    email.value = DEMO_PERSONAS.darren.email
-    password.value = DEMO_PASSWORD
-    playLoginSuccessChime()
-    await completeLogin(email.value, password.value)
+    errorMsg.value = 'Please enter your SMU email address.'
     return
   }
   if (!isSmuEmail.value) {
