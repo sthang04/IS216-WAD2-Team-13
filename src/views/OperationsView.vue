@@ -1057,11 +1057,11 @@ function clearLate(person) {
           <button type="button" class="btn btn-sm btn-outline-warning text-dark fw-bold border-warning d-flex align-items-center gap-2" :disabled="!isEventDay" :aria-expanded="showDelayMenu" :title="isEventDay ? 'What\'s happening now runs over. Fixed times (like the performance) never move.' : 'Only on the day of the event'" @click="showDelayMenu = !showDelayMenu">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <circle cx="12" cy="12" r="10"></circle>
-              <polyline points="12 6 12 12 16 14"></polyline>
+              <polyline points="12 6 12 16 14"></polyline>
             </svg>
             <span>Delay current tasks ▾</span>
           </button>
-          <div v-if="showDelayMenu" class="ops-more-menu shadow-lg border rounded-3 py-1 overflow-hidden" style="min-width: 220px; z-index: 1050;">
+          <div v-if="showDelayMenu" class="ops-more-menu shadow-lg border rounded-3 py-2 overflow-hidden" style="min-width: 230px; z-index: 1050;">
             <div class="px-3 py-1.5 text-uppercase fw-bold text-muted border-bottom" style="font-size: 0.65rem; letter-spacing: 0.04em;">
               Quick Presets
             </div>
@@ -1071,11 +1071,11 @@ function clearLate(person) {
                 <span class="text-muted" style="font-size: 0.68rem;">Delay</span>
               </button>
             </div>
-            <div class="p-2.5 border-top bg-light">
-              <label for="customDelayInput" class="small fw-bold text-dark d-block mb-1" style="font-size: 0.72rem;">
+            <div class="p-3 border-top bg-light">
+              <label for="customDelayInput" class="small fw-bold text-dark d-block mb-1.5" style="font-size: 0.72rem;">
                 Custom Delay:
               </label>
-              <div class="input-group input-group-sm mb-1">
+              <div class="input-group input-group-sm mb-2">
                 <input 
                   id="customDelayInput"
                   v-model.number="customDelayMinutes" 
@@ -1097,9 +1097,9 @@ function clearLate(person) {
                   Apply
                 </button>
               </div>
-              <div class="d-flex justify-content-between align-items-center">
-                <small class="text-muted" style="font-size: 0.66rem;">e.g. 45, 90 mins</small>
-                <button type="button" class="btn btn-link p-0 text-muted ops-small text-decoration-none" style="font-size: 0.68rem;" @click="showDelayMenu = false">Close</button>
+              <div class="d-flex justify-content-between align-items-center pt-1 pb-0.5 px-0.5">
+                <small class="text-muted" style="font-size: 0.68rem;">e.g. 45, 90 mins</small>
+                <button type="button" class="btn btn-link p-0 text-muted ops-small text-decoration-none" style="font-size: 0.7rem;" @click="showDelayMenu = false">Close</button>
               </div>
             </div>
           </div>
@@ -1609,7 +1609,7 @@ function clearLate(person) {
   left: 0;
   top: calc(100% + 4px);
   z-index: 1050;
-  min-width: 220px;
+  min-width: 230px;
   max-width: calc(100vw - 2rem);
   background: #fff;
 }
