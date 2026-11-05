@@ -44,7 +44,14 @@ watch(() => route.meta.view, (view) => {
   if (view && isLoggedIn.value && view !== currentView.value) currentView.value = view
 })
 // /signup opens the sign-up screen
-watch(() => route.meta.signup, (signup) => { if (signup && !isLoggedIn.value) showSignUp.value = true })
+watch(() => route.meta.signup, (signup) => { if (signup) showSignUp.value = true })
+watch(() => route.path, (newPath) => {
+  if (newPath === '/signup') {
+    showSignUp.value = true
+  } else if (showSignUp.value) {
+    showSignUp.value = false
+  }
+})
 const apiMode = ref(false) // Toggle API badge tags on/off across all views (Default: OFF as requested)
 const slots = ref([])
 const loading = ref(true)
@@ -289,6 +296,20 @@ function handleUserLogin(persona) {
  
 
  
+function startSignUp() {
+  showSignUp.value = true
+  if (route.path !== '/signup') {
+    router.push('/signup')
+  }
+}
+
+function handleSignUpCancel() {
+  showSignUp.value = false
+  if (route.path === '/signup') {
+    router.push('/')
+  }
+}
+
 // New ExCo finished sign-up (already signed in by authService)
 function handleSignUpDone(persona) {
   showSignUp.value = false
@@ -307,10 +328,12 @@ function handleSignUpDone(persona) {
         isDemo: false
       }))
     } catch {}
+    applySession(persona)
+    currentView.value = homeView(persona)
+    router.push(VIEW_PATHS[homeView(persona)] || '/facilities')
+    toast.value = `Welcome to Pulse, ${persona.name}! You're signed in as ${persona.roleLabel}.`
+    toastType.value = 'success'
   }
-  applySession(persona)
-  toast.value = `Welcome to Pulse, ${persona.name}! You're signed in as ${persona.roleLabel}.`
-  toastType.value = 'success'
 }
  
 async function handleSignOut() {
@@ -377,16 +400,16 @@ onMounted(async () => {
  
     <!-- ExCo sign-up (email must be on OSL's ExCo list) -->
     <SignUpView
-      v-else-if="showSignUp && !isLoggedIn"
+      v-else-if="showSignUp"
       @done="handleSignUpDone"
-      @cancel="showSignUp = false"
+      @cancel="handleSignUpCancel"
     />
  
     <!-- View 0: Landing & Interactive Login Experience (Shown when logged out) -->
     <div v-else-if="!isLoggedIn || currentView === 'landing'">
       <LandingLoginView 
         @login="handleUserLogin"
-        @signup="showSignUp = true"
+        @signup="startSignUp"
       />
     </div>
  
@@ -420,6 +443,7 @@ onMounted(async () => {
                 </span>
                 <select 
                   id="clubSwitcher" 
+                  aria-label="Club scope"
                   v-model="selectedClub" 
                   class="form-select form-select-sm fw-bold club-switcher-select" 
                   style="border-radius: 0.65rem;"
@@ -448,6 +472,7 @@ onMounted(async () => {
                 </span>
                 <select 
                   id="clubSwitcher" 
+                  aria-label="Club scope"
                   v-model="selectedClub" 
                   class="form-select form-select-sm fw-bold club-switcher-select" 
                   style="border-radius: 0.65rem;"
@@ -550,7 +575,7 @@ onMounted(async () => {
  
               <div 
                 v-if="profileMenuOpen" 
-                class="card shadow-lg position-absolute end-0 mt-2 p-2 border-0" 
+                class="card shadow-lg position-absolute end-0 mt-2 p-2 border-0 pulse-account-menu" 
                 style="min-width: 260px; z-index: 1050; border-radius: 0.85rem;"
               >
                 <!-- Signed-in identity (the avatar only shows initials) -->
@@ -755,16 +780,22 @@ onMounted(async () => {
         <!-- Global Toast Alert -->
         <div 
           v-if="toast" 
-          class="alert alert-dismissible fade show shadow-sm mb-3 py-2 px-3" 
+          class="alert fade show shadow-sm mb-3 py-2 px-3 d-flex align-items-center justify-content-between gap-2" 
           :class="`alert-${toastType}`" 
           role="alert"
           style="border-radius: 0.85rem;"
         >
-          <div class="d-flex align-items-center gap-2 pe-4" style="font-size: 0.825rem;">
+          <div class="d-flex align-items-center gap-2 min-w-0" style="font-size: 0.825rem;">
             <strong class="text-nowrap flex-shrink-0">Notice:</strong>
-            <span class="flex-grow-1">{{ toast }}</span>
+            <span class="flex-grow-1" style="word-break: break-word;">{{ toast }}</span>
           </div>
-          <button type="button" class="btn-close" aria-label="Close notice" @click="toast = ''"></button>
+          <button 
+            type="button" 
+            class="btn-close flex-shrink-0" 
+            aria-label="Close notice" 
+            style="position: static; padding: 0.35rem; font-size: 0.725rem; margin-left: auto;" 
+            @click="toast = ''"
+          ></button>
         </div>
  
 

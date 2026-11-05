@@ -193,3 +193,176 @@ export async function loadClubBookings(clubId, date) {
 export async function deleteEvent(eventId) {
   unwrap(await supabase.from('ops_events').delete().eq('id', eventId))
 }
+
+// ---------------- Day-of Ops & Personal Schedule Cross-Sync Helpers ----------------
+
+export function resolveSmuBuilding(venueStr = "") {
+  const v = (venueStr || "").toLowerCase()
+  if (v.includes("studio") || v.includes("connexion") || v.includes("l7.2") || v.includes("7.1")) {
+    return "SMU CONNEXION"
+  }
+  if (v.includes("scis") || v.includes("seminar room") || v.includes("sr 2.1") || v.includes("lab")) {
+    return "SMU SCHOOL OF COMPUTING AND INFORMATION SYSTEMS 1"
+  }
+  if (v.includes("main hall") || v.includes("library") || v.includes("b1") || v.includes("holding room") || v.includes("audio & lighting") || v.includes("booth") || v.includes("lorry") || v.includes("loading bay")) {
+    return "LI KA SHING LIBRARY"
+  }
+  if (v.includes("bazaar") || v.includes("campus green") || v.includes("admin") || v.includes("osl")) {
+    return "SMU ADMINISTRATION BUILDING"
+  }
+  if (v.includes("soe") || v.includes("soss") || v.includes("social sciences") || v.includes("economics")) {
+    return "SMU SCHOOL OF ECONOMICS & SCHOOL OF SOCIAL SCIENCES"
+  }
+  if (v.includes("law") || v.includes("yphsl")) {
+    return "SMU YONG PUNG HOW SCHOOL OF LAW"
+  }
+  if (v.includes("lkcsb") || v.includes("business")) {
+    return "SMU LEE KONG CHIAN SCHOOL OF BUSINESS"
+  }
+  return "LI KA SHING LIBRARY"
+}
+
+function getTodayIso() {
+  const d = new Date()
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`
+}
+
+export function getDefaultSampleOpsEvents(clubName = "Eurhythmix") {
+  const today = getTodayIso()
+  return [
+    {
+      id: "ops-sample-showcase",
+      name: "Showcase",
+      date: today,
+      venue: "Main Hall",
+      crew: [
+        {
+          memberId: 2,
+          name: "Rachel Tan",
+          role: "Logistics Director",
+          phone: "@racheltan",
+          checkedInAt: 895, // 14:55
+          late: "",
+          blocks: [
+            { id: "b1", start: 900, end: 960, title: "Collect props from Studio 7.1", type: "setup", venue: "Studio 7.1", fixed: false },
+            { id: "b2", start: 960, end: 990, title: "Walk to Main Hall", type: "move", venue: "Campus Concourse • 8 min walk", fixed: false },
+            { id: "b3", start: 990, end: 1050, title: "Stage setup", type: "setup", venue: "Main Hall Stage", fixed: false },
+            { id: "b4", start: 1050, end: 1110, title: "Dinner", type: "meal", venue: "Holding Room B1.2", fixed: false },
+            { id: "b5", start: 1110, end: 1170, title: "Tech rehearsal", type: "perform", venue: "Main Hall Stage", fixed: false },
+            { id: "b6", start: 1170, end: 1200, title: "Front of house check", type: "other", venue: "Main Hall Foyer", fixed: false },
+            { id: "b7", start: 1200, end: 1320, title: "Performance (backstage lead)", type: "perform", venue: "Main Hall Stage", fixed: true },
+            { id: "b8", start: 1320, end: 1350, title: "Teardown", type: "setup", venue: "Main Hall Stage", fixed: false }
+          ]
+        },
+        {
+          memberId: 3,
+          name: "Angel Low",
+          role: "Lead Dancer",
+          phone: "@angellow",
+          checkedInAt: 898, // 14:58
+          late: "",
+          blocks: [
+            { id: "b21", start: 900, end: 990, title: "Warm up + run Act 2", type: "perform", venue: "Studio 7.1", fixed: false },
+            { id: "b22", start: 990, end: 1020, title: "Walk to Main Hall", type: "move", venue: "Campus Concourse • 8 min walk", fixed: false },
+            { id: "b23", start: 1020, end: 1050, title: "Spacing on stage", type: "perform", venue: "Main Hall Stage", fixed: false },
+            { id: "b24", start: 1050, end: 1110, title: "Dinner + change into costumes", type: "meal", venue: "Holding Room B1.2", fixed: false },
+            { id: "b25", start: 1110, end: 1170, title: "Tech rehearsal", type: "perform", venue: "Main Hall Stage", fixed: false },
+            { id: "b26", start: 1170, end: 1200, title: "Hair & makeup", type: "other", venue: "Holding Room B1.2", fixed: false },
+            { id: "b27", start: 1200, end: 1320, title: "Performance", type: "perform", venue: "Main Hall Stage", fixed: true },
+            { id: "b28", start: 1320, end: 1350, title: "Teardown", type: "setup", venue: "Main Hall Stage", fixed: false }
+          ]
+        },
+        {
+          memberId: 5,
+          name: "Darren Koh",
+          role: "Props Head",
+          phone: "@darrenk",
+          checkedInAt: null,
+          late: "Running 10 min late (SOE seminar)",
+          blocks: [
+            { id: "b41", start: 900, end: 960, title: "Load props onto lorry", type: "setup", venue: "Studio 7.1", fixed: false },
+            { id: "b42", start: 960, end: 990, title: "Go with lorry", type: "move", venue: "Loading Bay", fixed: false },
+            { id: "b43", start: 990, end: 1050, title: "Stage setup", type: "setup", venue: "Main Hall Stage", fixed: false },
+            { id: "b44", start: 1050, end: 1080, title: "Buy dinner for ExCo", type: "other", venue: "Campus Basement", fixed: false },
+            { id: "b45", start: 1080, end: 1110, title: "Dinner", type: "meal", venue: "Holding Room B1.2", fixed: false },
+            { id: "b46", start: 1110, end: 1170, title: "Tech rehearsal", type: "perform", venue: "Main Hall Stage", fixed: false },
+            { id: "b47", start: 1170, end: 1200, title: "Props check", type: "setup", venue: "Backstage", fixed: false },
+            { id: "b48", start: 1200, end: 1320, title: "Performance (props crew)", type: "perform", venue: "Backstage", fixed: true },
+            { id: "b49", start: 1320, end: 1350, title: "Teardown + load lorry", type: "setup", venue: "Loading Bay", fixed: false }
+          ]
+        }
+      ]
+    }
+  ]
+}
+
+export function getStoredOpsEvents(clubName = "Eurhythmix") {
+  try {
+    const raw = localStorage.getItem(`pulse_ops_events:${clubName || "demo"}`)
+    if (raw) {
+      const parsed = JSON.parse(raw)
+      if (Array.isArray(parsed) && parsed.length > 0) return parsed
+    }
+  } catch {}
+  return null
+}
+
+export function getOpsTasksForMember(memberName, clubName = "Eurhythmix") {
+  if (!memberName) return { tasks: [], eventName: "", eventDate: "", tasksCount: 0 }
+  
+  let allEvents = getStoredOpsEvents(clubName)
+  if (!allEvents || allEvents.length === 0) {
+    allEvents = getDefaultSampleOpsEvents(clubName)
+  }
+
+  const normalizedTarget = memberName.trim().toLowerCase()
+  const matchedTasks = []
+  let primaryEventName = ""
+  let primaryEventDate = ""
+
+  for (const ev of allEvents) {
+    if (!ev || !ev.crew || !Array.isArray(ev.crew)) continue
+    
+    const crewPerson = ev.crew.find(c => {
+      const cName = (c.name || "").toLowerCase()
+      return cName === normalizedTarget || cName.includes(normalizedTarget) || normalizedTarget.includes(cName)
+    })
+
+    if (crewPerson && Array.isArray(crewPerson.blocks) && crewPerson.blocks.length > 0) {
+      if (!primaryEventName) {
+        primaryEventName = ev.name
+        primaryEventDate = ev.date
+      }
+      for (const [idx, b] of crewPerson.blocks.entries()) {
+        const startStr = typeof b.start === "number" ? minutesToTime(b.start).slice(0, 5) : (b.start || "15:00")
+        const endStr = typeof b.end === "number" ? minutesToTime(b.end).slice(0, 5) : (b.end || "16:00")
+        const combinedVenue = b.venue ? `${b.venue}, ${ev.venue || "Main Hall"}` : (ev.venue || "Main Hall")
+
+        matchedTasks.push({
+          id: `ops-${ev.id}-${b.id || idx}`,
+          title: `${b.title} (${ev.name})`,
+          category: "Day-of Ops",
+          date: ev.date,
+          startTime: startStr,
+          endTime: endStr,
+          venue: combinedVenue,
+          building: resolveSmuBuilding(b.venue || ev.venue),
+          room: b.venue || ev.venue || "Main Hall",
+          role: crewPerson.role || "Crew Member",
+          status: b.fixed ? "In Progress" : "Not Started",
+          notes: `Assigned in Day-of Operations for ${ev.name}. ${b.fixed ? "Fixed time performance schedule." : ""}`,
+          isCustom: false,
+          isOpsTask: true,
+          eventId: ev.id
+        })
+      }
+    }
+  }
+
+  return {
+    tasks: matchedTasks,
+    eventName: primaryEventName,
+    eventDate: primaryEventDate,
+    tasksCount: matchedTasks.length
+  }
+}

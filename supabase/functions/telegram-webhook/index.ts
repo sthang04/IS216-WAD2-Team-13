@@ -156,6 +156,17 @@ async function disconnectChat(chatId: number) {
     )
   }
 
+  const { error: demoError } = await supabase
+    .from('demo_recipients')
+    .update({ telegram_chat_id: null, updated_at: new Date().toISOString() })
+    .eq('telegram_chat_id', chatId)
+
+  if (demoError) {
+    throw new Error(
+      `Unable to disconnect demo recipient: ${demoError.message}`
+    )
+  }
+
   console.log('Telegram chat disconnected')
 }
 
