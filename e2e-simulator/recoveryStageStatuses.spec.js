@@ -1,9 +1,9 @@
-// BROWSER TEST PURPOSE: refinements Workflow user workflows and regression coverage.
+// BROWSER TEST PURPOSE: recovery stage statuses user workflows and regression coverage.
 // Setup opens the real Vue UI; actions use its controls; assertions check visible results/state.
 // Uses isolated fixture responses; passing UI checks do not prove deployed database or delivery integration.
-// Purpose: fixture-backed refinements Workflow browser regressions for simulator controls and state.
+// Purpose: fixture-backed recovery stage statuses browser regressions for simulator controls and state.
 // Use Setup -> Actions -> Assert; real Vue/engine code runs, but these tests do not prove live Supabase integration.
-import {test,expect} from '@playwright/test'
+import {test,expect} from '../e2e/helpers/browserUi.js'
 import {bootRecovery} from './helpers/recoveryHarness.js'
 const stage=(panel,name)=>panel.getByRole('tablist',{name:'Recovery stages'}).getByRole('tab').filter({hasText:name})
 // These are persisted-record-shaped fixtures, not live approvals. Stage checks

@@ -339,7 +339,7 @@ async function handleManualLogin() {
 
 <template>
   <div 
-    class="min-vh-100 d-flex flex-column justify-content-center align-items-center position-relative py-3 py-lg-5 px-2 px-sm-3 pulse-login-canvas landing-type overflow-hidden"
+    class="min-vh-100 d-flex flex-column justify-content-center align-items-center position-relative py-3 py-lg-5 px-2 px-sm-3 pulse-login-canvas landing-type"
     @mousemove="handleMouseMove"
   >
     <!-- Liquid Ambient Aura Orbs (Modern Glass Lighting) -->
@@ -969,6 +969,9 @@ async function handleManualLogin() {
    Liquid Glass & Mesh Aesthetic
    ========================================================================== */
 .pulse-login-canvas {
+  /* Decorative orbs may overflow, but must not create a hidden scroll container
+     that focus/scroll anchoring can pan sideways and clip the actual login UI. */
+  overflow: clip;
   background:
     radial-gradient(ellipse 60% 50% at 0% 0%, rgba(254, 205, 211, 0.55), transparent 70%),
     radial-gradient(ellipse 50% 60% at 100% 100%, rgba(186, 230, 253, 0.5), transparent 70%),
@@ -1178,7 +1181,7 @@ async function handleManualLogin() {
     padding-left: 0.5rem !important;
     padding-right: 0.5rem !important;
     justify-content: flex-start !important;
-    overflow-x: hidden !important;
+    overflow-x: clip !important;
     max-width: 100% !important;
     width: 100% !important;
   }

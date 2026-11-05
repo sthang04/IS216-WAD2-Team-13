@@ -1,15 +1,15 @@
-// BROWSER TEST PURPOSE: refinements Bookings user workflows and regression coverage.
+// BROWSER TEST PURPOSE: booking verification and linking user workflows and regression coverage.
 // Setup opens the real Vue UI; actions use its controls; assertions check visible results/state.
 // Uses isolated fixture responses; passing UI checks do not prove deployed database or delivery integration.
-// Purpose: fixture-backed refinements Bookings browser regressions for simulator controls and state.
+// Purpose: fixture-backed booking verification and linking browser regressions for simulator controls and state.
 // Use Setup -> Actions -> Assert; real Vue/engine code runs, but these tests do not prove live Supabase integration.
-import {test,expect} from '@playwright/test'
-import {bootRefinement} from './helpers/refinementHarness.js'
+import {test,expect} from '../e2e/helpers/browserUi.js'
+import {bootSimulatorPreview} from './helpers/simulatorPreviewHarness.js'
 // Discovery failures and disabled activation must not turn a visible radio or
 // local confirmation into permission to link a booking. Success is covered by
 // originalBooking.spec.js with a fully isolated in-memory RPC implementation.
 test('three-step booking modal preserves evidence, refresh and fail-closed linking',async({page})=>{
- await bootRefinement(page)
+ await bootSimulatorPreview(page)
  await page.getByLabel('Disruption type',{exact:true}).selectOption('FACILITY_UNAVAILABLE')
  const section=page.getByRole('region',{name:'Facility Bookings',exact:true});await expect(section).toContainText('8 of 8 linked')
  await section.getByRole('button',{name:'Manage bookings',exact:true}).click()
@@ -25,7 +25,7 @@ test('three-step booking modal preserves evidence, refresh and fail-closed linki
 })
 
 test('permission-denied booking discovery stays actionable but cannot link',async({page})=>{
- await bootRefinement(page)
+ await bootSimulatorPreview(page)
  // Replace only the already-mocked transport. A denied read must surface its
  // reason without constructing eligible booking records or unlocking a write.
  await page.evaluate(async()=>{const {supabase}=await import('/src/supabase.js');const read=supabase.rpc;supabase.rpc=async(name,args)=>name==='rpc_simulator_original_booking_candidates'?{error:{message:'Event management permission required'}}:read(name,args)})

@@ -1,7 +1,7 @@
 // BROWSER TEST PURPOSE: member Invitations user workflows and regression coverage.
 // Setup opens the real Vue UI; actions use its controls; assertions check visible results/state.
 // Uses isolated fixture responses; passing UI checks do not prove deployed database or delivery integration.
-import {test,expect} from '@playwright/test'
+import {test,expect} from '../e2e/helpers/browserUi.js'
 import {readFileSync} from 'node:fs'
 const client=readFileSync(new URL('./memberClient.js',import.meta.url),'utf8')
 const service=readFileSync(new URL('../src/services/simulatorWorkflowService.js',import.meta.url),'utf8')

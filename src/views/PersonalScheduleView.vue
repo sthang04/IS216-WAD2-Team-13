@@ -591,7 +591,7 @@ function exportCalendarICS() {
           <span class="text-muted d-none d-md-inline" style="font-size: 0.7rem;">
             Switch to a future day, then use Add Event to prefill it.
           </span>
-          <input v-model="selectedDate" type="date" class="form-control form-control-sm" style="width: auto;" />
+          <input v-model="selectedDate" aria-label="Schedule date" type="date" class="form-control form-control-sm" style="width: auto;" />
         </div>
       </div>
     </div>
@@ -866,7 +866,7 @@ function exportCalendarICS() {
       tabindex="-1"
       style="background-color: rgba(15, 23, 42, 0.65); z-index: 1055;"
     >
-      <div class="modal-dialog modal-dialog-centered">
+      <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable">
         <div class="modal-content border-0 shadow-lg" style="border-radius: 1rem;">
 
           <div class="modal-header border-bottom py-3 px-4 bg-light">
@@ -876,7 +876,8 @@ function exportCalendarICS() {
             <button type="button" class="btn-close" aria-label="Close" @click="closeModal"></button>
           </div>
 
-          <form @submit.prevent="saveEvent">
+          <!-- Keep this nested form shrinkable so its body scrolls and the save footer stays visible. -->
+          <form class="pulse-scrollable-modal-form" @submit.prevent="saveEvent">
             <div class="modal-body p-4">
 
               <div class="mb-3">

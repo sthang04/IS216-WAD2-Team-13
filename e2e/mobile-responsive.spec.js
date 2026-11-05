@@ -1,6 +1,6 @@
 // Retained responsive journey: viewport sizes come from configuration, including
 // all desktop and mobile sizes. A matching heading prevents login redirects passing.
-import {test,expect} from '@playwright/test'
+import {test,expect} from './helpers/browserUi.js'
 import {signIn,fits,navigate} from './helpers/userJourney.js'
 
 test('public and authenticated views fit the configured screen and remain navigable',async({page})=>{

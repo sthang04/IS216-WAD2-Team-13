@@ -3,7 +3,7 @@
 // Uses isolated fixture responses; passing UI checks do not prove deployed database or delivery integration.
 // Purpose: fixture-backed calendar Navigation browser regressions for simulator controls and state.
 // Use Setup -> Actions -> Assert; real Vue/engine code runs, but these tests do not prove live Supabase integration.
-import {test,expect} from '@playwright/test'
+import {test,expect} from '../e2e/helpers/browserUi.js'
 async function boot(page,canManage=true){
  // Keep the fixture outside the calendar's four-day transfer lock.
  await page.clock.setFixedTime(new Date('2026-10-25T00:00:00+08:00'))

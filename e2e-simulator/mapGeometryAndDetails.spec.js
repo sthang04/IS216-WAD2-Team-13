@@ -1,10 +1,10 @@
-// BROWSER TEST PURPOSE: reference Conformance user workflows and regression coverage.
+// BROWSER TEST PURPOSE: map geometry and details user workflows and regression coverage.
 // Setup opens the real Vue UI; actions use its controls; assertions check visible results/state.
 // Uses isolated fixture responses; passing UI checks do not prove deployed database or delivery integration.
-// Purpose: fixture-backed reference Conformance browser regressions for simulator controls and state.
+// Purpose: fixture-backed map geometry and details browser regressions for simulator controls and state.
 // Use Setup -> Actions -> Assert; real Vue/engine code runs, but these tests do not prove live Supabase integration.
-import {test,expect} from '@playwright/test'
-import {bootRefinement,runScenario} from './helpers/refinementHarness.js'
+import {test,expect} from '../e2e/helpers/browserUi.js'
+import {bootSimulatorPreview,runScenario} from './helpers/simulatorPreviewHarness.js'
 import {bootRecovery} from './helpers/recoveryHarness.js'
 
 // These inspect rendered geometry, not just CSS values or the presence of code.
@@ -14,7 +14,7 @@ import {bootRecovery} from './helpers/recoveryHarness.js'
 // behavior is covered separately, and scroll-dependent masks would move pixels.
 // All records/RPCs are isolated fixtures; no production workflows are exercised.
 for(const [name,options] of [['single',{single:true}],['branch',{}],['long-branch-label',{longLabels:true}],['shortcut',{pairs:[[0,1],[0,2],[1,3],[2,3],[0,3]]}],['linear',{pairs:[[0,1],[1,2],[2,3],[3,4],[4,5],[5,6],[6,7]]}],['parallel',{pairs:[[0,2],[1,3],[2,4],[3,5]]}],['converging',{pairs:[[0,3],[1,3],[2,3]]}],['independent',{shape:'independent'}],['long',{longGraph:true}]])test('rendered map bounds, obstacles and controls: '+name,async({page})=>{
- await bootRefinement(page,options);await runScenario(page);await page.emulateMedia({reducedMotion:'reduce'});await page.getByRole('button',{name:'Fit whole map',exact:true}).click()
+ await bootSimulatorPreview(page,options);await runScenario(page);await page.emulateMedia({reducedMotion:'reduce'});await page.getByRole('button',{name:'Fit whole map',exact:true}).click()
  const map=page.getByRole('region',{name:'Scrollable Event Village',exact:true})
  await expect.poll(()=>map.evaluate(e=>{const r=e.getBoundingClientRect(),g=e.querySelector('[data-testid=village-graph-content]').getBoundingClientRect();return g.left>=r.left+5&&g.right<=r.right-5&&g.top>=r.top+50&&g.bottom<=r.bottom-50})).toBe(true)
  const geometry=await map.evaluate(e=>{const r=e.getBoundingClientRect(),g=e.querySelector('[data-testid=village-graph-content]').getBoundingClientRect(),nodes=[...e.querySelectorAll('[data-activity-id]')].map(n=>({id:n.dataset.activityId,rect:n.getBoundingClientRect()}));const overlaps=[];for(let i=0;i<nodes.length;i++)for(let j=i+1;j<nodes.length;j++){const a=nodes[i].rect,b=nodes[j].rect;if(a.left<b.right&&a.right>b.left&&a.top<b.bottom&&a.bottom>b.top)overlaps.push([nodes[i].id,nodes[j].id])}const crossings=[];for(const edge of e.querySelectorAll('.village-path')){const p=edge.querySelector('path:last-child'),matrix=p.getScreenCTM(),len=p.getTotalLength();for(let d=0;d<len;d+=8){const q=p.getPointAtLength(d),pt=new DOMPoint(q.x,q.y).matrixTransform(matrix);for(const n of nodes){if([edge.dataset.from,edge.dataset.to].includes(n.id))continue;const b=n.rect;if(pt.x>b.left&&pt.x<b.right&&pt.y>b.top&&pt.y<b.bottom)crossings.push(n.id)}}}return {dx:Math.abs(g.x+g.width/2-r.x-r.width/2),dy:Math.abs(g.y+g.height/2-r.y-r.height/2),overlaps,crossings,sceneryClipped:[...e.querySelector('svg').children].filter(n=>n.tagName==='g'&&n.getAttribute('aria-hidden')==='true').some(n=>{const b=n.getBoundingClientRect();return b.left<r.left||b.right>r.right||b.top<r.top||b.bottom>r.bottom})}})
@@ -25,7 +25,7 @@ for(const [name,options] of [['single',{single:true}],['branch',{}],['long-branc
 })
 
 test('reference hierarchy and full-width interactions are rendered',async({page})=>{
- await bootRefinement(page,{many:true});await runScenario(page);await page.emulateMedia({reducedMotion:'reduce'});await page.addStyleTag({content:'.pip-container,.back-to-top{display:none!important}'});await page.getByRole('button',{name:'Fixture activity 1: Direct impact',exact:true}).click();await page.getByRole('button',{name:'Fit whole map',exact:true}).click()
+ await bootSimulatorPreview(page,{many:true});await runScenario(page);await page.emulateMedia({reducedMotion:'reduce'});await page.addStyleTag({content:'.pip-container,.back-to-top{display:none!important}'});await page.getByRole('button',{name:'Fixture activity 1: Direct impact',exact:true}).click();await page.getByRole('button',{name:'Fit whole map',exact:true}).click()
  const selected=page.getByRole('region',{name:'Selected Activity',exact:true});await expect(selected.getByRole('heading',{name:'Selected Activity',exact:true})).toBeVisible();await expect(selected.locator('.selected-heading')).toContainText('Direct impact');await expect(selected.getByRole('heading',{name:'Fixture activity 1',exact:true})).toBeVisible();await expect(selected).toContainText('Fixture affected member');await expect(selected.getByRole('heading',{name:'Dependencies',exact:true})).toBeVisible();await expect(selected.getByText('Schedule unchanged',{exact:true})).toBeVisible()
  await selected.getByRole('button',{name:'View all dependencies',exact:true}).click();const dialog=page.getByRole('dialog',{name:'All recorded dependencies',exact:true});await expect(dialog.getByRole('listitem')).toHaveCount(4);await page.keyboard.press('Escape');await expect(dialog).toBeHidden()
  const map=page.getByRole('region',{name:'Event Village',exact:true});await expect.poll(()=>page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true)

@@ -1,8 +1,8 @@
-// Browser regressions for the November update, registered at every required screen size.
+// Cross-feature browser workflows for sign-in, booking conflicts, waitlists and meeting availability.
 // Real UI/services run against isolated API data; no real booking or message is sent.
 import {test,expect} from './app.js'
 import {room,fit,downloadText} from './journeys.js'
-export function registerRecentUpdateJourneys(){
+export function registerCrossFeatureJourneys(){
  test('landing login and persona drawer fit before a successful sign-in',async({page,app})=>{
   await app.open()
   await fit(page)

@@ -955,7 +955,7 @@ function clearLate(person) {
 
     <!-- Header: which event, plus the main actions -->
     <div class="d-flex flex-wrap justify-content-between align-items-start gap-3 mb-3">
-      <div>
+      <div class="ops-event-heading">
         <div v-if="apiMode" class="d-flex align-items-center gap-2 mb-1">
           <span class="pulse-api-tag">OneMap Routing API</span>
           <span class="pulse-api-tag">Telegram Bot API</span>
@@ -1404,7 +1404,7 @@ function clearLate(person) {
     <!-- Add / edit task -->
     <div v-if="editor" class="modal-backdrop fade show" style="background: rgba(15, 23, 42, 0.6); z-index: 1065;" @click="editor = null"></div>
     <div v-if="editor" class="modal fade show d-block" tabindex="-1" style="z-index: 1070;" role="dialog" aria-modal="true">
-      <div class="modal-dialog modal-dialog-centered">
+      <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable">
         <form class="modal-content border-0 shadow-lg rounded-4" @submit.prevent="saveTask">
           <div class="modal-header border-bottom px-4 py-3">
             <h5 class="modal-title fw-bold mb-0">{{ editor.mode === 'edit' ? 'Edit task' : 'Add a task' }}</h5>
@@ -1474,6 +1474,9 @@ function clearLate(person) {
 </template>
 
 <style scoped>
+/* Long event names must fit the header rather than widening the page on phones. */
+.ops-event-heading { min-width: 0; max-width: 100%; }
+#opsEvent { min-width: 0; max-width: 100%; }
 .ops-label { font-size: 0.65rem; letter-spacing: 0.04em; }
 .ops-small { font-size: 0.72rem; }
 .ops-clock { font-variant-numeric: tabular-nums; white-space: nowrap; flex-shrink: 0; } /* digits don't jiggle while sliding */

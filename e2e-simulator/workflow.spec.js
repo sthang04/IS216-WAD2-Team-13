@@ -3,7 +3,7 @@
 // Uses isolated fixture responses; passing UI checks do not prove deployed database or delivery integration.
 // Purpose: fixture-backed workflow browser regressions for simulator controls and state.
 // Use Setup -> Actions -> Assert; real Vue/engine code runs, but these tests do not prove live Supabase integration.
-import {test,expect} from '@playwright/test'
+import {test,expect} from '../e2e/helpers/browserUi.js'
 
 // Real Chromium UI, mocked loader. No production data or live workflow calls.
 test.beforeEach(async({page})=>{

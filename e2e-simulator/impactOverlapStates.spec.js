@@ -1,15 +1,15 @@
-// BROWSER TEST PURPOSE: visual Edge Cases user workflows and regression coverage.
+// BROWSER TEST PURPOSE: impact overlap states user workflows and regression coverage.
 // Setup opens the real Vue UI; actions use its controls; assertions check visible results/state.
 // Uses isolated fixture responses; passing UI checks do not prove deployed database or delivery integration.
-// Purpose: fixture-backed visual Edge Cases browser regressions for simulator controls and state.
+// Purpose: fixture-backed impact overlap states browser regressions for simulator controls and state.
 // Use Setup -> Actions -> Assert; real Vue/engine code runs, but these tests do not prove live Supabase integration.
-import {test,expect} from '@playwright/test'
-import {bootRefinement,runScenario,openHeatmap} from './helpers/refinementHarness.js'
+import {test,expect} from '../e2e/helpers/browserUi.js'
+import {bootSimulatorPreview,runScenario,openHeatmap} from './helpers/simulatorPreviewHarness.js'
 
 // Overlapping activities are loaded as real schedule records. The existing
 // engine/model, rather than test-specific UI statuses, determines precedence.
 for(const type of ['MEMBER_UNAVAILABLE','FACILITY_UNAVAILABLE'])test('overlapping active rows and heatmap precedence: '+type,async({page})=>{
- await bootRefinement(page,{overlap:true});await runScenario(page,type)
+ await bootSimulatorPreview(page,{overlap:true});await runScenario(page,type)
  const active=page.getByRole('region',{name:'Activities at selected time',exact:true}),slider=page.getByRole('slider',{name:'Timeline playback time',exact:true})
  await slider.fill('15');await expect(active.getByRole('button')).toHaveCount(2);await expect(active).toContainText('2 activities')
  for(let i=0;i<2;i++){await active.getByRole('button').nth(i).click();await expect(slider).toHaveValue('15');await expect(page.getByRole('group',{name:'Activity booths',exact:true}).getByRole('button').nth(i)).toHaveAttribute('aria-pressed','true')}

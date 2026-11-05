@@ -3,7 +3,7 @@
 // Uses isolated fixture responses; passing UI checks do not prove deployed database or delivery integration.
 // Purpose: fixture-backed local Apply Undo browser regressions for simulator controls and state.
 // Use Setup -> Actions -> Assert; real Vue/engine code runs, but these tests do not prove live Supabase integration.
-import {test,expect} from '@playwright/test'
+import {test,expect} from '../e2e/helpers/browserUi.js'
 // IN-MEMORY RPC RESPONSES ONLY. This tests real Vue handlers and the real adapter,
 // not Supabase persistence or database authorization. All external traffic is blocked.
 import {bootRecovery as boot,confirmRecovery as confirm} from './helpers/recoveryHarness.js'

@@ -1,16 +1,16 @@
-// BROWSER TEST PURPOSE: visual Batch user workflows and regression coverage.
+// BROWSER TEST PURPOSE: simulator UI interactions user workflows and regression coverage.
 // Setup opens the real Vue UI; actions use its controls; assertions check visible results/state.
 // Uses isolated fixture responses; passing UI checks do not prove deployed database or delivery integration.
-// Purpose: fixture-backed visual Batch browser regressions for simulator controls and state.
+// Purpose: fixture-backed simulator UI interactions browser regressions for simulator controls and state.
 // Use Setup -> Actions -> Assert; real Vue/engine code runs, but these tests do not prove live Supabase integration.
-import {test,expect} from '@playwright/test'
-import {bootRefinement,runScenario,openHeatmap} from './helpers/refinementHarness.js'
+import {test,expect} from '../e2e/helpers/browserUi.js'
+import {bootSimulatorPreview,runScenario,openHeatmap} from './helpers/simulatorPreviewHarness.js'
 import {bootRecovery} from './helpers/recoveryHarness.js'
 
 // Real Vue components and engine, synthetic loader/RPC records only. Geometry
 // assertions measure rendered content, so an attractive but empty view cannot pass.
 for(const shape of ['branch','independent','single'])test('fit centres actual booth bounds: '+shape,async({page})=>{
- await bootRefinement(page,{shape,single:shape==='single'});await runScenario(page)
+ await bootSimulatorPreview(page,{shape,single:shape==='single'});await runScenario(page)
  await page.getByRole('button',{name:'Fit whole map',exact:true}).click()
  const map=page.getByRole('region',{name:'Scrollable Event Village',exact:true})
  await expect.poll(()=>map.evaluate(e=>{const r=e.getBoundingClientRect(),g=e.querySelector('[aria-label="Activity booths"]').getBoundingClientRect();return g.x>=r.x && g.right<=r.right+1 && g.y>=r.y && g.bottom<=r.bottom+1})).toBe(true)
@@ -21,7 +21,7 @@ for(const shape of ['branch','independent','single'])test('fit centres actual bo
 })
 
 test('direct arrows support keyboard inspection and modal endpoints focus linked booths',async({page})=>{
- await bootRefinement(page,{shape:'branch'});await runScenario(page)
+ await bootSimulatorPreview(page,{shape:'branch'});await runScenario(page)
  const arrow=page.getByRole('button',{name:'Dependency: Fixture activity 1 to Fixture activity 2',exact:true})
  await arrow.focus();await page.keyboard.press('Enter');await expect(page.getByRole('region',{name:'Selected dependency',exact:true})).toContainText('Recorded direct dependency')
  await page.getByRole('button',{name:'View all dependencies',exact:true}).click()
@@ -34,7 +34,7 @@ test('direct arrows support keyboard inspection and modal endpoints focus linked
 })
 
 test('timeline header, impact legend, active selection and labelled heatmap preserve playback',async({page})=>{
- await bootRefinement(page);await runScenario(page)
+ await bootSimulatorPreview(page);await runScenario(page)
  const time=page.locator('#impact-timeline'),slider=time.getByRole('slider'),active=time.getByRole('region',{name:'Activities at selected time',exact:true})
  await expect(time.getByRole('group',{name:'Timeline impact colours'})).toContainText('Downstream risk');await expect(time).toContainText('Playback marker')
  await slider.fill('15');const before=await slider.inputValue();await active.getByRole('button').first().click();await expect(slider).toHaveValue(before)
@@ -47,7 +47,7 @@ test('timeline header, impact legend, active selection and labelled heatmap pres
 })
 
 test('compact alternatives separate preview from calendar actions and preserve original timings',async({page})=>{
- await bootRefinement(page,{many:true});await runScenario(page,'FACILITY_UNAVAILABLE')
+ await bootSimulatorPreview(page,{many:true});await runScenario(page,'FACILITY_UNAVAILABLE')
  const id=await page.getByTestId('facility-alternative').first().getAttribute('data-facility-option');const card=page.locator('[data-facility-option="'+id+'"]');await expect(card).toContainText('Schedule unchanged');await expect(card.getByLabel('Overall recovery score')).toContainText(/100|unavailable/)
  // Actions: verification starts closed; explicit expansion reveals calendar actions.
  const preview=card.getByRole('button',{name:'Use this alternative',exact:true});await expect(preview).toBeVisible()
@@ -60,7 +60,7 @@ test('compact alternatives separate preview from calendar actions and preserve o
 })
 
 test('empty saved recoveries hide filters; candidate inspection is pink without preview mutation',async({page})=>{
- await bootRefinement(page,{many:true});await runScenario(page)
+ await bootSimulatorPreview(page,{many:true});await runScenario(page)
  const workflow=page.getByRole('region',{name:'Persisted recovery workflow',exact:true});await expect(workflow.getByRole('group',{name:'Saved recovery views'})).toHaveCount(0);await workflow.locator('#simulator-saved-recoveries > summary').click();await expect(workflow).toContainText('No saved recoveries')
  const row=page.locator('.candidate-row').nth(1);await row.click();await expect(row).toHaveCSS('background-color','rgb(255, 241, 242)');await expect(workflow).toHaveAttribute('data-selected-recovery','')
  const first=page.getByRole('article',{name:'Recovery plan 1',exact:true});await first.getByTestId('follow-up-actions').locator(':scope > summary').click();await first.getByText('Scoring evidence',{exact:true}).click();await expect(first.locator('pre')).toHaveCount(0)

@@ -1,7 +1,7 @@
 // BROWSER TEST PURPOSE: read Only user workflows and regression coverage.
 // Setup opens the real Vue UI; actions use its controls; assertions check visible results/state.
 // Uses the configured application/backend; do not replace missing evidence with a passing skip.
-import {test,expect} from '@playwright/test'
+import {test,expect} from '../../e2e/helpers/browserUi.js'
 import {loadEnv} from 'vite'
 import {guardReadOnlyBackend} from '../helpers/readOnlyBackend.js'
 

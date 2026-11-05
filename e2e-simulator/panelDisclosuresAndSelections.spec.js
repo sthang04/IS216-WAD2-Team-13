@@ -1,16 +1,16 @@
-// BROWSER TEST PURPOSE: simplification user workflows and regression coverage.
+// BROWSER TEST PURPOSE: panel disclosure and selection workflows and regression coverage.
 // Setup opens the real Vue UI; actions use its controls; assertions check visible results/state.
 // Uses isolated fixture responses; passing UI checks do not prove deployed database or delivery integration.
-// Purpose: fixture-backed simplification browser regressions for simulator controls and state.
+// Purpose: fixture-backed panel disclosure and selection browser regressions for simulator controls and state.
 // Use Setup -> Actions -> Assert; real Vue/engine code runs, but these tests do not prove live Supabase integration.
-import {test,expect} from '@playwright/test'
-import {bootRefinement} from './helpers/refinementHarness.js'
+import {test,expect} from '../e2e/helpers/browserUi.js'
+import {bootSimulatorPreview} from './helpers/simulatorPreviewHarness.js'
 import {openTimeline,openFacilityHeatmap} from './helpers/disclosures.js'
 
-// Week 10c: Setup -> Actions -> Assert. Real Vue and engine, isolated records;
+// Setup -> Actions -> Assert. Real Vue and engine, isolated records;
 // these browser tests do not prove live Supabase RLS or deliver notifications.
 async function simulate(page){
- await bootRefinement(page,{many:true})
+ await bootSimulatorPreview(page,{many:true})
  await page.getByRole('button',{name:'Add disruption',exact:true}).click()
  await page.getByLabel('Disruption type',{exact:true}).nth(1).selectOption('FACILITY_UNAVAILABLE')
  for(let i=0;i<2;i++){

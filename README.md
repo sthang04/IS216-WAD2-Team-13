@@ -118,7 +118,5 @@ Fixture-based browser results do not prove deployed database or Telegram deliver
 
 The two Node unit-test files and 28 non-browser Playwright contract files are kept,
 with comments explaining why they exist. They are excluded from browser E2E runs.
-No test files were deleted. See [the scope and preservation report](docs/testing-audit.md)
-for the retained-file inventory, coverage limits and configuration details.
 
-Latest audit: **1,251 fixture browser checks passed**, and all **54 live checks passed** in a follow-up after live scheduling/wait fixes. These are separate validation phases across all six sizes; the report explains the initial live failures and retained evidence. No Node unit or non-browser contract suite was run in this audit. See [the audit report](docs/testing-audit.md) for changes, limits and the one proposed unused-helper removal (retained pending review).
+

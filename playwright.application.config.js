@@ -11,8 +11,12 @@ export default defineConfig({
   url:'http://127.0.0.1:5188',reuseExistingServer:false,timeout:60000,
   env:{VITE_SUPABASE_URL:'',VITE_SUPABASE_ANON_KEY:'',VITE_TELEGRAM_BOT_USERNAME:'pulse_fixture_bot',
    VITE_SIMULATOR_WORKFLOW_ENABLED:'false',VITE_SIMULATOR_PRODUCTION_APPROVED:'false'}},
- // Desktop runs the complete feature suite; mobile entries exercise touch-specific journeys.
+ // All feature workflows run on desktop and mobile. Mobile also retains touch-specific journeys.
  projects:viewportProjects('foundation-').map(project=>({...project,
-  ...(project.use.hasTouch?{testMatch:'**/*.mobile.spec.js'}:{testIgnore:'**/*.mobile.spec.js'})})),
+  ...(project.use.hasTouch?{
+   // These entry files share registrations with their .mobile counterparts; run each journey once.
+   testIgnore:['**/ui.spec.js','**/crossFeatureWorkflows.spec.js','**/simulatorIntegration.spec.js'],
+   grepInvert:/Pip opens actual notifications/
+  }:{testIgnore:'**/*.mobile.spec.js'})})),
 
 })

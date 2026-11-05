@@ -21,7 +21,7 @@ test('heatmap toggles availability and restores the unselected state',async({pag
  await expect(cell).toHaveAttribute('aria-pressed','false')
 })
 
-test('heatmap selects blocks one by one, without dragging, in the legend colours',async({page,app})=>{
+test('heatmap selects blocks one by one, without dragging, in the legend colours',async({page,app},info)=>{
  await open(page,app)
  const cells=page.locator('.scheduler-grid [role=button]')
  const [first,second,third]=[cells.nth(0),cells.nth(1),cells.nth(2)]
@@ -34,12 +34,19 @@ test('heatmap selects blocks one by one, without dragging, in the legend colours
  const legendColour=await page.locator('.legend .avail-amber').evaluate(el=>getComputedStyle(el).backgroundColor)
  await expect(first).toHaveCSS('background-color',legendColour)
  await expect(page.locator('.legend')).not.toContainText(/\bYou\b/)
+ // Touch uses individual taps. Mouse-only drag prevention is checked on desktop.
+ if(!info.project.use.hasTouch){
  // Holding the button across blocks must not paint them
  const box=await third.boundingBox()
  await first.hover();await page.mouse.down()
  await page.mouse.move(box.x+box.width/2,box.y+box.height/2,{steps:5});await page.mouse.up()
  await expect(third).toHaveAttribute('aria-pressed','false')
  await expect(first).toHaveAttribute('aria-pressed','true')
+ }else{
+  await third.tap();await expect(third).toHaveAttribute('aria-pressed','true')
+  await third.tap();await expect(third).toHaveAttribute('aria-pressed','false')
+  await expect(first).toHaveAttribute('aria-pressed','true')
+ }
 })
 
 test('week navigation changes the visible week and returns to this week',async({page,app})=>{

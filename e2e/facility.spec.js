@@ -1,6 +1,6 @@
 // Real-app facility and role browser regressions. Setup signs in through the UI;
 // actions use visible controls; assertions verify current pages and permissions.
-import {test,expect} from '@playwright/test'
+import {test,expect} from './helpers/browserUi.js'
 import {signIn,navigate,fits} from './helpers/userJourney.js'
 
 test('campus facilities and their booking rows load after one-click sign-in',async({page})=>{

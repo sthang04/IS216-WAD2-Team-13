@@ -113,12 +113,12 @@ function pickDay(day) {
 
     <div class="pulse-cal-pad">
       <Transition :name="`pulse-tear-${flip}`">
-    <div :key="weekStart" class="pulse-cal-grid pulse-cal-sheet" role="list">
+    <div :key="weekStart" class="pulse-cal-grid pulse-cal-sheet" :role="selectable ? 'group' : 'list'" aria-label="Weekdays">
       <component
         :is="selectable ? 'button' : 'div'"
         v-for="day in days"
         :key="day.date"
-        role="listitem"
+        :role="selectable ? 'button' : 'listitem'"
         :type="selectable ? 'button' : undefined"
         class="pulse-cal-day"
         :class="{ today: day.today, locked: day.locked, outside: day.outside, selected: selectedDay === day.date, selectable }"

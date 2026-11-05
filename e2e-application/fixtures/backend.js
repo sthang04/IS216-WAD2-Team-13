@@ -43,6 +43,13 @@ export function createBackend(config,calls){
     link_path:'/personal-schedule',created_at:'2026-11-03T01:55:00Z'},
    {id:402,title:'Fixture facility update',message:'Read the fixture calendar',is_read:false,
     link_path:'/facilities',created_at:'2026-11-03T01:50:00Z'}]:[]}
+ // Only the UI stress scenario expands the list; all existing notification fixtures stay unchanged.
+ if(config().notificationCount && !sessionStorage.getItem(key)){
+  state.notifications=Array.from({length:config().notificationCount},(_,i)=>({
+   id:800+i,title:'Fixture long notification '+(i+1),
+   message:'A long rehearsal update about room changes and participant availability. '.repeat(5),
+   is_read:false,link_path:'/personal-schedule',created_at:'2026-11-03T01:55:00Z'}))
+ }
  const persist=()=>sessionStorage.setItem(key,JSON.stringify(state))
  const allowedTables=new Set([
   'v_master_facility_calendar','v_waitlist_queue','ops_events','facility_bookings',
@@ -104,6 +111,8 @@ export function createBackend(config,calls){
   return q
  }
  async function rpc(name,args={}){
+  // Controlled loading states are released explicitly by the browser test, without sleeps.
+  if(config().holdRpc===name)await new Promise(resolve=>pendingReads.add(resolve))
   if(config().rpcError===name)return {data:null,error:{message:'Fixture operation denied: '+name}}
   // App.vue mounts the meeting pane alongside the simulator. Supply its exact
   // empty read contracts without permitting any meeting mutations.
