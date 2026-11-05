@@ -349,7 +349,12 @@ export async function signUpExco({ email, fullName, positions, telegramHandle, p
       sector: 'ACF • Arts & Culture',
       smartSearches: ['Studio L7.2', 'Dance Studio', 'Sprung Floor', 'Connexion', 'Evening Slots']
     }
-    writeLocalSession({ email: normalized, name: fullName, cca: 'SMU Eurhythmix' })
+    writeLocalSession({
+      email: normalized,
+      name: fullName,
+      cca: 'SMU Eurhythmix',
+      roleLabel: roleLabels[roleCode] || 'Eurhythmix ExCo Member'
+    })
     sessionPersona = persona
     return persona
   }
@@ -427,6 +432,20 @@ export async function restoreSession() {
   let persona = null
   if (saved && saved.email) {
     persona = findPersonaByEmail(saved.email)
+    if (!persona && saved.cca) {
+      persona = {
+        id: 'new-exco-demo',
+        name: saved.name || 'New ExCo Member',
+        email: saved.email,
+        role: 'club',
+        roleLabel: saved.roleLabel || `${saved.cca} ExCo Member`,
+        cca: saved.cca,
+        allowedClubs: [saved.cca],
+        isDev: false,
+        sector: 'ACF • Arts & Culture',
+        smartSearches: ['Studio L7.2', 'Dance Studio', 'Sprung Floor', 'Connexion', 'Evening Slots']
+      }
+    }
   }
   if (persona) {
     sessionPersona = persona
