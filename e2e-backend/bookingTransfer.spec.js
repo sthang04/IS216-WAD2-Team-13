@@ -26,7 +26,7 @@ test('owner releases, another club claims and OSL approves a persisted booking t
  await claimant.page.getByRole('dialog',{name:'Claim this slot?',exact:true}).getByRole('button',{name:'Submit claim',exact:true}).click()
  await expect.poll(async()=>(await world.booking()).status).toBe('Pending Admin Sign-off')
  const pending=await world.booking();expect(pending.claiming_club_id).toBe(10)
- await claimant.page.reload();await expect(slot).toContainText('Pending Admin Sign-off')
+ await claimant.page.reload();await expect(slot).toContainText('Awaiting OSL approval')
  // Actions: OSL approves the exact request, not whichever pending card appears first.
  await admin.page.goto('/facilities/admin')
  const review=admin.page.locator('.pulse-panel').filter({hasText:'E2E-BOOKING-'+(world.bookingId-980101)}).filter({has:admin.page.getByRole('button',{name:'Approve',exact:true})})
@@ -35,8 +35,8 @@ test('owner releases, another club claims and OSL approves a persisted booking t
  // Assert: ownership persisted and both clubs see the approved result after reload.
  await expect.poll(async()=>{const row=await world.booking();return [row.owner_club_id,row.status]}).toEqual([10,'Officially Confirmed Booking'])
  await owner.page.reload();await claimant.page.reload()
- await expect(owner.page.locator('.pulse-slot').filter({hasText:pending.time_label})).toContainText('Confirmed')
- await expect(claimant.page.locator('.pulse-slot').filter({hasText:pending.time_label})).toContainText('Confirmed')
+ await expect(owner.page.locator('.pulse-slot').filter({hasText:pending.time_label})).toContainText('Unavailable')
+ await expect(claimant.page.locator('.pulse-slot').filter({hasText:pending.time_label})).toContainText('Successfully Transferred')
  const decisions=await admin.rpc('rpc_recent_transfer_decisions',{p_demo_member_id:null,p_limit:20})
  expect(decisions.some(d=>d.transfer_id===pending.transfer_id)).toBe(true)
  for(const actor of [owner,claimant,admin])await assertPageLayout(actor.page)

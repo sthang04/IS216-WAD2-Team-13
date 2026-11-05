@@ -9,14 +9,13 @@ import PageHero from '../components/PageHero.vue'
 import FacilityTabs from '../components/FacilityTabs.vue'
 import WeekNavigator from '../components/WeekNavigator.vue'
 import BookingSlotCard from '../components/BookingSlotCard.vue'
-import BookingStatusBadge from '../components/BookingStatusBadge.vue'
 import ConfirmActionModal from '../components/ConfirmActionModal.vue'
 import { loadOffers } from '../services/notificationStore'
 import { session, activeMembership, activeClubName, canManageActiveClub, showToast } from '../services/sessionState'
 import {
   STATUSES, fetchCalendar, fetchClubTransfers, releaseBooking, undoRelease,
   listenForCalendarChanges, bookingActions, defaultWeekStart, weekStartOf, addDays,
-  formatDate, formatTime
+  formatDate, formatTime, formatReference
 } from '../services/facilityService'
 import { fetchActiveClubEntries } from '../services/waitlistService'
 import { requestOslEmail } from '../services/transferService'
@@ -140,24 +139,23 @@ const liveOffers = computed(() => {
   return count
 })
 
-// The five boxes at the top of the page
-const stats = computed(() => {
-  return [
-    { key: 'assigned', label: 'Assigned this week', value: assigned.value.length, tone: 'plain' },
-    { key: 'released', label: 'Released by us', value: released.value.length, tone: 'amber' },
-    { key: 'pending', label: 'Pending transfers', value: pendingTransfers.value.length, tone: 'sky' },
-    { key: 'successful', label: 'Successful transfers', value: successfulTransfers.value.length, tone: 'green' },
-    { key: 'rejected', label: 'Rejected transfers', value: rejectedTransfers.value.length, tone: 'red' }
-  ]
-})
-
-// Clicking a box scrolls to its section
-function scrollTo(key) {
-  const section = document.getElementById('section-' + key)
-  if (section) {
-    section.scrollIntoView({ behavior: 'smooth', block: 'start' })
-  }
+// The folder tabs: each one opens a section of the page
+const TABS = [
+  { key: 'assigned', label: 'My Bookings', tone: 'own' },
+  { key: 'pending', label: 'Pending', tone: 'pending' },
+  { key: 'released', label: 'Released', tone: 'claim' },
+  { key: 'successful', label: 'Successful', tone: 'success' },
+  { key: 'rejected', label: 'Rejected', tone: 'rejected' }
+]
+const activeTab = ref('assigned')
+const TAB_COLOURS = {
+  assigned: 'var(--pf-primary)',
+  pending: 'var(--pf-sky)',
+  released: 'var(--pf-violet)',
+  successful: 'var(--pf-green)',
+  rejected: '#8a8494'
 }
+const emailNeedsAttention = computed(() => pendingTransfers.value.some((transfer) => emailFailed(transfer)))
 
 function actionsFor(booking) {
   return bookingActions(booking, {
@@ -182,7 +180,7 @@ function slotDetails(row) {
   return [
     { label: 'Facility', value: row.facility_name },
     { label: 'When', value: formatDate(row.booking_date, true) + ', ' + formatTime(row.start_time) + ' – ' + formatTime(row.end_time) },
-    { label: 'FBS reference', value: row.fbs_reference }
+    { label: 'FBS reference', value: formatReference(row.fbs_reference) }
   ]
 }
 
@@ -237,9 +235,11 @@ async function confirmPending() {
     if (type === 'release') {
       await releaseBooking(row.booking_id, clubId)
       showToast(row.facility_name + ' released.', 'success')
+      activeTab.value = 'released'
     } else if (type === 'undo') {
       await undoRelease(row.booking_id, clubId)
       showToast('Release undone.', 'success')
+      activeTab.value = 'assigned'
     } else if (type === 'resend') {
       await requestOslEmail(row.transfer_id, clubId)
       showToast('Request queued for OSL.', 'success')
@@ -263,9 +263,12 @@ async function confirmPending() {
     tag="My Club"
     :title="activeClubName || 'My Club'"
     :subtitle="activeMembership
-      ? (canManageActiveClub ? 'You are the Logistics Director: you can release and claim slots. Claims are emailed to OSL automatically.'
-                             : `You are ${activeMembership.role_name}. You can see everything here, but only the Logistics Director can act.`)
-      : 'Your club\'s bookings, releases and transfers, week by week.'"
+      ? 'Your CCA’s bookings and transfers, week by week. Every transfer needs OSL approval.'
+      : 'Your CCA’s bookings and transfers, week by week.'"
+    :stats="session.activeClubId ? [
+      { label: 'Facilities booked', value: assigned.length, tone: 'plain' },
+      { label: 'Pending transfers', value: pendingTransfers.length, tone: 'sky' }
+    ] : []"
   />
 
 
@@ -279,13 +282,6 @@ async function confirmPending() {
   <template v-else>
     <WeekNavigator v-model:week-start="weekStart" />
 
-    <div class="pulse-stat-grid mb-4">
-      <button v-for="stat in stats" :key="stat.key" type="button" class="pulse-stat-card" :class="`tone-${stat.tone}`" @click="scrollTo(stat.key)">
-        <span class="pulse-stat-card-num">{{ stat.value }}</span>
-        <span class="pulse-stat-card-label">{{ stat.label }}</span>
-      </button>
-    </div>
-
     <div v-if="!session.isDev && !canManageActiveClub" class="pulse-banner pulse-banner-view">
       <strong>View only.</strong> Release and claim are limited to {{ activeClubName }}'s Logistics Director.
     </div>
@@ -295,139 +291,159 @@ async function confirmPending() {
 
     <div v-if="loading" class="text-center py-5"><div class="spinner-border text-danger" role="status"></div></div>
 
-    <template v-else>
-      <!-- 1. What we hold this week -->
-      <section id="section-assigned" class="pulse-panel pulse-section overflow-hidden mb-4" style="--i: 0">
-        <header class="pulse-section-head tone-plain">
-          <div>
-            <h2 class="h6 fw-bold mb-0">My Assigned Bookings</h2>
-            <p class="text-muted small mb-0">Recurring FBS allocations and officially confirmed transfers {{ activeClubName }} holds this week.</p>
-          </div>
-          <span class="pulse-count">{{ assigned.length }}</span>
-        </header>
-        <p v-if="!assigned.length" class="p-3 text-muted small mb-0">No assigned bookings this week.</p>
-        <BookingSlotCard
-          v-for="(b, i) in assigned"
-          :key="b.booking_id"
-          :index="i"
-          :booking="b"
-          :actions="actionsFor(b)"
-          :busy="busyId === b.booking_id"
-          show-facility
-          @action="onBookingAction"
-        />
-      </section>
+    <div v-else class="pulse-folder" :style="{ '--active-tab': TAB_COLOURS[activeTab] }">
+      <div class="pulse-folder-tabs" role="tablist" aria-label="My Club sections">
+        <button
+          v-for="tab in TABS"
+          :id="`tab-${tab.key}`"
+          :key="tab.key"
+          type="button"
+          role="tab"
+          class="pulse-folder-tab"
+          :class="[`tone-${tab.tone}`, { active: activeTab === tab.key }]"
+          :aria-selected="activeTab === tab.key"
+          :aria-controls="`section-${tab.key}`"
+          @click="activeTab = tab.key"
+        >{{ tab.label }}<span v-if="tab.key === 'pending' && emailNeedsAttention" class="pulse-folder-alert" title="An email to OSL failed"></span></button>
+      </div>
 
-      <!-- 2. Waiting on OSL -->
-      <section id="section-pending" class="pulse-panel pulse-section overflow-hidden mb-4" style="--i: 1">
-        <header class="pulse-section-head tone-sky">
-          <div>
-            <h2 class="h6 fw-bold mb-0">Pending Transfers</h2>
-            <p class="text-muted small mb-0">Claims made by {{ activeClubName }}, or on slots it released. Only OSL can approve them.</p>
-          </div>
-          <span class="pulse-count">{{ pendingTransfers.length }}</span>
-        </header>
-        <p v-if="!pendingTransfers.length" class="p-3 text-muted small mb-0">No transfers waiting for OSL this week.</p>
-        <div v-for="(t, i) in pendingTransfers" :key="t.transfer_id" class="pulse-slot is-pending" :style="{ '--i': i }">
-          <div class="pulse-slot-when">
-            <div class="fw-semibold">{{ formatDate(t.booking_date) }}</div>
-            <div class="small text-muted">{{ formatTime(t.start_time) }} – {{ formatTime(t.end_time) }}</div>
-            <div class="small fw-semibold mt-1">{{ t.facility_name }}</div>
-          </div>
-          <div class="pulse-slot-status">
-            <BookingStatusBadge status="Pending Admin Sign-off" />
-            <div class="small mt-1"><span class="pulse-direction" :class="t.direction === 'OUTGOING' ? 'out' : 'in'">{{ t.direction === 'OUTGOING' ? '↗ Outgoing' : '↙ Incoming' }}</span></div>
-          </div>
-          <div class="pulse-slot-who small">{{ t.releasing_club_name }} → <strong>{{ t.claiming_club_name }}</strong></div>
-          <div class="pulse-slot-ref small font-monospace">{{ t.fbs_reference }}</div>
-          <div class="pulse-slot-actions">
-            <template v-if="emailFailed(t)">
-              <button v-if="t.direction === 'OUTGOING' && canManageActiveClub" type="button" class="btn btn-sm btn-pulse-primary pulse-attention" :disabled="busyId === t.transfer_id" @click="askResendOsl(t)">Resend to OSL</button>
-              <span v-else class="small text-warning-emphasis">Email to OSL failed</span>
-            </template>
-            <span v-else-if="emailSent(t)" class="small text-success fw-semibold">✓ Emailed to OSL for review</span>
-            <span v-else class="small text-muted">Sending to OSL…</span>
-          </div>
-        </div>
-      </section>
+      <div class="pulse-folder-page">
+        <Transition name="pulse-folder-swap" mode="out-in">
+          <!-- What we hold this week -->
+          <section v-if="activeTab === 'assigned'" id="section-assigned" key="assigned" role="tabpanel" aria-labelledby="tab-assigned" class="pulse-folder-section">
+            <header class="pulse-section-head tone-plain">
+              <div>
+                <h2 class="h6 fw-bold mb-0">My Assigned Bookings</h2>
+                <p class="text-muted small mb-0">Slots {{ activeClubName }} holds this week.</p>
+              </div>
+            </header>
+            <p v-if="!assigned.length" class="p-3 text-muted small mb-0">No bookings this week.</p>
+            <BookingSlotCard
+              v-for="(b, i) in assigned"
+              :key="b.booking_id"
+              :index="i"
+              :booking="b"
+              :actions="actionsFor(b)"
+              :busy="busyId === b.booking_id"
+              :highlight-club-id="session.activeClubId"
+              plain-owner
+              show-facility
+              @action="onBookingAction"
+            />
+          </section>
 
-      <!-- 3. Released, not yet claimed -->
-      <section id="section-released" class="pulse-panel pulse-section overflow-hidden mb-4" style="--i: 2">
-        <header class="pulse-section-head tone-amber">
-          <div>
-            <h2 class="h6 fw-bold mb-0">Released by My Club</h2>
-            <p class="text-muted small mb-0">Released by us this week and still available to claim.</p>
-          </div>
-          <span class="pulse-count">{{ released.length }}</span>
-        </header>
-        <p v-if="!released.length" class="p-3 text-muted small mb-0">Nothing released this week.</p>
-        <BookingSlotCard
-          v-for="(b, i) in released"
-          :key="b.booking_id"
-          :index="i"
-          :booking="b"
-          :actions="actionsFor(b)"
-          :busy="busyId === b.booking_id"
-          show-facility
-          @action="onBookingAction"
-        />
-      </section>
+          <!-- Waiting on OSL -->
+          <section v-else-if="activeTab === 'pending'" id="section-pending" key="pending" role="tabpanel" aria-labelledby="tab-pending" class="pulse-folder-section">
+            <header class="pulse-section-head tone-sky">
+              <div>
+                <h2 class="h6 fw-bold mb-0">Pending Transfers</h2>
+                <p class="text-muted small mb-0">Waiting for OSL to approve.</p>
+              </div>
+            </header>
+            <p v-if="!pendingTransfers.length" class="p-3 text-muted small mb-0">Nothing waiting for OSL this week.</p>
+            <div v-for="(t, i) in pendingTransfers" :key="t.transfer_id" class="pulse-slot is-pending" :style="{ '--i': i }">
+              <div class="pulse-slot-when">
+                <div class="fw-semibold">{{ formatDate(t.booking_date) }}</div>
+                <div class="small text-muted">{{ formatTime(t.start_time) }} – {{ formatTime(t.end_time) }}</div>
+                <div class="small fw-semibold mt-1">{{ t.facility_name }}</div>
+              </div>
+              <div class="pulse-slot-status"><span class="pulse-badge pulse-badge-pending">Awaiting OSL approval</span></div>
+              <div class="pulse-slot-who small">
+                <component :is="t.direction === 'OUTGOING' ? 'strong' : 'span'">{{ t.releasing_club_name }}</component> →
+                <component :is="t.direction === 'OUTGOING' ? 'span' : 'strong'">{{ t.claiming_club_name }}</component>
+              </div>
+              <div class="pulse-slot-ref small font-monospace">{{ formatReference(t.fbs_reference) }}</div>
+              <div class="pulse-slot-actions">
+                <template v-if="emailFailed(t)">
+                  <button v-if="t.direction === 'OUTGOING' && canManageActiveClub" type="button" class="btn btn-sm btn-pulse-primary pulse-attention" :disabled="busyId === t.transfer_id" @click="askResendOsl(t)">Resend to OSL</button>
+                  <span v-else class="small text-warning-emphasis">Email to OSL failed</span>
+                </template>
+                <span v-else-if="emailSent(t)" class="small text-success fw-semibold">✓ Emailed to OSL</span>
+                <span v-else class="small text-muted">Sending to OSL…</span>
+              </div>
+            </div>
+          </section>
 
-      <!-- 4. Approved -->
-      <section id="section-successful" class="pulse-panel pulse-section overflow-hidden mb-4" style="--i: 3">
-        <header class="pulse-section-head tone-green">
-          <div>
-            <h2 class="h6 fw-bold mb-0">Successful Transfers</h2>
-            <p class="text-muted small mb-0">Approved by OSL. Incoming slots also appear under My Assigned Bookings.</p>
-          </div>
-          <span class="pulse-count">{{ successfulTransfers.length }}</span>
-        </header>
-        <p v-if="!successfulTransfers.length" class="p-3 text-muted small mb-0">No approved transfers this week.</p>
-        <div v-for="(t, i) in successfulTransfers" :key="t.transfer_id" class="pulse-slot" :class="{ 'is-confirmed': t.direction !== 'OUTGOING' }" :style="{ '--i': i }">
-          <div class="pulse-slot-when">
-            <div class="fw-semibold">{{ formatDate(t.booking_date) }}</div>
-            <div class="small text-muted">{{ formatTime(t.start_time) }} – {{ formatTime(t.end_time) }}</div>
-            <div class="small fw-semibold mt-1">{{ t.facility_name }}</div>
-          </div>
-          <div class="pulse-slot-status">
-            <BookingStatusBadge status="Officially Confirmed Booking" :ours="t.direction !== 'OUTGOING'" />
-            <div class="small mt-1"><span class="pulse-direction" :class="t.direction === 'OUTGOING' ? 'out' : 'in'">{{ t.direction === 'OUTGOING' ? '↗ Handed over' : '↙ Received' }}</span></div>
-          </div>
-          <div class="pulse-slot-who small">{{ t.releasing_club_name }} → <strong>{{ t.claiming_club_name }}</strong></div>
-          <div class="pulse-slot-ref small font-monospace">{{ t.fbs_reference }}</div>
-          <div class="pulse-slot-actions small text-muted">Approved {{ t.decided_at ? new Date(t.decided_at).toLocaleDateString('en-SG', { day: 'numeric', month: 'short' }) : '' }}</div>
-        </div>
-      </section>
+          <!-- Released, not yet claimed -->
+          <section v-else-if="activeTab === 'released'" id="section-released" key="released" role="tabpanel" aria-labelledby="tab-released" class="pulse-folder-section">
+            <header class="pulse-section-head tone-amber">
+              <div>
+                <h2 class="h6 fw-bold mb-0">Released by My Club</h2>
+                <p class="text-muted small mb-0">Released this week and not claimed yet.</p>
+              </div>
+            </header>
+            <p v-if="!released.length" class="p-3 text-muted small mb-0">Nothing released this week.</p>
+            <BookingSlotCard
+              v-for="(b, i) in released"
+              :key="b.booking_id"
+              :index="i"
+              :booking="b"
+              :actions="actionsFor(b)"
+              :busy="busyId === b.booking_id"
+              :highlight-club-id="session.activeClubId"
+              plain-owner
+              show-facility
+              @action="onBookingAction"
+            />
+          </section>
 
-      <!-- 5. Rejected -->
-      <section id="section-rejected" class="pulse-panel pulse-section overflow-hidden mb-4" style="--i: 4">
-        <header class="pulse-section-head tone-red">
-          <div>
-            <h2 class="h6 fw-bold mb-0">Rejected Transfers</h2>
-            <p class="text-muted small mb-0">OSL rejected these, or did not sign off 48 hours before the booking (the slot then stays with the releasing CCA). The history is kept.</p>
-          </div>
-          <span class="pulse-count">{{ rejectedTransfers.length }}</span>
-        </header>
-        <p v-if="!rejectedTransfers.length" class="p-3 text-muted small mb-0">No rejected transfers this week.</p>
-        <div v-for="(t, i) in rejectedTransfers" :key="t.transfer_id" class="pulse-slot is-rejected" :style="{ '--i': i }">
-          <div class="pulse-slot-when">
-            <div class="fw-semibold">{{ formatDate(t.booking_date) }}</div>
-            <div class="small text-muted">{{ formatTime(t.start_time) }} – {{ formatTime(t.end_time) }}</div>
-            <div class="small fw-semibold mt-1">{{ t.facility_name }}</div>
-          </div>
-          <div class="pulse-slot-status">
-            <span class="pulse-badge pulse-badge-rejected">{{ t.state === 'EXPIRED' ? 'Deadline passed' : 'Not approved' }}</span>
-            <div class="small mt-1"><span class="pulse-direction" :class="t.direction === 'OUTGOING' ? 'out' : 'in'">{{ t.direction === 'OUTGOING' ? '↗ Outgoing' : '↙ Incoming' }}</span></div>
-          </div>
-          <div class="pulse-slot-who small">
-            {{ t.releasing_club_name }} → <strong>{{ t.claiming_club_name }}</strong>
-            <div v-if="t.rejection_reason" class="text-muted">Reason: {{ t.rejection_reason }}</div>
-          </div>
-          <div class="pulse-slot-ref small font-monospace">{{ t.fbs_reference }}</div>
-          <div class="pulse-slot-actions small text-muted">{{ t.decided_at ? new Date(t.decided_at).toLocaleDateString('en-SG', { day: 'numeric', month: 'short' }) : '' }}</div>
-        </div>
-      </section>
-    </template>
+          <!-- Approved -->
+          <section v-else-if="activeTab === 'successful'" id="section-successful" key="successful" role="tabpanel" aria-labelledby="tab-successful" class="pulse-folder-section">
+            <header class="pulse-section-head tone-green">
+              <div>
+                <h2 class="h6 fw-bold mb-0">Successful Transfers</h2>
+                <p class="text-muted small mb-0">Approved by OSL. Slots you received also appear under My Bookings.</p>
+              </div>
+            </header>
+            <p v-if="!successfulTransfers.length" class="p-3 text-muted small mb-0">No approved transfers this week.</p>
+            <div v-for="(t, i) in successfulTransfers" :key="t.transfer_id" class="pulse-slot" :class="t.direction === 'OUTGOING' ? 'is-handed-over' : 'is-confirmed'" :style="{ '--i': i }">
+              <div class="pulse-slot-when">
+                <div class="fw-semibold">{{ formatDate(t.booking_date) }}</div>
+                <div class="small text-muted">{{ formatTime(t.start_time) }} – {{ formatTime(t.end_time) }}</div>
+                <div class="small fw-semibold mt-1">{{ t.facility_name }}</div>
+              </div>
+              <div class="pulse-slot-status">
+                <span class="pulse-transfer-tag" :class="t.direction === 'OUTGOING' ? 'out' : 'in'">{{ t.direction === 'OUTGOING' ? 'Handed over' : 'Received' }}</span>
+              </div>
+              <div class="pulse-slot-who small">
+                <component :is="t.direction === 'OUTGOING' ? 'strong' : 'span'">{{ t.releasing_club_name }}</component> →
+                <component :is="t.direction === 'OUTGOING' ? 'span' : 'strong'">{{ t.claiming_club_name }}</component>
+              </div>
+              <div class="pulse-slot-ref small font-monospace">{{ formatReference(t.fbs_reference) }}</div>
+              <div class="pulse-slot-actions small text-muted">Approved {{ t.decided_at ? new Date(t.decided_at).toLocaleDateString('en-SG', { day: 'numeric', month: 'short' }) : '' }}</div>
+            </div>
+          </section>
+
+          <!-- Rejected -->
+          <section v-else id="section-rejected" key="rejected" role="tabpanel" aria-labelledby="tab-rejected" class="pulse-folder-section">
+            <header class="pulse-section-head tone-red">
+              <div>
+                <h2 class="h6 fw-bold mb-0">Rejected Transfers</h2>
+                <p class="text-muted small mb-0">Rejected by OSL, or not approved 48 hours before the booking. The slot stays with the releasing CCA.</p>
+              </div>
+            </header>
+            <p v-if="!rejectedTransfers.length" class="p-3 text-muted small mb-0">No rejected transfers this week.</p>
+            <div v-for="(t, i) in rejectedTransfers" :key="t.transfer_id" class="pulse-slot is-rejected" :style="{ '--i': i }">
+              <div class="pulse-slot-when">
+                <div class="fw-semibold">{{ formatDate(t.booking_date) }}</div>
+                <div class="small text-muted">{{ formatTime(t.start_time) }} – {{ formatTime(t.end_time) }}</div>
+                <div class="small fw-semibold mt-1">{{ t.facility_name }}</div>
+              </div>
+              <div class="pulse-slot-status">
+                <span class="pulse-badge pulse-badge-rejected">{{ t.state === 'EXPIRED' ? 'Deadline passed' : 'Not approved' }}</span>
+              </div>
+              <div class="pulse-slot-who small">
+                <component :is="t.direction === 'OUTGOING' ? 'strong' : 'span'">{{ t.releasing_club_name }}</component> →
+                <component :is="t.direction === 'OUTGOING' ? 'span' : 'strong'">{{ t.claiming_club_name }}</component>
+                <div v-if="t.rejection_reason" class="text-muted">Reason: {{ t.rejection_reason }}</div>
+              </div>
+              <div class="pulse-slot-ref small font-monospace">{{ formatReference(t.fbs_reference) }}</div>
+              <div class="pulse-slot-actions small text-muted">{{ t.decided_at ? new Date(t.decided_at).toLocaleDateString('en-SG', { day: 'numeric', month: 'short' }) : '' }}</div>
+            </div>
+          </section>
+        </Transition>
+      </div>
+    </div>
   </template>
 
   <ConfirmActionModal

@@ -21,6 +21,7 @@ export const test=base.extend({
    const email=env['PULSE_E2E_'+role.toUpperCase()+'_EMAIL']
    expect(email,'Missing dedicated '+role+' test account').toBeTruthy()
    const context=await browser.newContext({baseURL:origin,viewport:info.project.use.viewport,isMobile:!!info.project.use.isMobile,hasTouch:!!info.project.use.hasTouch,timezoneId:'Asia/Singapore',serviceWorkers:'block'})
+   await context.addInitScript(()=>sessionStorage.setItem('pulse-open-facilities','"all"'))
    // Guard destinations without replacing real backend responses. Delivery is not exercised.
    await context.route('**/*',route=>{
     const url=new URL(route.request().url())

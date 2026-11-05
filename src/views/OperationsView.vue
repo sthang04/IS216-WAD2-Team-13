@@ -1235,7 +1235,7 @@ function clearLate(person) {
                   </div>
                   <div class="text-muted ops-small">{{ b.venue }}<span v-if="b.venue"> • </span>{{ BLOCK_TYPES[b.type].label }}</div>
                 </div>
-                <button v-if="!readOnly" type="button" class="btn btn-link btn-sm p-0 ops-small text-decoration-none" @click="openEditTask(me, b)">Edit</button>
+                <button v-if="!readOnly" type="button" class="btn btn-link btn-sm p-0 ops-small text-decoration-none text-nowrap flex-shrink-0" @click="openEditTask(me, b)">Edit</button>
               </div>
               <div v-if="!me.blocks.length" class="text-muted small">No tasks yet. Use "+ Add task" to plan {{ me.name }}'s day.</div>
             </div>

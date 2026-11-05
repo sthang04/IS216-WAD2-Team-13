@@ -970,8 +970,7 @@ body {
 }
 
 .pulse-mobile-pill {
-  flex: 1 1 0;
-  min-width: 0;
+  flex: 1 0 auto;
   display: inline-flex;
   flex-direction: row;
   align-items: center;
@@ -1030,6 +1029,11 @@ body {
 
 .pulse-mobile-pill span:not(.pill-icon) {
   white-space: nowrap;
+}
+
+@media (max-width: 400px) {
+  .pulse-mobile-pill { padding-inline: 0.45rem; }
+  .pulse-mobile-pill .pill-icon { display: none; }
 }
 
 @media (max-width: 991.98px) {

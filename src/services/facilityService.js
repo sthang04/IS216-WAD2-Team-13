@@ -32,6 +32,8 @@ export const STATUSES = {
  
 // Calendar filter value (not a status): bookings our CCA is not part of
 export const OTHER_CCA_FILTER = 'Other CCA Bookings'
+export const MY_CCA_FILTER = 'My CCA Bookings'
+export const UNAVAILABLE_FILTER = 'Unavailable'
  
 // Order used when sorting: released slots first, confirmed last
 const STATUS_ORDER = {
@@ -133,10 +135,12 @@ export function formatTime(time) {
  
 // '~40 (estimate)' or '40 (published)'
 export function capacityLabel(facility) {
-  if (facility.capacity_is_estimate) {
-    return '~' + facility.capacity + ' (estimate)'
-  }
-  return facility.capacity + ' (published)'
+  return String(facility.capacity)
+}
+
+// References are shown without the seed data's DEMO- prefix
+export function formatReference(reference) {
+  return String(reference ?? '').replace(/^DEMO-/, '')
 }
  
 // ---------------- Reading data from the database ----------------
@@ -354,7 +358,7 @@ export function bookingActions(booking, options) {
  
   // Too close to the booking date
   if (!booking.is_transfer_window_open) {
-    actions.push({ type: 'locked', label: 'Locked', hint: 'Transfers close ' + TRANSFER_LEAD_DAYS + ' days before the booking' })
+    actions.push({ type: 'locked', label: 'Locked', hint: 'Transfer requests must be made at least ' + TRANSFER_LEAD_DAYS + ' days before the booking' })
     return actions
   }
  
@@ -384,8 +388,8 @@ export function bookingActions(booking, options) {
     if (options.conflictingBooking) {
       actions.push({
         type: 'blocked_conflict',
-        label: 'Time conflict',
-        hint: 'Your CCA already holds ' + (options.conflictingBooking.facility_name || 'a facility') + ' at this time. Double booking is not permitted.'
+        label: 'Existing Booking',
+        hint: 'Your CCA already holds ' + (options.conflictingBooking.facility_name || 'a facility') + ' at this time.'
       })
       return actions
     }
@@ -405,8 +409,8 @@ export function bookingActions(booking, options) {
   } else if (options.conflictingBooking) {
     actions.push({
       type: 'blocked_conflict',
-      label: 'Time conflict',
-      hint: 'Your CCA already holds ' + (options.conflictingBooking.facility_name || 'a facility') + ' at this time. Double booking is not permitted.'
+      label: 'Existing Booking',
+      hint: 'Your CCA already holds ' + (options.conflictingBooking.facility_name || 'a facility') + ' at this time.'
     })
   } else {
     actions.push({ type: 'join', label: 'Join waitlist', variant: 'outline' })

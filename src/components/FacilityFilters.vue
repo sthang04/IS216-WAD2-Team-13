@@ -1,6 +1,6 @@
 <script setup>
 import { computed, ref, onMounted, onUnmounted, watch } from 'vue'
-import { OTHER_CCA_FILTER } from '../services/facilityService'
+import { OTHER_CCA_FILTER, MY_CCA_FILTER, UNAVAILABLE_FILTER } from '../services/facilityService'
 
 // Options come from the facilities table, not from hard-coded metadata.
 const props = defineProps({
@@ -20,12 +20,15 @@ const CAPACITY_OPTIONS = [
 ]
 
 // Values are the database statuses; labels are what users see
-const STATUS_OPTIONS = [
+const STATUS_OPTIONS = computed(() => [
   { value: 'Proposed Peer Transfer', label: 'Available to Claim' },
   { value: 'Pending Admin Sign-off', label: 'Awaiting OSL approval' },
-  { value: 'Booked', label: 'Booked' },
-  { value: 'Officially Confirmed Booking', label: 'Officially Confirmed' }
-]
+  { value: 'Booked', label: props.hasActiveClub ? 'Booked by my CCA' : 'Booked' },
+  // With a CCA, its transferred slots are under My CCA's bookings
+  ...(props.hasActiveClub
+    ? [{ value: UNAVAILABLE_FILTER, label: 'Unavailable' }]
+    : [{ value: 'Officially Confirmed Booking', label: 'Successfully Transferred' }])
+])
 
 
 const typeOptions = computed(() => [...new Set(props.facilities.map(f => f.facility_type))].sort())
@@ -45,17 +48,7 @@ const searchPlaceholderQueries = [
   "Search 'ACC'…"
 ]
 
-// Only suggest searches that can find a facility
-const SUGGESTIONS = [
-  { label: 'Dance Studios', val: 'Dance' },
-  { label: 'Band & Acoustic', val: 'Acoustic' },
-  { label: 'Mirrors', val: 'Mirrors' },
-  { label: 'ACC Concourse', val: 'ACC' }
-]
-const suggestions = computed(() => SUGGESTIONS.filter((chip) => {
-  const word = chip.val.toLowerCase()
-  return props.facilities.some((f) => [f.name, f.location, f.facility_type, ...(f.equipment || [])].join(' ').toLowerCase().includes(word))
-}))
+
 const currentSearchPlaceholder = ref('')
 let searchPlaceholderTimer = null
 let sqIndex = 0
@@ -141,24 +134,11 @@ onUnmounted(() => {
         </button>
       </div>
 
-      <!-- Quick Suggestion Chips (Apple-style fast filters) -->
-      <div class="d-flex flex-wrap align-items-center gap-1 mt-2 ps-1">
-        <span v-if="suggestions.length" class="text-muted small fw-semibold me-1" style="font-size: 0.72rem;">Suggested:</span>
-        <button
-          v-for="chip in suggestions"
-          :key="chip.label"
-          type="button"
-          class="btn btn-sm pulse-search-chip"
-          :class="{ active: filters.search === chip.val }"
-          @click="update('search', filters.search === chip.val ? '' : chip.val)"
-        >
-          {{ chip.label }}
-        </button>
       </div>
-    </div>
 
     <!-- 4 Filter Dropdowns -->
-    <div class="row g-2 g-md-3 pt-2 border-top">
+    <div class="mt-4 pt-3 border-top">
+    <div class="row g-2 g-md-3">
       <div class="col-6 col-md-6 col-xl-3">
         <label class="form-label small fw-bold mb-1" for="f-type">Facility Type</label>
         <select id="f-type" class="form-select form-select-sm" :value="filters.type" @change="update('type', $event.target.value)">
@@ -186,11 +166,13 @@ onUnmounted(() => {
           <optgroup label="By status">
             <option v-for="opt in STATUS_OPTIONS" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
           </optgroup>
-          <optgroup v-if="hasActiveClub" label="By CCA">
-            <option :value="OTHER_CCA_FILTER">Other CCA Bookings</option>
+          <optgroup v-if="hasActiveClub" label="By holder">
+            <option :value="MY_CCA_FILTER">My CCA's bookings</option>
+            <option :value="OTHER_CCA_FILTER">Other CCAs' bookings</option>
           </optgroup>
         </select>
       </div>
+    </div>
     </div>
   </section>
 </template>

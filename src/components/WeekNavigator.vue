@@ -8,7 +8,7 @@ import {
 // Drawn like a desk calendar: a header with binder rings, then one tile per day.
 const props = defineProps({
   weekStart: { type: String, required: true },
-  // Optional { 'YYYY-MM-DD': { available, pending } } shown on each day tile.
+  // Optional { 'YYYY-MM-DD': { available } } shown on each day tile.
   dayCounts: { type: Object, default: null },
   // Optional day filter (v-model:selected-day); null means the whole week.
   selectedDay: { type: String, default: null },
@@ -25,11 +25,13 @@ const monthLabel = computed(() =>
 
 // Tells people up front which days in this week can still be transferred.
 const lockNote = computed(() => {
+  const today = singaporeToday()
   const cutoff = transferCutoffDate()
   const weekEnd = addDays(props.weekStart, 6)
-  if (cutoff <= props.weekStart) return { open: true, text: 'Every day this week is open for transfers' }
-  if (cutoff > weekEnd) return { open: false, text: 'This whole week is inside the 4-day lock' }
-  return { open: true, text: `Transfers open from ${formatDate(cutoff)} (4-day rule)` }
+  if (cutoff <= props.weekStart) return { open: true, text: 'Every day this week is open for transfers.' }
+  if (weekEnd < today) return { open: false, text: 'This week has passed.' }
+  if (cutoff > weekEnd) return { open: false, text: 'Transfer requests must be made at least 4 days before the booking.' }
+  return { open: false, text: `Transfers for this week open from ${formatDate(cutoff)}. Requests must be made at least 4 days before the booking.` }
 })
 
 const days = computed(() => {
@@ -43,7 +45,8 @@ const days = computed(() => {
       weekday: d.toLocaleDateString('en-SG', { weekday: 'short', timeZone: 'UTC' }),
       day: d.getUTCDate(),
       today: date === today,
-      locked: date < cutoff,
+      passed: date < today,
+      locked: date >= today && date < cutoff,
       outside: date > CALENDAR_END,
       counts: props.dayCounts?.[date] || null
     }
@@ -69,8 +72,16 @@ function jumpTo(value) {
   emit('update:weekStart', week)
 }
 
+function slotsLabel(count) {
+  return count + ' available slot' + (count === 1 ? '' : 's')
+}
+
+function openDatePicker(event) {
+  try { event.target.showPicker?.() } catch { /* the browser opens its own picker */ }
+}
+
 function pickDay(day) {
-  if (!props.selectable || day.outside) return
+  if (!props.selectable || day.outside || day.passed || day.locked) return
   emit('update:selectedDay', props.selectedDay === day.date ? null : day.date)
 }
 </script>
@@ -87,27 +98,34 @@ function pickDay(day) {
           <Transition name="swap" mode="out-in">
             <h2 :key="label" class="h4 fw-bold mb-0">{{ label }}</h2>
           </Transition>
-          <span v-if="isDefault" class="pulse-cal-chip">Next week</span>
+          <span v-if="isDefault" class="pulse-cal-chip">Upcoming week</span>
           <button v-else type="button" class="pulse-cal-link" @click="emit('update:weekStart', defaultWeekStart())">
-            Back to next week
+            Go to upcoming week
           </button>
         </div>
       </div>
 
-      <div class="d-flex align-items-center gap-2">
-        <button type="button" class="pulse-cal-arrow" aria-label="Previous week" :disabled="weekStart <= minWeek" @click="shift(-1)">‹</button>
-        <label class="visually-hidden" for="week-jump">Jump to week</label>
-        <input
-          id="week-jump"
-          type="date"
-          class="form-control form-control-sm pulse-cal-jump"
-          title="Jump to week"
-          :value="weekStart"
-          :min="minWeek"
-          :max="CALENDAR_END"
-          @change="jumpTo($event.target.value)"
-        />
-        <button type="button" class="pulse-cal-arrow" aria-label="Next week" :disabled="weekStart >= maxWeek" @click="shift(1)">›</button>
+      <div class="pulse-cal-nav">
+        <button type="button" class="pulse-cal-step" aria-label="Previous week" :disabled="weekStart <= minWeek" @click="shift(-1)">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg>Previous<span class="pulse-cal-long"> week</span>
+        </button>
+        <label class="pulse-cal-step pulse-cal-choose" for="week-jump">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="5" width="16" height="16" rx="2"/><path d="M16 3v4M8 3v4M4 11h16"/></svg>Choose date
+          <input
+            id="week-jump"
+            type="date"
+            aria-label="Jump to week"
+            title="Choose date"
+            :value="weekStart"
+            :min="minWeek"
+            :max="CALENDAR_END"
+            @click="openDatePicker"
+            @change="jumpTo($event.target.value)"
+          />
+        </label>
+        <button type="button" class="pulse-cal-step" aria-label="Next week" :disabled="weekStart >= maxWeek" @click="shift(1)">
+          Next<span class="pulse-cal-long"> week</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg>
+        </button>
       </div>
     </header>
 
@@ -121,19 +139,22 @@ function pickDay(day) {
         :role="selectable ? 'button' : 'listitem'"
         :type="selectable ? 'button' : undefined"
         class="pulse-cal-day"
-        :class="{ today: day.today, locked: day.locked, outside: day.outside, selected: selectedDay === day.date, selectable }"
+        :class="{ today: day.today, locked: day.locked, passed: day.passed, outside: day.outside, selected: selectedDay === day.date, selectable: selectable && !day.passed && !day.locked }"
         :aria-pressed="selectable ? selectedDay === day.date : undefined"
-        :title="day.locked ? 'Inside the 4-day lock: no transfers' : ''"
+        :disabled="selectable && (day.passed || day.locked || day.outside) ? true : undefined"
+        :title="day.locked ? 'Transfer requests must be made at least 4 days before the booking' : day.passed ? 'This day has passed' : ''"
         @click="pickDay(day)"
       >
-        <span class="pulse-cal-weekday">{{ day.weekday }}</span>
-        <span class="pulse-cal-num">{{ day.day }}</span>
-        <span v-if="day.today" class="pulse-cal-mark" aria-label="Today">✓</span>
-        <span v-else-if="day.locked" class="pulse-cal-mark" aria-label="Locked">🔒</span>
-        <span v-if="day.counts" class="pulse-cal-counts">
-          <span v-if="day.counts.available" class="pulse-cal-pill claim">{{ day.counts.available }} open</span>
-          <span v-if="day.counts.pending" class="pulse-cal-pill sky">{{ day.counts.pending }} pending</span>
+        <span class="pulse-cal-top">
+          <span class="pulse-cal-weekday">{{ day.weekday }}</span>
+          <span v-if="day.today" class="pulse-cal-tag today"><span class="pulse-cal-tag-text">Today</span></span>
+          <span v-else-if="day.passed" class="pulse-cal-tag"><span class="pulse-cal-tag-text">Passed</span></span>
+          <span v-else-if="day.locked" class="pulse-cal-tag locked">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg><span class="pulse-cal-tag-text">Locked</span>
+          </span>
         </span>
+        <span class="pulse-cal-num">{{ day.day }}</span>
+        <span v-if="day.counts?.available && !day.passed && !day.locked" class="pulse-cal-entry" :aria-label="slotsLabel(day.counts.available)"><span class="pulse-cal-entry-count">{{ day.counts.available }}</span><span class="pulse-cal-entry-text"> available slot{{ day.counts.available === 1 ? '' : 's' }}</span></span>
       </component>
     </div>
       </Transition>
@@ -141,10 +162,12 @@ function pickDay(day) {
 
     <footer class="pulse-cal-foot">
       <span class="pulse-lock-note" :class="{ open: lockNote.open }">
-        <span class="pulse-dot"></span>{{ lockNote.text }}
+        <svg v-if="!lockNote.open" viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>
+        <span v-else class="pulse-dot"></span>{{ lockNote.text }}
       </span>
-      <span v-if="selectable" class="text-muted small">
-        {{ selectedDay ? `Showing ${formatDate(selectedDay)} only.` : 'Pick a day to show only that day.' }}
+      <span v-if="Object.values(dayCounts || {}).some((c) => c.available)" class="pulse-cal-key"><span class="pulse-cal-key-dot" aria-hidden="true"></span>Slots available to claim</span>
+      <span v-if="selectable" class="pulse-cal-hint">
+        {{ selectedDay ? `Showing ${formatDate(selectedDay)} only.` : 'Select a day to see only its bookings.' }}
         <button v-if="selectedDay" type="button" class="btn btn-link btn-sm p-0 align-baseline" @click="emit('update:selectedDay', null)">Show whole week</button>
       </span>
     </footer>

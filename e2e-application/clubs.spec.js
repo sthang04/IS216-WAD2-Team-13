@@ -25,11 +25,12 @@ test('My Club release moves assigned booking into its released section',async({p
 
 test('failed outgoing transfer email can be retried after explicit review',async({page,app})=>{
  await app.open('/facilities/my-club',{authenticated:true,facilities:true,transfers:true,emailFailed:true})
+ await page.getByRole('tab',{name:/^Pending/}).click()
  await page.getByRole('button',{name:'Resend to OSL',exact:true}).click()
  const dialog=page.getByRole('dialog',{name:'Resend the transfer request to OSL?',exact:true})
  await expect(dialog).toContainText('FIXTURE-FBS-502')
  await dialog.getByRole('button',{name:'Resend to OSL',exact:true}).click()
  await expect(page.getByRole('status').filter({hasText:'Request queued for OSL.'})).toBeVisible()
- await expect(page.locator('#section-pending')).toContainText('Emailed to OSL for review')
+ await expect(page.locator('#section-pending')).toContainText('Emailed to OSL')
  await expect(page.getByRole('button',{name:'Resend to OSL',exact:true})).toHaveCount(0)
 })

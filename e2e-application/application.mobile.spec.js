@@ -57,3 +57,18 @@ test('mobile heatmap remains scrollable and availability updates by touch',async
  expect(await scroll.evaluate(e=>e.scrollLeft)).toBeGreaterThan(0)
  await fit(page)
 })
+
+test('the whole week and the page tabs fit on a phone without clipping',async({page,app})=>{
+ await app.open('/facilities',{authenticated:true,facilities:true})
+ const size=page.viewportSize()
+ const days=page.locator('.pulse-cal-day')
+ await expect(days).toHaveCount(7)
+ for(let i=0;i<7;i++){const b=await days.nth(i).boundingBox();expect(b.x).toBeGreaterThanOrEqual(0);expect(b.x+b.width).toBeLessThanOrEqual(size.width)}
+ const pills=page.locator('.pulse-mobile-pill')
+ for(let i=0;i<await pills.count();i++){
+  const clipped=await pills.nth(i).evaluate(el=>el.scrollWidth>el.clientWidth+1)
+  expect(clipped).toBe(false)
+ }
+ const last=await pills.last().boundingBox()
+ expect(last.x+last.width).toBeLessThanOrEqual(size.width)
+})

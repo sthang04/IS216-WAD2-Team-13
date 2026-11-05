@@ -17,7 +17,7 @@ test('three-step booking modal preserves evidence, refresh and fail-closed linki
  await modal.getByLabel('Activity for calendar',{exact:true}).selectOption('2')
  await expect(modal.getByRole('link',{name:'Open Facility Calendar for selected activity',exact:true})).toHaveAttribute('href','/facilities?week=2026-11-02')
  await modal.getByText('Inspect linked records for Fixture activity 2 (1)',{exact:true}).click();await expect(modal).toContainText('Fixture Original Room');await expect(modal).toContainText('Booking 1')
- await modal.getByRole('button',{name:'Find eligible original bookings',exact:true}).click();await expect(modal).toContainText('Original booking linking is unavailable')
+ await modal.getByRole('button',{name:'Find eligible original bookings',exact:true}).click();await expect(modal).toContainText('original booking linking is turned off')
  await expect(modal.getByRole('button',{name:'Link approved booking to activity',exact:true})).toBeDisabled()
  await modal.getByLabel('I confirm this booking and activity, actual audience capacity, required equipment and suitability.',{exact:true}).check();await expect(modal.getByRole('button',{name:'Link approved booking to activity',exact:true})).toBeDisabled()
  await modal.getByRole('button',{name:'Refresh booking information',exact:true}).click();await expect(modal.getByLabel('I confirm this booking and activity, actual audience capacity, required equipment and suitability.',{exact:true})).not.toBeChecked()

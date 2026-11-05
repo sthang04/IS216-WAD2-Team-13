@@ -16,7 +16,7 @@ import ConfirmActionModal from '../components/ConfirmActionModal.vue'
 import { loadOffers } from '../services/notificationStore'
 import { session, activeClubName, canManageActiveClub, showToast } from '../services/sessionState'
 import {
-  STATUSES, OTHER_CCA_FILTER, fetchFacilities, fetchCalendar, releaseBooking, undoRelease, claimBooking,
+  STATUSES, OTHER_CCA_FILTER, MY_CCA_FILTER, UNAVAILABLE_FILTER, formatReference, fetchFacilities, fetchCalendar, releaseBooking, undoRelease, claimBooking,
   listenForCalendarChanges, bookingActions, defaultWeekStart, weekStartOf, addDays,
   formatWeekLabel, formatDate, formatTime
 } from '../services/facilityService'
@@ -208,6 +208,17 @@ function matchesAvailability(booking) {
     // No CCA to compare against (guest, OSL): show everything instead of nothing
     return !session.value.activeClubId || isOtherCcaBooking(booking)
   }
+  const clubId = session.value.activeClubId
+  if (choice === MY_CCA_FILTER) {
+    return booking.owner_club_id === clubId
+  }
+  if (choice === UNAVAILABLE_FILTER) {
+    return booking.owner_club_id !== clubId && (booking.status === STATUSES.BOOKED || booking.status === STATUSES.CONFIRMED)
+  }
+  // With a CCA, these two mean "ours": other CCAs' slots are under Unavailable
+  if (clubId && (choice === STATUSES.BOOKED || choice === STATUSES.CONFIRMED) && booking.owner_club_id !== clubId) {
+    return false
+  }
   return booking.status === choice
 }
 
@@ -233,7 +244,7 @@ const visibleBookings = computed(() => {
   })
 })
 
-// Open and pending slots per day, shown on the week calendar tiles
+// Slots available to claim per day, shown on the week calendar tiles
 const dayCounts = computed(() => {
   const result = {}
   const facilityById = new Map(facilities.value.map((facility) => [facility.id, facility]))
@@ -246,14 +257,8 @@ const dayCounts = computed(() => {
     if (!bookingMatchesSimulatorFocus(booking, simulatorFocus.value) || !matchesAvailability(booking)) {
       return
     }
-    if (!result[booking.booking_date]) {
-      result[booking.booking_date] = { available: 0, pending: 0 }
-    }
     if (booking.status === STATUSES.PROPOSED) {
-      result[booking.booking_date].available += 1
-    }
-    if (booking.status === STATUSES.PENDING) {
-      result[booking.booking_date].pending += 1
+      result[booking.booking_date] = { available: (result[booking.booking_date]?.available || 0) + 1 }
     }
   })
   return result
@@ -281,24 +286,57 @@ const groups = computed(() => {
   return result
 })
 
-// Totals shown at the top of the page
+// The two numbers at the top of the page
 const counts = computed(() => {
-  const result = { booked: 0, available: 0, pending: 0 }
+  const result = { available: 0, pending: 0 }
   groups.value.forEach((group) => {
     group.bookings.forEach((booking) => {
-      if (booking.status === STATUSES.BOOKED) {
-        result.booked += 1
-      } else if (booking.status === STATUSES.PROPOSED) {
-        result.available += 1
-      } else if (booking.status === STATUSES.PENDING) {
-        result.pending += 1
-      }
+      if (booking.status === STATUSES.PROPOSED) result.available += 1
+      if (booking.status === STATUSES.PENDING) result.pending += 1
     })
   })
   return result
 })
 
-// booking_id -> our waitlist entry for it
+// ---------- Which facilities are open ----------
+// Remembered for this tab, so a live reload or a refresh doesn't fold everything away.
+const OPEN_KEY = 'pulse-open-facilities'
+function readOpenFacilities() {
+  try {
+    return JSON.parse(sessionStorage.getItem(OPEN_KEY)) ?? []
+  } catch {
+    return []
+  }
+}
+const openFacilities = ref(readOpenFacilities())
+watch(openFacilities, (ids) => {
+  try { sessionStorage.setItem(OPEN_KEY, JSON.stringify(ids)) } catch { /* storage blocked: just not remembered */ }
+})
+
+function isOpen(id) {
+  return openFacilities.value === 'all' || openFacilities.value.includes(id)
+}
+
+function toggleFacility(id) {
+  const ids = openFacilities.value === 'all' ? groups.value.map((group) => group.facility.id) : openFacilities.value
+  openFacilities.value = ids.includes(id) ? ids.filter((other) => other !== id) : [...ids, id]
+}
+
+const allOpen = computed(() => groups.value.length > 0 && groups.value.every((group) => isOpen(group.facility.id)))
+
+function toggleAll() {
+  openFacilities.value = allOpen.value ? [] : groups.value.map((group) => group.facility.id)
+}
+
+// Narrowing the list is a search for something: show what it found
+watch(() => [filters.value.availability, filters.value.search, selectedDay.value, !!simulatorFocus.value], () => {
+  const narrowing = filters.value.availability !== 'All' || filters.value.search.trim() !== '' || selectedDay.value !== null || !!simulatorFocus.value
+  if (narrowing && openFacilities.value !== 'all') {
+    openFacilities.value = [...new Set([...openFacilities.value, ...groups.value.map((group) => group.facility.id)])]
+  }
+})
+
+
 const entryByBooking = computed(() => {
   const result = {}
   myEntries.value.forEach((entry) => {
@@ -350,7 +388,8 @@ const CONFIRM_TEXT = {
   },
   claim: {
     title: 'Claim this slot?',
-    message: 'The booking becomes Awaiting OSL approval. It is only official once OSL approves the transfer.',
+    message: 'OSL has to approve this claim before it is official.',
+    warning: 'Once OSL approves, this slot is yours and you can’t release it again.',
     confirmLabel: 'Submit claim'
   },
   leave: {
@@ -366,7 +405,7 @@ function slotDetails(booking) {
     { label: 'Facility', value: booking.facility_name },
     { label: 'When', value: formatDate(booking.booking_date, true) + ', ' + formatTime(booking.start_time) + ' – ' + formatTime(booking.end_time) },
     { label: 'Holder', value: booking.owner_club_name },
-    { label: 'FBS reference', value: booking.fbs_reference }
+    { label: 'FBS reference', value: formatReference(booking.fbs_reference) }
   ]
 }
 
@@ -398,6 +437,7 @@ function onAction(type, booking) {
     booking: booking,
     title: text.title,
     message: text.message,
+    warning: text.warning,
     confirmLabel: text.confirmLabel,
     danger: text.danger,
     details: slotDetails(booking)
@@ -464,11 +504,10 @@ async function runAction(booking, action) {
 
   <PageHero
     title="Pulse - Master Facility Calendar"
-    subtitle="Find released CCA facility slots and coordinate peer transfers through one streamlined workflow."
+    subtitle="Browse facility bookings and claim slots other CCAs have released."
     :stats="[
-      { label: 'Booked', value: counts.booked, tone: 'plain' },
-      { label: 'Available to claim', value: counts.available, tone: 'green' },
-      { label: 'Awaiting OSL approval', value: counts.pending, tone: 'sky' }
+      { label: 'Facilities available', value: counts.available, tone: 'violet' },
+      { label: 'Pending', value: counts.pending, tone: 'sky' }
     ]"
   />
 
@@ -501,7 +540,7 @@ async function runAction(booking, action) {
     Look for "Accept offer" below, or open the <RouterLink to="/facilities/waitlist">Waitlist</RouterLink> tab.
   </div>
 
-  <FacilityFilters v-model:filters="filters" :facilities="facilities" :week-label="weekLabel" />
+  <FacilityFilters v-model:filters="filters" :facilities="facilities" :week-label="weekLabel" :has-active-club="!!session.activeClubId" />
 
   <div v-if="loading" class="text-center py-5">
     <div class="spinner-border text-danger" role="status"></div>
@@ -511,13 +550,18 @@ async function runAction(booking, action) {
     <h2 class="h6 fw-bold">No facilities match these filters</h2>
     <p class="text-muted small mb-0">Try another week or loosen the filters.</p>
   </div>
-  <div v-else class="d-flex flex-column gap-4">
+  <div v-else class="d-flex flex-column gap-3">
+    <div class="d-flex justify-content-end">
+      <button type="button" class="btn btn-sm btn-outline-secondary" @click="toggleAll">{{ allOpen ? 'Collapse all' : 'Expand all' }}</button>
+    </div>
     <FacilityCard
       v-for="(group, i) in groups"
       :key="group.facility.id"
       :index="i"
       :highlight-club-id="session.activeClubId"
       :facility="group.facility"
+      :expanded="isOpen(group.facility.id)"
+      @toggle="toggleFacility"
       :bookings="group.bookings"
       :actions-by-booking="actionsByBooking"
       :waitlist-by-booking="canManageActiveClub ? entryByBooking : {}"
@@ -530,6 +574,7 @@ async function runAction(booking, action) {
     :show="!!pending"
     :title="pending?.title"
     :message="pending?.message"
+    :warning="pending?.warning"
     :details="pending?.details || []"
     :confirm-label="pending?.confirmLabel"
     :danger="pending?.danger"
