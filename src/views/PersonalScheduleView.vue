@@ -575,7 +575,6 @@ function exportCalendarICS() {
 
 <template>
   <div class="py-2">
-    <SimulatorInvitationInbox v-if="!readOnly" />
     
 
     <!-- Top Header & Actions -->
@@ -745,6 +744,8 @@ function exportCalendarICS() {
             Add Event / Class
           </button>
         </div>
+
+        <SimulatorInvitationInbox v-if="!readOnly" />
 
         <!-- Academic & Rehearsal Clash Detector (only if the viewed day has a clash) -->
         <div v-if="dayHasConflict" class="card border-0 shadow-sm p-3 mb-4" style="background-color: #fffbeb; border-left: 4px solid #f59e0b !important; border-radius: 0.75rem;">

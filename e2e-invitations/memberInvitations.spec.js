@@ -11,7 +11,7 @@ async function boot(page,path='/personal-schedule'){
  await page.route('**/src/supabase.js*',route=>route.fulfill({contentType:'application/javascript',body:client}))
  await page.route('**/src/services/simulatorWorkflowService.js*',route=>route.fulfill({contentType:'application/javascript',body:service.replace(/^export const SIMULATOR_WORKFLOW_VERIFIED = .*$/m,'export const SIMULATOR_WORKFLOW_VERIFIED = true')}))
  await page.goto(path)
- await expect(page.getByRole('heading',{name:'My Replacement Invitations',exact:true})).toBeVisible()
+ await expect(page.getByRole('heading',{name:'Replacement Invitations',exact:true})).toBeVisible()
  await expect(page.locator('#simulator-invitation-inbox')).toHaveAttribute('aria-busy','false')
 }
 const card=(page,id)=>page.locator('[data-invitation-id="'+id+'"]')
@@ -32,8 +32,8 @@ test('ordinary member uses actual PULSE navigation and sees complete invitation 
   await nav.getByRole('button',{name:/Heatmap/}).click()
   await nav.getByRole('button',{name:/My Schedule/}).click()
  }else{
-  await page.getByRole('button',{name:'Availability Heatmap',exact:true}).click()
-  await page.getByRole('button',{name:'Personal Schedule',exact:true}).click()
+  await page.getByRole('button',{name:/^(Availability )?Heatmap$/}).click()
+  await page.getByRole('button',{name:/^(Personal )?Schedule$/}).click()
  }
  await expect(page).toHaveURL(/personal-schedule/)
  const item=card(page,'accept-me')
@@ -69,14 +69,14 @@ test('expired and cancelled invitations cannot be answered',async({page})=>{
 test('deep link scrolls and focuses the visible inbox; layout fits desktop and mobile',async({page})=>{
  await boot(page,'/personal-schedule#simulator-invitation-inbox')
  const inbox=page.locator('#simulator-invitation-inbox');await expect(inbox).toBeFocused()
- const box=await inbox.boundingBox(),header=await page.getByRole('banner').boundingBox();expect(box.y).toBeGreaterThanOrEqual(header.y+header.height);expect(box.y).toBeLessThan(header.height+40)
+ await expect.poll(async()=>{const box=await inbox.boundingBox(),header=await page.getByRole('banner').boundingBox();return box.y>=header.y+header.height && box.y<header.height+40}).toBe(true)
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true)
  await page.screenshot({path:test.info().outputPath('member-invitations.png')})
 })
 test('friendly empty state and read failure remain distinct',async({page})=>{
- await boot(page);await page.evaluate(()=>window.__memberInvitations.empty());await page.getByRole('button',{name:'Refresh my invitations',exact:true}).click()
+ await boot(page);await page.evaluate(()=>window.__memberInvitations.empty());await page.getByRole('button',{name:'Refresh',exact:true}).click()
  await expect(page.locator('#simulator-invitation-inbox').getByText(/all caught up/)).toBeVisible()
- await page.evaluate(()=>window.__memberInvitations.readError=true);await page.getByRole('button',{name:'Refresh my invitations',exact:true}).click()
+ await page.evaluate(()=>window.__memberInvitations.readError=true);await page.getByRole('button',{name:'Refresh',exact:true}).click()
  await expect(page.getByText(/Inbox unavailable/)).toBeVisible();await expect(page.locator('#simulator-invitation-inbox').getByText(/all caught up/)).toHaveCount(0)
 })
 test('loading, write errors and disabled backend gate are visible and never imply success',async({page})=>{
@@ -86,9 +86,47 @@ test('loading, write errors and disabled backend gate are visible and never impl
  await expect(page.getByText(/^Saving your response/)).toBeVisible()
  await page.evaluate(()=>window.__memberInvitations.releaseWrites())
  await expect(page.getByRole('alert')).toContainText('Fixture response unavailable')
- await page.evaluate(()=>{window.__memberInvitations.gate=false;window.__memberInvitations.holdReads=true});await page.getByRole('button',{name:'Refresh my invitations',exact:true}).click()
+ await page.evaluate(()=>{window.__memberInvitations.gate=false;window.__memberInvitations.holdReads=true});await page.getByRole('button',{name:'Refresh',exact:true}).click()
  await expect(page.getByText(/^Loading your invitations/)).toBeVisible()
  await page.evaluate(()=>window.__memberInvitations.releaseReads())
  await expect(card(page,'accept-me').getByRole('button',{name:'Accept this invitation',exact:true})).toBeDisabled()
  await expect(page.getByText(/Responses are currently unavailable/)).toBeVisible()
+})
+
+
+test('empty disabled inbox has no warning and automatically receives new invitations',async({page})=>{
+ await boot(page)
+ await page.evaluate(()=>{window.__memberInvitations.gate=false;window.__memberInvitations.empty()})
+ await page.getByRole('button',{name:'Refresh',exact:true}).click()
+ await expect(page.locator('#simulator-invitation-inbox').getByText(/all caught up/)).toBeVisible()
+ await expect(page.getByText(/Responses are currently unavailable/)).toHaveCount(0)
+ await page.evaluate(()=>{
+  const control=window.__memberInvitations
+  control.gate=true
+  control.state().rows.push({id:'new-request',event_name:'New rehearsal',recipient_member_id:7,status:'Pending',expires_at:'2099-11-01T00:00:00Z',assignment_snapshot:[]})
+  window.dispatchEvent(new Event('focus'))
+ })
+ await expect(card(page,'new-request')).toContainText('New rehearsal')
+ await expect(card(page,'new-request').getByRole('button',{name:'Accept this invitation',exact:true})).toBeEnabled()
+})
+
+
+test('invitation dropdown closes, refreshes while closed, and reopens with keyboard',async({page})=>{
+ await boot(page)
+ const toggle=page.getByRole('button',{name:'Replacement Invitations',exact:true})
+ const content=page.locator('#replacement-invitation-content')
+ await expect(toggle).toHaveAttribute('aria-expanded','true')
+ await toggle.click()
+ await expect(toggle).toHaveAttribute('aria-expanded','false')
+ await expect(content).toBeHidden()
+ await page.evaluate(()=>window.__memberInvitations.empty())
+ await page.getByRole('button',{name:'Refresh',exact:true}).click()
+ await expect(page.locator('#simulator-invitation-inbox')).toHaveAttribute('aria-busy','false')
+ await expect(content).toBeHidden()
+ await toggle.focus()
+ await page.keyboard.press('Enter')
+ await expect(toggle).toHaveAttribute('aria-expanded','true')
+ await expect(content.getByText(/all caught up/)).toBeVisible()
+ await page.keyboard.press('Space')
+ await expect(content).toBeHidden()
 })
