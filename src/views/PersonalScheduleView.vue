@@ -6,6 +6,8 @@ import SimulatorInvitationInbox from '../components/SimulatorInvitationInbox.vue
 import { getWalkTime } from '../services/onemap';
 import { supabase } from '../supabase';
 import { demoMemberId, session } from '../services/sessionState';
+import { fetchMyBaseline } from '../services/meetingService';
+import { icsEventsOn } from '../services/icsBaseline';
 
 const props = defineProps({
   active: { type: Boolean, default: true },
@@ -22,19 +24,18 @@ const props = defineProps({
   }
 });
 
-// Simulator linked code
-// App.vue keeps panes mounted with v-show. Scroll only after this member page
-// becomes visible, including a deep link opened before session restoration.
-const route=useRoute()
-watch([()=>route.hash,()=>props.active],async([hash,active])=>{
- if(active && !props.readOnly && hash==='#simulator-invitation-inbox'){
-  await nextTick()
-  const inbox=document.getElementById('simulator-invitation-inbox')
-  if(inbox)inbox.style.scrollMarginTop=((document.querySelector('header')?.getBoundingClientRect().height || 0)+16)+'px'
-  inbox?.scrollIntoView({block:'start'})
-  inbox?.focus({preventScroll:true})
- }
-},{immediate:true,flush:'post'})
+// Simulator linked code navigation
+const route = useRoute();
+watch([() => route.hash, () => props.active], async ([hash, active]) => {
+  if (active && !props.readOnly && hash === '#simulator-invitation-inbox') {
+    await nextTick();
+    const inbox = document.getElementById('simulator-invitation-inbox');
+    if (inbox) inbox.style.scrollMarginTop = ((document.querySelector('header')?.getBoundingClientRect().height || 0) + 16) + 'px';
+    inbox?.scrollIntoView({ block: 'start' });
+    inbox?.focus({ preventScroll: true });
+  }
+}, { immediate: true, flush: 'post' });
+
 const isCheckedIn = ref(false);
 const isLocating = ref(false);
 const checkInMsg = ref('');
@@ -42,41 +43,40 @@ const toastMsg = ref('');
 
 // Guests can look around but not make changes
 function blockedForGuest() {
-  if (!props.readOnly) return false
-  toastMsg.value = 'Guest view is read-only. Sign in as a CCA ExCo to make changes.'
-  return true
+  if (!props.readOnly) return false;
+  toastMsg.value = 'Guest view is read-only. Sign in as a CCA ExCo to make changes.';
+  return true;
 }
 
-const selectedCategory = ref('All'); // 'All', 'CCA', 'Academic', 'Adhoc'
+const selectedCategory = ref('All'); // 'All', 'CCA', 'Academic', 'Day-of Ops', 'Adhoc'
 const showModal = ref(false);
 const isEditing = ref(false);
 const editingId = ref(null);
 const formError = ref('');
 
-// ---- Day being viewed (switch to a future day to prefill it in advance) ----
+// ---- Day being viewed ----
 const selectedDate = ref('2026-10-23');
 
 function parseISO(s) {
-  const [y, m, d] = s.split('-').map(Number)
-  return new Date(y, m - 1, d)
+  const [y, m, d] = s.split('-').map(Number);
+  return new Date(y, m - 1, d);
 }
 function toISO(dt) {
-  return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`
+  return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`;
 }
 function shiftDay(n) {
-  if (!selectedDate.value) return
-  const dt = parseISO(selectedDate.value)
-  dt.setDate(dt.getDate() + n)
-  selectedDate.value = toISO(dt)
+  if (!selectedDate.value) return;
+  const dt = parseISO(selectedDate.value);
+  dt.setDate(dt.getDate() + n);
+  selectedDate.value = toISO(dt);
 }
 const selectedDateLabel = computed(() => {
-  if (!selectedDate.value) return 'Pick a date'
+  if (!selectedDate.value) return 'Pick a date';
   return parseISO(selectedDate.value).toLocaleDateString('en-SG', {
     weekday: 'long', day: 'numeric', month: 'long', year: 'numeric'
-  })
-})
+  });
+});
 
-// 'Adhoc' is stored in the data, 'Ad hoc' is what people see
 function categoryLabel(cat) {
   if (cat === 'Adhoc') return 'Ad hoc';
   if (cat === 'Day-of Ops') return 'Day-of Ops';
@@ -94,26 +94,58 @@ const SMU_BUILDINGS = [
   'SMU Administration Building'
 ];
 
-// Initial Schedule Events with structured building names & room details
+// Initial Schedule Events with updated venue locations and realistic timings
 const defaultEvents = [
   {
     id: 1,
-    title: 'IS216 Web Application Development II (G1)',
-    category: 'Academic',
+    title: 'Collect Props & Audio Gear',
+    category: 'Day-of Ops',
     date: '2026-10-23',
-    startTime: '15:30',
-    endTime: '17:00',
-    // Exact official OneMap building search string
-    building: 'SMU SCHOOL OF COMPUTING AND INFORMATION SYSTEMS 1',
-    room: 'Seminar Room 2.1',
-    venue: 'Seminar Room 2.1, SCIS1',
-    role: 'Undergraduate Student',
-    status: 'Completed',
-    notes: 'Sprint presentation dry-run and Vue component architecture lab.',
-    isCustom: false
+    startTime: '15:00',
+    endTime: '16:00',
+    building: 'SMU SCHOOL OF ECONOMICS & SCHOOL OF SOCIAL SCIENCES',
+    room: 'Studio 7.1 (SOE Level 7)',
+    venue: 'Studio 7.1, SOE Level 7',
+    role: 'Logistics Lead',
+    status: 'Not Started',
+    notes: 'Collect wireless mics and prop trunks from storage room.',
+    isCustom: false,
+    isOpsTask: true
   },
   {
     id: 2,
+    title: 'Walk to Main Hall',
+    category: 'Day-of Ops',
+    date: '2026-10-23',
+    startTime: '16:00',
+    endTime: '16:30',
+    building: 'LI KA SHING LIBRARY',
+    room: 'Main Hall B1',
+    venue: 'Main Hall B1, Li Ka Shing Library',
+    role: 'Stage Runner',
+    status: 'Not Started',
+    notes: 'Transit with gear trunks from SOE Level 7 Studio 7.1 to Main Hall B1.',
+    isCustom: false,
+    isOpsTask: true
+  },
+  {
+    id: 3,
+    title: 'Stage & Floor Setup',
+    category: 'Day-of Ops',
+    date: '2026-10-23',
+    startTime: '16:30',
+    endTime: '17:30',
+    building: 'LI KA SHING LIBRARY',
+    room: 'Main Hall Stage B1',
+    venue: 'Main Hall Stage B1, Li Ka Shing Library',
+    role: 'Stage Setup Lead',
+    status: 'Not Started',
+    notes: 'Tape floor markers and place sound monitors.',
+    isCustom: false,
+    isOpsTask: true
+  },
+  {
+    id: 5,
     title: 'Act 2 Floor Positioning & Soundcheck',
     category: 'CCA',
     date: '2026-10-23',
@@ -128,7 +160,7 @@ const defaultEvents = [
     isCustom: false
   },
   {
-    id: 3,
+    id: 6,
     title: 'Act 2 Audio & Lighting Programming',
     category: 'Adhoc',
     date: '2026-10-23',
@@ -143,7 +175,7 @@ const defaultEvents = [
     isCustom: false
   },
   {
-    id: 4,
+    id: 7,
     title: 'Opening Night Live Production (Curtain Call)',
     category: 'CCA',
     date: '2026-10-23',
@@ -158,15 +190,15 @@ const defaultEvents = [
     isCustom: false
   },
   {
-    id: 5,
+    id: 8,
     title: 'Eurhythmix ExCo Debrief & Safety Check',
     category: 'Adhoc',
     date: '2026-10-23',
     startTime: '22:00',
     endTime: '22:30',
-    building: 'SMU CONNEXION',
-    room: 'Studio L7.2 (Dance)',
-    venue: 'Studio L7.2 (Dance), Connexion',
+    building: 'SMU SCHOOL OF ECONOMICS & SCHOOL OF SOCIAL SCIENCES',
+    room: 'Studio 7.1 (SOE Level 7)',
+    venue: 'Studio 7.1, SOE Level 7',
     role: 'Honorary General Secretary',
     status: 'Not Started',
     notes: 'Verify studio equipment inventory and lock up keys per SSU Clause 9.2(c).',
@@ -174,47 +206,44 @@ const defaultEvents = [
   }
 ];
 
-// ---- Saving: events are stored in this browser (localStorage) so they survive a page refresh ----
-const storageKey = computed(() => `pulse-schedule-${props.activePersona.email || props.activePersona.name}`)
+const storageKey = computed(() => `pulse-schedule-${props.activePersona.email || props.activePersona.name}`);
+
+// The old sample class may still be saved in this browser; real classes now come from your timetable
+const isOldSampleClass = (e) => e.id === 4 && !e.isCustom && e.category === 'Academic';
 
 function loadSavedEvents() {
   try {
-    const saved = JSON.parse(localStorage.getItem(storageKey.value))
-    if (Array.isArray(saved)) return saved
-  } catch (e) { /* ignore corrupted or blocked storage */ }
-  return null
+    const saved = JSON.parse(localStorage.getItem(storageKey.value));
+    if (Array.isArray(saved)) return saved.filter(e => !isOldSampleClass(e));
+  } catch (e) { }
+  return null;
 }
 
 function sampleEvents() {
-  const events = JSON.parse(JSON.stringify(defaultEvents))
-  const clubName = props.activePersona?.cca || 'CCA'
-  if (events[4]) {
-    events[4].title = `${clubName} ExCo Debrief & Safety Check`
-    events[4].role = `${clubName} ExCo`
+  const events = JSON.parse(JSON.stringify(defaultEvents));
+  const clubName = props.activePersona?.cca || 'CCA';
+  if (events[7]) {
+    events[7].title = `${clubName} ExCo Debrief & Safety Check`;
+    events[7].role = `${clubName} ExCo`;
   }
-  return events
+  return events;
 }
 
-// Start from the saved schedule if there is one, otherwise the sample data
-const scheduleEvents = ref(loadSavedEvents() ?? sampleEvents())
+const scheduleEvents = ref(loadSavedEvents() ?? sampleEvents());
 
-// Save whenever anything changes (add, edit, delete, status toggle)
 watch(scheduleEvents, (events) => {
-  try { localStorage.setItem(storageKey.value, JSON.stringify(events)) } catch (e) { /* storage full or blocked */ }
-}, { deep: true })
+  try { localStorage.setItem(storageKey.value, JSON.stringify(events)); } catch (e) { }
+}, { deep: true });
 
-// If the logged-in persona changes, load that persona's own saved schedule and resync ops
 watch(storageKey, () => {
   scheduleEvents.value = loadSavedEvents() ?? sampleEvents();
   syncOpsTasks(false);
 });
 
-// ---- Live Cross-Sync with Day-of Operations ----
+// Live Cross-Sync with Day-of Operations
 const opsSyncInfo = ref(null);
-
 let opsSyncVersion = 0;
 
-// Signed in: the events saved in Operations. Otherwise: this browser's copy, or the sample.
 async function readOpsTasks() {
   const { authUserId, activeClubId, memberId } = session.value;
   if (supabase && authUserId && activeClubId && !props.readOnly) {
@@ -233,25 +262,20 @@ async function syncOpsTasks(forceToast = false) {
   try {
     result = await readOpsTasks();
   } catch (error) {
-    // Keep what is on screen rather than showing tasks that may be wrong
     console.log('Day-of Ops tasks not loaded:', error.message);
     return;
   }
   if (version !== opsSyncVersion) return;
   const { tasks, eventName, eventDate, tasksCount, eventsCount = 1 } = result;
 
-  // Saved schedules can hold tasks from events that have since changed, so always replace them
   const customAndAcademic = scheduleEvents.value.filter(e => !e.isOpsTask && !String(e.id).startsWith('ops-'));
   scheduleEvents.value = [...customAndAcademic, ...tasks];
 
   if (tasksCount > 0) {
     opsSyncInfo.value = { eventName, eventDate, eventCount: tasksCount, otherEvents: eventsCount - 1 };
-
-    // Jump to the ops event date if viewing default placeholder date
     if (selectedDate.value === '2026-10-23' && eventDate) {
       selectedDate.value = eventDate;
     }
-
     if (forceToast) {
       toastMsg.value = `⚡ Synced ${tasksCount} Day-of Ops tasks from "${eventName}".`;
       setTimeout(() => { toastMsg.value = ''; }, 4000);
@@ -265,85 +289,134 @@ onMounted(() => {
   syncOpsTasks(false);
 });
 
-// The session may finish loading after this page, or switch to another CCA
 watch(() => [session.value.ready, session.value.authUserId, session.value.activeClubId, session.value.memberId], () => {
   syncOpsTasks(false);
 });
 
+/* Classes from the timetable imported in Availability (read-only here) */
+const myTimetable = ref({ fileName: '', events: [] });
 
-
-// All events, in order of date then start time
-const sortedEvents = computed(() =>
-  [...scheduleEvents.value].sort((a, b) =>
-    (a.date + a.startTime).localeCompare(b.date + b.startTime))
-)
-
-// Only the events on the day being viewed
-const dayEvents = computed(() =>
-  sortedEvents.value.filter(e => e.date === selectedDate.value)
-)
-
-// ---- OneMap walking time calculation using official building names ----
-function minutesBetween(end, start) {
-  const toMin = t => parseInt(t.slice(0, 2)) * 60 + parseInt(t.slice(3))
-  return toMin(start) - toMin(end)
+async function loadTimetable() {
+  if (props.readOnly || !supabase || !session.value.authUserId) {
+    myTimetable.value = { fileName: '', events: [] };
+    return;
+  }
+  try {
+    myTimetable.value = await fetchMyBaseline();
+  } catch (error) {
+    console.log('Timetable not loaded:', error.message);
+  }
 }
 
-const walkInfo = ref({})            // eventId -> { minutes, metres, gapMinutes, prevVenue, sameVenue?, unavailable? }
-const isLoadingWalk = ref(false)
-let loadCounter = 0
+onMounted(loadTimetable);
+watch(() => [session.value.authUserId, props.readOnly], loadTimetable);
+// Re-read after an import or replace in Availability
+watch(() => props.active, (active) => { if (active) loadTimetable(); });
+
+const classEvents = computed(() =>
+  icsEventsOn(myTimetable.value.events, parseISO(selectedDate.value)).map((c, i) => ({
+    id: `class-${selectedDate.value}-${i}`,
+    title: c.title,
+    category: 'Academic',
+    date: selectedDate.value,
+    startTime: c.startTime,
+    endTime: c.endTime,
+    venue: 'From your timetable',
+    role: 'Class',
+    notes: '',
+    isClass: true
+  }))
+);
+
+// Your saved events plus today's classes
+const allEvents = computed(() => [...scheduleEvents.value, ...classEvents.value]);
+
+/* Overdue & Missed Task Status Evaluator */
+function getEffectiveStatus(event) {
+  if (event.status === 'Completed' || event.status === 'In Progress') {
+    return event.status;
+  }
+  const now = new Date();
+  const todayIso = toISO(now);
+  const currentTime = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+
+  if (event.date < todayIso || (event.date === todayIso && event.endTime <= currentTime)) {
+    return 'Overdue/Missed';
+  }
+  return 'Not Started';
+}
+
+const sortedEvents = computed(() =>
+  [...allEvents.value].sort((a, b) =>
+    (a.date + a.startTime).localeCompare(b.date + b.startTime))
+);
+
+const dayEvents = computed(() =>
+  sortedEvents.value.filter(e => e.date === selectedDate.value)
+);
+
+function minutesBetween(end, start) {
+  const toMin = t => parseInt(t.slice(0, 2)) * 60 + parseInt(t.slice(3));
+  return toMin(start) - toMin(end);
+}
+
+const walkInfo = ref({});
+const isLoadingWalk = ref(false);
+let loadCounter = 0;
 
 async function loadWalkTimes() {
-  const thisLoad = ++loadCounter
-  isLoadingWalk.value = true
-  const list = sortedEvents.value
+  const thisLoad = ++loadCounter;
+  isLoadingWalk.value = true;
+  const list = sortedEvents.value;
 
   const entries = await Promise.all(list.slice(1).map(async (cur, i) => {
-    const prev = list[i]
-    if (prev.date !== cur.date) return null
-    const gapMinutes = minutesBetween(prev.endTime, cur.startTime)
+    const prev = list[i];
+    if (prev.date !== cur.date) return null;
+    // Imported classes have no room saved, so there's no walk to work out
+    if (prev.isClass || cur.isClass) return null;
+    const gapMinutes = minutesBetween(prev.endTime, cur.startTime);
 
-    // Use .building for OneMap resolution, fall back to .venue
-    const prevBuilding = prev.building || prev.venue
-    const curBuilding = cur.building || cur.venue
+    const isWalkingTask = cur.title.toLowerCase().includes('walk') || prev.title.toLowerCase().includes('walk');
+    const prevBuilding = prev.building || prev.venue;
+    const curBuilding = cur.building || cur.venue;
 
-    const base = { gapMinutes, prevVenue: prev.venue }
+    const base = { gapMinutes, prevVenue: prev.venue, isWalkingTask };
 
-    // If both events are in the same building, no walking needed
     if (prevBuilding === curBuilding) {
-      return [cur.id, { ...base, sameVenue: true, minutes: 0, metres: 0 }]
+      return [cur.id, { ...base, sameVenue: true, minutes: 0, metres: 0 }];
     }
 
-    const walk = await getWalkTime(prevBuilding, curBuilding)
-    if (!walk) return [cur.id, { ...base, unavailable: true }]
-    if (walk.metres === 0) return [cur.id, { ...base, sameVenue: true, minutes: 0, metres: 0 }]
-    return [cur.id, { ...base, ...walk }]
-  }))
+    const walk = await getWalkTime(prevBuilding, curBuilding);
+    if (!walk) return [cur.id, { ...base, unavailable: true }];
+    if (walk.metres === 0) return [cur.id, { ...base, sameVenue: true, minutes: 0, metres: 0 }];
+    return [cur.id, { ...base, ...walk }];
+  }));
 
-  if (thisLoad !== loadCounter) return
-  walkInfo.value = Object.fromEntries(entries.filter(Boolean))
-  isLoadingWalk.value = false
+  if (thisLoad !== loadCounter) return;
+  walkInfo.value = Object.fromEntries(entries.filter(Boolean));
+  isLoadingWalk.value = false;
 }
 
 const routeKey = computed(() =>
   sortedEvents.value.map(e => `${e.id}|${e.date}|${e.startTime}|${e.endTime}|${e.building || e.venue}`).join(';')
-)
-watch(routeKey, loadWalkTimes, { immediate: true })
+);
+watch(routeKey, loadWalkTimes, { immediate: true });
 
 function transitText(event) {
-  const i = walkInfo.value[event.id]
-  if (!i) return ''
-  if (i.sameVenue) return 'Same building as your previous event, no walking needed'
-  if (i.unavailable) return `Walk time unavailable from ${i.prevVenue}`
-  return `~${i.minutes} min walk (${i.metres}m) from ${i.prevVenue}`
+  const i = walkInfo.value[event.id];
+  if (!i) return '';
+  if (i.isWalkingTask) return `Walk in progress from ${i.prevVenue}`;
+  if (i.sameVenue) return 'Same building as your previous event, no walking needed';
+  if (i.unavailable) return `Walk time unavailable from ${i.prevVenue}`;
+  return `~${i.minutes} min walk (${i.metres}m) from ${i.prevVenue}`;
 }
 
 function transitTight(event) {
-  const i = walkInfo.value[event.id]
-  return !!i && !i.sameVenue && !i.unavailable && i.minutes > i.gapMinutes
+  const i = walkInfo.value[event.id];
+  if (!i || i.isWalkingTask) return false;
+  return !i.sameVenue && !i.unavailable && i.minutes > i.gapMinutes;
 }
 
-// Modal Form State
 const eventForm = ref({
   title: '',
   category: 'CCA',
@@ -356,17 +429,15 @@ const eventForm = ref({
   notes: ''
 });
 
-// Events shown in the list: the viewed day, filtered by category
 const filteredEvents = computed(() => {
   if (selectedCategory.value === 'All') return dayEvents.value;
   return dayEvents.value.filter(e => e.category === selectedCategory.value);
 });
 
-// Conflict Detection: academic classes that overlap with CCA slots on the same day
 const conflictingEventIds = computed(() => {
   const conflicts = new Set();
-  const academics = scheduleEvents.value.filter(e => e.category === 'Academic');
-  const ccas = scheduleEvents.value.filter(e => e.category === 'CCA' || e.category === 'Day-of Ops');
+  const academics = allEvents.value.filter(e => e.category === 'Academic');
+  const ccas = allEvents.value.filter(e => e.category === 'CCA' || e.category === 'Day-of Ops');
 
   for (const acad of academics) {
     for (const cca of ccas) {
@@ -385,24 +456,27 @@ const conflictingEventIds = computed(() => {
   return conflicts;
 });
 
-// Only show the clash banner if the viewed day has a clash
 const dayHasConflict = computed(() =>
   dayEvents.value.some(e => conflictingEventIds.value.has(e.id))
-)
+);
 
-// Active assignment highlight (for the viewed day)
+// Classes aren't tasks, so they never become the current assignment or count towards "Done"
+const dayTasks = computed(() => dayEvents.value.filter(e => !e.isClass));
+
 const activeAssignment = computed(() => {
-  return dayEvents.value.find(e => e.status === 'In Progress')
-    || dayEvents.value.find(e => e.status === 'Not Started')
-    || dayEvents.value[0];
+  return dayTasks.value.find(e => getEffectiveStatus(e) === 'In Progress')
+    || dayTasks.value.find(e => getEffectiveStatus(e) === 'Overdue/Missed')
+    || dayTasks.value.find(e => getEffectiveStatus(e) === 'Not Started')
+    || dayTasks.value[0];
 });
 
 function toggleEventStatus(event) {
-  if (blockedForGuest()) return
-  if (event.status === 'Not Started') {
+  if (blockedForGuest()) return;
+  const current = getEffectiveStatus(event);
+  if (current === 'Not Started' || current === 'Overdue/Missed') {
     event.status = 'In Progress';
     toastMsg.value = `Started: "${event.title}" is now active.`;
-  } else if (event.status === 'In Progress') {
+  } else if (current === 'In Progress') {
     event.status = 'Completed';
     toastMsg.value = `Completed: "${event.title}" marked as finished.`;
   } else {
@@ -411,10 +485,14 @@ function toggleEventStatus(event) {
   }
   setTimeout(() => { toastMsg.value = ''; }, 3500);
 }
-// Asks Supabase to queue a Telegram alert about a schedule change.
-// action is 'added', 'updated' or 'removed'. The bot token stays on the server;
-// the Edge Function send-telegram-notifications does the actual sending.
-// It never throws: if the alert can't be sent, the schedule change still works.
+
+function markCompletedDirectly(event) {
+  if (blockedForGuest()) return;
+  event.status = 'Completed';
+  toastMsg.value = `Marked as finished: "${event.title}".`;
+  setTimeout(() => { toastMsg.value = ''; }, 3500);
+}
+
 async function sendScheduleAlert(action, ev) {
   if (props.readOnly || !supabase) return;
   try {
@@ -430,16 +508,14 @@ async function sendScheduleAlert(action, ev) {
     if (error) throw error;
   } catch (err) {
     console.log('Telegram schedule alert not queued:', err.message);
-    toastMsg.value += ' Telegram alert could not be queued: ' + err.message;
   }
 }
 
-// Modal Form Actions
 function openAddModal() {
   if (blockedForGuest()) return;
   isEditing.value = false;
   editingId.value = null;
-  formError.value = ''; // Reset error
+  formError.value = '';
   eventForm.value = {
     title: '',
     category: 'CCA',
@@ -458,7 +534,7 @@ function openEditModal(event) {
   if (blockedForGuest()) return;
   isEditing.value = true;
   editingId.value = event.id;
-  formError.value = ''; // Reset error
+  formError.value = '';
   eventForm.value = {
     title: event.title,
     category: event.category,
@@ -481,12 +557,10 @@ function closeModal() {
 function saveEvent() {
   if (blockedForGuest() || !eventForm.value.title.trim()) return;
 
-  // Validate start and end times
   if (eventForm.value.endTime <= eventForm.value.startTime) {
     formError.value = 'End time must be after start time.';
     return;
   }
-
   formError.value = '';
 
   const combinedVenue = eventForm.value.room.trim()
@@ -518,26 +592,15 @@ function saveEvent() {
     sendScheduleAlert('added', newEvent);
   }
 
-  // If the event was saved on a different day, jump to that day so you can see it
   if (eventForm.value.date && eventForm.value.date !== selectedDate.value) {
     selectedDate.value = eventForm.value.date;
   }
-
   closeModal();
   setTimeout(() => { toastMsg.value = ''; }, 4000);
 }
 
-  // If the event was saved on a different day, jump to that day so you can see it
-  if (eventForm.value.date && eventForm.value.date !== selectedDate.value) {
-    selectedDate.value = eventForm.value.date;
-  }
-
-  closeModal();
-  setTimeout(() => { toastMsg.value = ''; }, 4000);
-
-
 function deleteEvent(id) {
-  if (blockedForGuest()) return
+  if (blockedForGuest()) return;
   const item = scheduleEvents.value.find(e => e.id === id);
   if (!item) return;
   scheduleEvents.value = scheduleEvents.value.filter(e => e.id !== id);
@@ -546,7 +609,6 @@ function deleteEvent(id) {
   setTimeout(() => { toastMsg.value = ''; }, 4000);
 }
 
-// Escape commas, semicolons and new lines so they don't break the .ics file
 function icsEscape(text) {
   return String(text || '')
     .replace(/\\/g, '\\\\')
@@ -555,7 +617,6 @@ function icsEscape(text) {
     .replace(/\r?\n/g, '\\n');
 }
 
-// Singapore time -> UTC, e.g. '2026-10-23' + '18:30' -> '20261023T103000Z'
 function toIcsUtc(date, time) {
   const [y, m, d] = date.split('-').map(Number);
   const [hh, mm] = time.split(':').map(Number);
@@ -564,8 +625,7 @@ function toIcsUtc(date, time) {
 }
 
 function exportCalendarICS() {
-  const now = new Date().toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '');
-
+  const nowStr = new Date().toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '');
   const lines = [
     'BEGIN:VCALENDAR',
     'VERSION:2.0',
@@ -577,17 +637,16 @@ function exportCalendarICS() {
   for (const ev of scheduleEvents.value) {
     lines.push('BEGIN:VEVENT');
     lines.push(`UID:pulse-sched-${ev.id}@smu.edu.sg`);
-    lines.push(`DTSTAMP:${now}`);
+    lines.push(`DTSTAMP:${nowStr}`);
     lines.push(`DTSTART:${toIcsUtc(ev.date, ev.startTime)}`);
     lines.push(`DTEND:${toIcsUtc(ev.date, ev.endTime)}`);
     lines.push(`SUMMARY:${icsEscape(ev.title)}`);
     lines.push(`LOCATION:${icsEscape(ev.venue)}`);
-    lines.push(`DESCRIPTION:${icsEscape(`Role: ${ev.role} | Category: ${categoryLabel ? categoryLabel(ev.category) : ev.category} | Notes: ${ev.notes || 'None'}`)}`);
+    lines.push(`DESCRIPTION:${icsEscape(`Role: ${ev.role} | Category: ${categoryLabel(ev.category)} | Notes: ${ev.notes || 'None'}`)}`);
     lines.push('END:VEVENT');
   }
   lines.push('END:VCALENDAR');
 
-  // Calendar files must use Windows-style line endings (\r\n)
   const blob = new Blob([lines.join('\r\n') + '\r\n'], { type: 'text/calendar;charset=utf-8' });
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
@@ -598,22 +657,18 @@ function exportCalendarICS() {
   document.body.removeChild(link);
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 
-  toastMsg.value = `Exported ${scheduleEvents.value.length} events. Open the file for Apple Calendar, or import it in Google Calendar (Settings > Import & export).`;
+  toastMsg.value = `Exported ${scheduleEvents.value.length} events. Open the file for Apple Calendar or Google Calendar.`;
   setTimeout(() => { toastMsg.value = ''; }, 6000);
 }
 </script>
 
 <template>
   <div class="py-2">
-    
 
     <!-- Top Header & Actions -->
     <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-4">
       <div>
-        <div class="d-flex align-items-center gap-2 mb-1">
-          <span class="badge bg-danger rounded-pill px-2 py-1" style="font-size: 0.65rem; font-weight: 800;">
-            PERSONAL SCHEDULE
-          </span>
+        <div v-if="apiMode" class="d-flex align-items-center gap-2 mb-1">
           <span v-if="apiMode" class="pulse-api-tag">OneMap Transit Guide</span>
           <span v-if="apiMode" class="pulse-api-tag">iCal OASIS Sync</span>
         </div>
@@ -666,9 +721,9 @@ function exportCalendarICS() {
         <span class="small fw-semibold">{{ toastMsg }}</span>
       </div>
       <button type="button" class="btn-close" aria-label="Close message" @click="toastMsg = ''"></button>
-      </div>
+    </div>
 
-    <!-- Day Navigation: switch days to view or prefill them in advance -->
+    <!-- Day Navigation -->
     <div class="card border-0 shadow-sm p-2 mb-4" style="border-radius: 0.75rem; background-color: var(--pulse-card-bg);">
       <div class="d-flex flex-wrap justify-content-between align-items-center gap-2">
         <div class="d-flex align-items-center gap-2">
@@ -691,13 +746,12 @@ function exportCalendarICS() {
       <div class="col-lg-5">
 
         <div v-if="activeAssignment" class="pulse-hero-banner p-4 text-white shadow-lg mb-4">
-
           <div class="d-flex justify-content-between align-items-center mb-3">
             <span class="badge bg-danger rounded-pill px-3 py-1 fw-bold" style="font-size: 0.7rem;">
-              {{ activeAssignment.status === 'In Progress' ? 'ACTIVE NOW' : 'PRIORITY ASSIGNMENT' }}
+              {{ getEffectiveStatus(activeAssignment) === 'In Progress' ? 'ACTIVE NOW' : getEffectiveStatus(activeAssignment) === 'Overdue/Missed' ? 'ACTION REQUIRED' : 'PRIORITY ASSIGNMENT' }}
             </span>
-            <span class="badge bg-white bg-opacity-25 text-white" style="font-size: 0.75rem;">
-              {{ activeAssignment.status }}
+            <span class="badge" :class="getEffectiveStatus(activeAssignment) === 'Overdue/Missed' ? 'bg-danger text-white' : 'bg-white bg-opacity-25 text-white'" style="font-size: 0.75rem;">
+              {{ getEffectiveStatus(activeAssignment) }}
             </span>
           </div>
 
@@ -749,22 +803,29 @@ function exportCalendarICS() {
             </div>
           </div>
 
-          <!-- Action: Status Toggle -->
-          <div class="d-flex flex-wrap gap-2 mb-2">
+          <!-- Overdue Status Prompt Actions -->
+          <div v-if="getEffectiveStatus(activeAssignment) === 'Overdue/Missed'" class="p-3 rounded mb-3 bg-danger bg-opacity-25 border border-danger border-opacity-50">
+            <div class="fw-bold small text-white mb-2">Did you finish this task?</div>
+            <div class="d-flex gap-2">
+              <button type="button" class="btn btn-light btn-sm fw-bold flex-grow-1" @click="markCompletedDirectly(activeAssignment)">Yes, Mark Finished ✓</button>
+              <button type="button" class="btn btn-outline-light btn-sm flex-grow-1" @click="toggleEventStatus(activeAssignment)">Start Now</button>
+            </div>
+          </div>
+
+          <!-- Normal Action Toggle -->
+          <div v-else class="d-flex flex-wrap gap-2 mb-2">
             <button
               type="button"
               class="btn btn-outline-light py-2 px-3 fw-bold w-100"
               @click="toggleEventStatus(activeAssignment)"
             >
-              <span v-if="activeAssignment.status === 'Not Started'">Start Task</span>
-              <span v-else-if="activeAssignment.status === 'In Progress'">Mark Done ✓</span>
+              <span v-if="getEffectiveStatus(activeAssignment) === 'Not Started'">Start Task</span>
+              <span v-else-if="getEffectiveStatus(activeAssignment) === 'In Progress'">Mark Done ✓</span>
               <span v-else>Reset Status</span>
             </button>
           </div>
-
         </div>
 
-        <!-- Shown when the viewed day has no events yet -->
         <div v-else class="pulse-card p-4 shadow-sm mb-4 text-center">
           <h6 class="fw-bold mb-1">Nothing scheduled yet</h6>
           <p class="text-muted small mb-3">
@@ -777,7 +838,7 @@ function exportCalendarICS() {
 
         <SimulatorInvitationInbox v-if="!readOnly" />
 
-        <!-- Academic & Rehearsal Clash Detector (only if the viewed day has a clash) -->
+        <!-- Academic & Rehearsal Clash Detector -->
         <div v-if="dayHasConflict" class="card border-0 shadow-sm p-3 mb-4" style="background-color: #fffbeb; border-left: 4px solid #f59e0b !important; border-radius: 0.75rem;">
           <div class="d-flex align-items-start gap-2">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#d97706" stroke-width="2" class="flex-shrink-0 mt-1">
@@ -796,13 +857,12 @@ function exportCalendarICS() {
 
       </div>
 
-      <!-- Right: Interactive Personal Schedule Manager -->
+      <!-- Right: Schedule List Manager -->
       <div class="col-lg-7">
 
-        <!-- Filter Tabs & Stats -->
+        <!-- Category Filter Pills -->
         <div class="card border-0 shadow-sm p-2 mb-3" style="border-radius: 0.75rem; background-color: var(--pulse-card-bg);">
           <div class="d-flex flex-wrap justify-content-between align-items-center gap-2">
-
             <div class="d-flex flex-wrap gap-1">
               <button
                 type="button"
@@ -847,13 +907,10 @@ function exportCalendarICS() {
             </div>
 
             <span class="text-muted small px-2">
-              {{ dayEvents.filter(e => e.status === 'Completed').length }}/{{ dayEvents.length }} Done
+              {{ dayTasks.filter(e => getEffectiveStatus(e) === 'Completed').length }}/{{ dayTasks.length }} Done
             </span>
-
           </div>
         </div>
-
-
 
         <!-- Schedule Items List -->
         <div class="d-flex flex-column gap-3">
@@ -877,11 +934,10 @@ function exportCalendarICS() {
                     : '4px solid #10b981 !important'
             }"
           >
-            <!-- Keep complete status words readable; let the header stack when space runs out. -->
             <div class="schedule-entry-header d-flex flex-wrap justify-content-between align-items-start gap-2 mb-2">
               <div class="schedule-entry-details">
                 <div class="schedule-entry-title d-flex flex-wrap align-items-center gap-2 mb-1">
-                  <h6 class="fw-bold mb-0" :class="{ 'text-decoration-line-through text-muted': event.status === 'Completed' }">
+                  <h6 class="fw-bold mb-0" :class="{ 'text-decoration-line-through text-muted': getEffectiveStatus(event) === 'Completed' }">
                     {{ event.title }}
                   </h6>
                   <span class="badge" :class="{
@@ -891,9 +947,6 @@ function exportCalendarICS() {
                     'bg-success': event.category === 'Adhoc'
                   }" style="font-size: 0.65rem;">
                     {{ categoryLabel(event.category) }}
-                  </span>
-                  <span v-if="event.isOpsTask" class="badge text-white px-2 py-0.5 rounded-pill" style="background-color: var(--pulse-purple-transit); font-size: 0.65rem;">
-                    ⚡ Production Duty
                   </span>
                   <span v-if="conflictingEventIds.has(event.id)" class="badge bg-warning text-dark border border-warning" style="font-size: 0.65rem;">
                     Clash Detected
@@ -909,29 +962,42 @@ function exportCalendarICS() {
                 </div>
               </div>
 
-              <!-- Status Badge / Toggle Button -->
-              <button
-                type="button"
-                class="schedule-entry-status btn btn-sm py-1 px-2 rounded-pill fw-bold border"
-                :class="{
-                  'btn-success text-white': event.status === 'Completed',
-                  'btn-warning text-dark': event.status === 'In Progress',
-                  'btn-light text-muted': event.status === 'Not Started'
-                }"
-                style="font-size: 0.7rem;"
-                @click="toggleEventStatus(event)"
-                :title="'Click to toggle: ' + event.status"
-              >
-                {{ event.status }}
-              </button>
+              <!-- Interactive Status & Overdue Prompts -->
+              <span v-if="event.isClass" class="badge bg-primary-subtle text-primary border border-primary-subtle rounded-pill" style="font-size: 0.7rem;">📚 Class</span>
+              <div v-else class="d-flex flex-column align-items-end gap-1">
+                <button
+                  type="button"
+                  class="schedule-entry-status btn btn-sm py-1 px-2 rounded-pill fw-bold border"
+                  :class="{
+                    'btn-success text-white': getEffectiveStatus(event) === 'Completed',
+                    'btn-warning text-dark': getEffectiveStatus(event) === 'In Progress',
+                    'btn-danger text-white': getEffectiveStatus(event) === 'Overdue/Missed',
+                    'btn-light text-muted': getEffectiveStatus(event) === 'Not Started'
+                  }"
+                  style="font-size: 0.7rem;"
+                  @click="toggleEventStatus(event)"
+                  :title="'Click to toggle: ' + getEffectiveStatus(event)"
+                >
+                  {{ getEffectiveStatus(event) }}
+                </button>
+                <button
+                  v-if="getEffectiveStatus(event) === 'Overdue/Missed'"
+                  type="button"
+                  class="btn btn-link btn-sm p-0 text-danger text-decoration-underline"
+                  style="font-size: 0.68rem;"
+                  @click="markCompletedDirectly(event)"
+                >
+                  Did you finish this?
+                </button>
+              </div>
             </div>
 
-            <!-- Transit (calculated by OneMap) & Notes -->
+            <!-- Transit & Notes -->
             <div v-if="walkInfo[event.id] || event.notes" class="p-2 rounded bg-light border small text-muted mb-2" style="font-size: 0.725rem;">
               <div v-if="walkInfo[event.id]" class="mb-1" :class="{ 'text-danger fw-bold': transitTight(event) }">
                 <strong class="text-secondary">Transit:</strong>
                 {{ transitText(event) }}
-                <span v-if="!walkInfo[event.id].sameVenue"> • {{ walkInfo[event.id].gapMinutes }} min gap</span>
+                <span v-if="!walkInfo[event.id].sameVenue && !walkInfo[event.id].isWalkingTask"> • {{ walkInfo[event.id].gapMinutes }} min gap</span>
                 <span v-if="transitTight(event)"> ⚠ Not enough time</span>
               </div>
               <div v-if="event.notes">
@@ -939,8 +1005,12 @@ function exportCalendarICS() {
               </div>
             </div>
 
-            <!-- Action Buttons: Edit & Delete -->
-            <div class="d-flex justify-content-end gap-2 border-top pt-2">
+            <!-- Classes are edited by re-importing the timetable in Availability -->
+            <div v-if="event.isClass" class="border-top pt-2 text-muted text-end" style="font-size: 0.7rem;">
+              To change classes, import your timetable again in Availability.
+            </div>
+            <!-- Actions -->
+            <div v-else class="d-flex justify-content-end gap-2 border-top pt-2">
               <button
                 type="button"
                 class="btn btn-sm btn-outline-secondary py-0 px-2"
@@ -958,16 +1028,12 @@ function exportCalendarICS() {
                 Delete
               </button>
             </div>
-
           </div>
-
         </div>
-
       </div>
-
     </div>
 
-    <!-- MODAL: Add / Edit Event with SMU Building Selector -->
+    <!-- MODAL: Add / Edit Event -->
     <div
       v-if="showModal"
       class="modal fade show d-block"
@@ -976,7 +1042,6 @@ function exportCalendarICS() {
     >
       <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable">
         <div class="modal-content border-0 shadow-lg" style="border-radius: 1rem;">
-
           <div class="modal-header border-bottom py-3 px-4 bg-light">
             <h6 class="modal-title fw-bold text-dark mb-0">
               {{ isEditing ? 'Edit Schedule Event' : 'Add Custom Event / Class' }}
@@ -984,39 +1049,20 @@ function exportCalendarICS() {
             <button type="button" class="btn-close" aria-label="Close" @click="closeModal"></button>
           </div>
 
-          <!-- Keep this nested form shrinkable so its body scrolls and the save footer stays visible. -->
           <form class="pulse-scrollable-modal-form" @submit.prevent="saveEvent">
             <div class="modal-body p-4">
+              <div v-if="formError" class="alert alert-danger py-2 px-3 small border-0 mb-3 d-flex align-items-center gap-2" style="border-radius: 0.5rem; background-color: #fef2f2; color: #991b1b;">
+                <span>{{ formError }}</span>
+              </div>
 
-    <!-- Modal Error Banner -->
-    <div
-      v-if="formError"
-      class="alert alert-danger py-2 px-3 small border-0 mb-3 d-flex align-items-center gap-2"
-      role="alert"
-      style="border-radius: 0.5rem; background-color: #fef2f2; color: #991b1b;"
-    >
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <circle cx="12" cy="12" r="10"></circle>
-        <line x1="12" y1="8" x2="12" y2="12"></line>
-        <line x1="12" y1="16" x2="12.01" y2="16"></line>
-      </svg>
-      <span>{{ formError }}</span>
-    </div>
-              
               <div class="mb-3">
-                <label class="form-label small fw-bold text-dark">Event or Class Title:</label>
-                <input
-                  v-model="eventForm.title"
-                  type="text"
-                  class="form-control form-control-sm"
-                  placeholder="e.g. IS216 Lab, Rehearsal Warmup, Team Debrief"
-                  required
-                />
+                <label class="form-label small fw-bold text-dark">Event or Class Title <span class="text-danger">*</span></label>
+                <input v-model="eventForm.title" type="text" class="form-control form-control-sm" placeholder="e.g. IS216 Lab, Rehearsal Warmup" required />
               </div>
 
               <div class="row g-2 mb-3">
                 <div class="col-6">
-                  <label class="form-label small fw-bold text-dark">Category:</label>
+                  <label class="form-label small fw-bold text-dark">Category <span class="text-danger">*</span></label>
                   <select v-model="eventForm.category" class="form-select form-select-sm" required>
                     <option value="CCA">CCA</option>
                     <option value="Academic">Academic</option>
@@ -1024,67 +1070,44 @@ function exportCalendarICS() {
                   </select>
                 </div>
                 <div class="col-6">
-                  <label class="form-label small fw-bold text-dark">Date:</label>
+                  <label class="form-label small fw-bold text-dark">Date <span class="text-danger">*</span></label>
                   <input v-model="eventForm.date" type="date" class="form-control form-control-sm" required />
                 </div>
               </div>
 
               <div class="row g-2 mb-3">
                 <div class="col-6">
-                  <label class="form-label small fw-bold text-dark">Start Time:</label>
+                  <label class="form-label small fw-bold text-dark">Start Time <span class="text-danger">*</span></label>
                   <input v-model="eventForm.startTime" type="time" class="form-control form-control-sm" required />
                 </div>
                 <div class="col-6">
-                  <label class="form-label small fw-bold text-dark">End Time:</label>
+                  <label class="form-label small fw-bold text-dark">End Time <span class="text-danger">*</span></label>
                   <input v-model="eventForm.endTime" type="time" class="form-control form-control-sm" required />
                 </div>
               </div>
 
-              <!-- SMU Building Selection for OneMap Route Calculation -->
               <div class="mb-3">
-                <label class="form-label small fw-bold text-dark">SMU building:</label>
+                <label class="form-label small fw-bold text-dark">SMU Building <span class="text-danger">*</span></label>
                 <select v-model="eventForm.building" class="form-select form-select-sm fw-bold text-primary" required>
-                  <option v-for="b in SMU_BUILDINGS" :key="b" :value="b">
-                    {{ b }}
-                  </option>
+                  <option v-for="b in SMU_BUILDINGS" :key="b" :value="b">{{ b }}</option>
                 </select>
-                <small class="text-muted" style="font-size: 0.675rem;">
-                  We use this location to estimate walking time between events.
-                </small>
               </div>
 
               <div class="row g-2 mb-3">
                 <div class="col-6">
-                  <label class="form-label small fw-bold text-dark">Room / Floor Details:</label>
-                  <input
-                    v-model="eventForm.room"
-                    type="text"
-                    class="form-control form-control-sm"
-                    placeholder="e.g. SR 2.1, Studio L7.2, B1 Stage"
-                    required
-                  />
+                  <label class="form-label small fw-bold text-dark">Room / Floor Details <span class="text-danger">*</span></label>
+                  <input v-model="eventForm.room" type="text" class="form-control form-control-sm" placeholder="e.g. SR 2.1, Studio L7.2" required />
                 </div>
                 <div class="col-6">
                   <label class="form-label small fw-bold text-dark">Role / Responsibility:</label>
-                  <input
-                    v-model="eventForm.role"
-                    type="text"
-                    class="form-control form-control-sm"
-                    placeholder="e.g. Lead Dancer, Student"
-                  />
+                  <input v-model="eventForm.role" type="text" class="form-control form-control-sm" placeholder="e.g. Lead Dancer, Student" />
                 </div>
               </div>
 
               <div class="mb-2">
                 <label class="form-label small fw-bold text-dark">Preparation Notes:</label>
-                <textarea
-                  v-model="eventForm.notes"
-                  class="form-control form-control-sm"
-                  rows="2"
-                  placeholder="e.g. Bring dance sneakers, project slide deck ready."
-                ></textarea>
+                <textarea v-model="eventForm.notes" class="form-control form-control-sm" rows="2" placeholder="e.g. Bring dance sneakers."></textarea>
               </div>
-
             </div>
 
             <div class="modal-footer border-top py-3 px-4 d-flex justify-content-between">
@@ -1094,7 +1117,6 @@ function exportCalendarICS() {
               </button>
             </div>
           </form>
-
         </div>
       </div>
     </div>
@@ -1103,27 +1125,26 @@ function exportCalendarICS() {
 </template>
 
 <style scoped>
-/* Long titles may wrap naturally; status/category labels retain whole words. */
 .schedule-entry-details { flex: 1 1 14rem; min-width: 0; }
 .schedule-entry-title h6 { min-width: 0; overflow-wrap: anywhere; }
 .schedule-entry-title .badge, .schedule-entry-status { flex-shrink: 0; white-space: nowrap; word-break: normal; overflow-wrap: normal; }
 .schedule-entry-status { margin-left: auto; }
+.pulse-hero-banner {
+  background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
+  border-radius: 1rem;
+}
+.pulse-card {
+  background: var(--pulse-card-bg, #ffffff);
+  border-radius: 0.75rem;
+}
 .pulse-api-tag {
   font-size: 0.6rem;
   font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 0.04em;
   padding: 0.15rem 0.45rem;
   border-radius: 9999px;
   background-color: rgba(59, 130, 246, 0.12);
   color: #2563eb;
   border: 1px solid rgba(59, 130, 246, 0.25);
-}
-
-@media (max-width: 575.98px) {
-  h3 {
-    font-size: 1.25rem !important;
-    line-height: 1.25 !important;
-  }
 }
 </style>

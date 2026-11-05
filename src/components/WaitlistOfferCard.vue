@@ -31,7 +31,7 @@ const urgent = computed(() => remaining.value < 600)
   <div class="pulse-offer-card">
     <div class="d-flex flex-wrap justify-content-between align-items-start gap-3">
       <div>
-        <div class="pulse-eyebrow text-pulse">Waitlist offer · you are #1</div>
+        <div class="pulse-eyebrow pulse-offer-eyebrow">Waitlist offer · you are #1</div>
         <h3 class="h5 fw-bold mb-1">{{ entry.facility_name }}</h3>
         <div class="small">
           {{ formatDate(entry.booking_date, true) }}, {{ formatTime(entry.start_time) }} – {{ formatTime(entry.end_time) }}

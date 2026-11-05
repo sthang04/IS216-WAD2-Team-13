@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue';
+import { ref, computed, watch, onMounted, onBeforeUnmount, nextTick } from 'vue';
 import { supabase } from '../supabase';
 import { session as facilitySession, demoMemberId } from '../services/sessionState';
 import { loadClubExcos, loadEvents as fetchEvents, saveEvent as saveEventToDb, deleteEvent as deleteEventFromDb, isMissingTableError, loadClubBookings } from '../services/opsService';
@@ -80,7 +80,6 @@ function block(start, end, title, type, venue = '', fixed = false) {
 /* 2. THE CCA'S EXCOS (from Supabase, or a sample list)                */
 /* ================================================================== */
 
-// Used for guests, and until the ops tables exist in Supabase
 const SAMPLE_EXCOS = [
   { memberId: 's1', name: 'Mei Chen', role: 'President', phone: '@meichen' },
   { memberId: 's2', name: 'Rachel Tan', role: 'Logistics Director', phone: '@racheltan' },
@@ -93,10 +92,8 @@ const SAMPLE_EXCOS = [
   { memberId: 's9', name: 'Giselle Goh', role: 'Finance Director', phone: '@giselleg' }
 ]
 
-// Who can be put on a crew: the CCA's real ExCos when linked to Supabase
 const excoPool = ref(SAMPLE_EXCOS)
 
-// A crew member on one event: who they are, their tasks, and their check-in
 function crewFromExco(exco, blocks = [], checkIn = {}) {
   return {
     memberId: exco.memberId,
@@ -122,7 +119,7 @@ function sampleEvents() {
     {
       id: newId(),
       name: 'Showcase',
-      date: todayIso(), // today, so the sample shows the day-of features
+      date: todayIso(),
       venue: 'Main Hall',
       crew: [
         crewMember('Rachel Tan', [
@@ -223,15 +220,10 @@ const selectedEventId = ref(null)
 const event = computed(() => events.value.find(e => e.id === selectedEventId.value) || events.value[0] || null)
 const crew = computed(() => (event.value ? event.value.crew : []))
 
-// Where the events live:
-//   'supabase'  signed-in ExCo: saved for the whole CCA, every ExCo sees the same plan
-//   'local'     guests, or until the ops tables exist: sample events kept in this browser
 const dataMode = ref('local')
 const loadingEvents = ref(true)
-const saveState = ref('') // '', 'saving', 'saved' or 'error'
+const saveState = ref('')
 const activeClubId = computed(() => facilitySession.value.activeClubId)
-
-// ---------------- Sample events kept in this browser ----------------
 
 const storageKey = computed(() => `pulse_ops_events:${props.activePersona?.cca || 'demo'}`)
 
@@ -244,9 +236,7 @@ function loadLocalEvents() {
       selectedEventId.value = saved.selectedEventId
       return
     }
-  } catch {
-    // Storage blocked or bad data: fall back to the sample events
-  }
+  } catch { }
   events.value = sampleEvents()
   selectedEventId.value = events.value[0].id
 }
@@ -254,14 +244,9 @@ function loadLocalEvents() {
 function saveLocalEvents() {
   try {
     localStorage.setItem(storageKey.value, JSON.stringify({ events: events.value, selectedEventId: selectedEventId.value }))
-  } catch {
-    // Storage blocked (e.g. private window): changes just won't survive a refresh
-  }
+  } catch { }
 }
 
-// ---------------- Supabase ----------------
-
-// What each event looked like when last saved, so only real changes are sent
 const lastSaved = new Map()
 
 async function loadEventsForPage() {
@@ -280,7 +265,6 @@ async function loadEventsForPage() {
       loadingEvents.value = false
       return
     } catch (error) {
-      // Tables not created yet is expected; anything else is worth showing
       if (!isMissingTableError(error)) {
         showToast(`Couldn't load events from Supabase (${error.message}). Showing sample events instead.`, 6000)
       }
@@ -292,7 +276,6 @@ async function loadEventsForPage() {
   loadingEvents.value = false
 }
 
-// Load once the session knows who is signed in, and again if they switch CCA
 watch(
   () => [facilitySession.value.ready, facilitySession.value.authUserId, activeClubId.value, props.readOnly],
   ([ready]) => {
@@ -301,7 +284,6 @@ watch(
   { immediate: true }
 )
 
-// Save changes shortly after they happen (one save for a burst of edits)
 let saveTimer = null
 watch([events, selectedEventId], () => {
   if (dataMode.value === 'local') {
@@ -329,7 +311,6 @@ async function saveChangedEvents() {
   }
 }
 
-// Switching event starts that event's day fresh
 watch(selectedEventId, () => {
   delayNotice.value = null
   totalDelay.value = 0
@@ -350,8 +331,6 @@ function resetPlan() {
 /* 4. TIMELINE                                                         */
 /* ================================================================== */
 
-// The event's own start and end (set-up to teardown), stretched to fit any task
-// outside it, rounded out to the half hour (09:00–18:00 if there's nothing yet)
 const allBlocks = computed(() => crew.value.flatMap(p => p.blocks))
 const dayStart = computed(() => {
   const starts = allBlocks.value.map(b => b.start)
@@ -369,7 +348,6 @@ const halfHours = computed(() => {
   return ticks
 })
 
-// Where a time sits across the timeline, as a percentage
 function percentAt(minutes) {
   return ((minutes - dayStart.value) / (dayEnd.value - dayStart.value)) * 100
 }
@@ -386,17 +364,48 @@ function sortedBlocks(person) {
 }
 
 /* ================================================================== */
-/* 5. CLOCK & SLIDER TIME CONTROL                                      */
+/* 5. CLOCK & SLIDER TIME CONTROL & AUTO-SCROLLING                     */
 /* ================================================================== */
 
 const showClock = ref(toMinutes('17:00'))
 const today = ref(todayIso())
 const followLive = ref(true)
+const gridScrollContainer = ref(null)
 
-// Update clock when sliding the time range input
+function checkAutoScrollGrid() {
+  nextTick(() => {
+    const container = gridScrollContainer.value
+    if (!container) return
+    const gridEl = container.querySelector('.ops-grid')
+    if (!gridEl) return
+
+    const gridWidth = gridEl.offsetWidth
+    const redLineX = (percentAt(showClock.value) / 100) * gridWidth
+    
+    const nameColWidth = 150
+    const scrollLeft = container.scrollLeft
+    const visibleWidth = container.clientWidth
+    const visibleRight = scrollLeft + visibleWidth
+    const visibleLeft = scrollLeft + nameColWidth
+
+    if (redLineX > visibleRight - 60) {
+      container.scrollTo({
+        left: redLineX - visibleWidth + 120,
+        behavior: 'smooth'
+      })
+    } else if (redLineX < visibleLeft + 60) {
+      container.scrollTo({
+        left: Math.max(0, redLineX - nameColWidth - 60),
+        behavior: 'smooth'
+      })
+    }
+  })
+}
+
 function onSliderInput(e) {
   followLive.value = false
   showClock.value = Number(e.target.value)
+  checkAutoScrollGrid()
 }
 
 const eventDay = computed(() => {
@@ -416,7 +425,6 @@ const daysAway = computed(() => {
   return isNaN(diff) ? 0 : Math.max(0, diff)
 })
 
-// Event day: the real time. Otherwise: a preview a bit into the day.
 function resetClock() {
   followLive.value = true
   if (isEventDay.value) {
@@ -424,9 +432,9 @@ function resetClock() {
   } else {
     showClock.value = dayStart.value + Math.min(120, Math.floor((dayEnd.value - dayStart.value) / 2 / 15) * 15)
   }
+  checkAutoScrollGrid()
 }
 
-// Keep the live clock (and today's date) up to date
 let clockTimer = null
 function tickClock() {
   const dateNow = todayIso()
@@ -435,6 +443,7 @@ function tickClock() {
     resetClock()
   } else if (isEventDay.value && followLive.value) {
     showClock.value = minutesNow()
+    checkAutoScrollGrid()
   }
 }
 
@@ -446,7 +455,6 @@ function nextBlock(person, time = showClock.value) {
   return sortedBlocks(person).find(b => b.start > time) || null
 }
 
-// Faded once it's over: on the day by the clock, and everything after the event
 function isDone(b) {
   if (eventDay.value === 'past') return true
   return isEventDay.value && b.end <= showClock.value
@@ -458,7 +466,6 @@ function isDone(b) {
 
 const selectedName = ref('')
 
-// Signed-in person if they are on this event's crew, otherwise the first person
 const me = computed(() => {
   const wanted = selectedName.value || props.activePersona?.name
   return crew.value.find(p => p.name === wanted) || crew.value[0] || null
@@ -469,13 +476,12 @@ const myNow = computed(() => (me.value ? currentBlock(me.value) : null))
 const myNext = computed(() => (me.value ? nextBlock(me.value) : null))
 
 /* ================================================================== */
-/* 7. TABS (phone opens on My schedule, desktop on the full grid)      */
+/* 7. TABS                                                             */
 /* ================================================================== */
 
 const activeTab = ref('grid')
 const showDelayMenu = ref(false)
 
-// Clicking anywhere else closes the delay dropdown
 function closeDelayMenu(e) {
   if (!e.target.closest('.ops-delay')) showDelayMenu.value = false
 }
@@ -484,6 +490,7 @@ onMounted(() => {
   if (window.innerWidth < 768) activeTab.value = 'me'
   document.addEventListener('click', closeDelayMenu)
   clockTimer = setInterval(tickClock, 30000)
+  checkAutoScrollGrid()
 })
 onBeforeUnmount(() => {
   document.removeEventListener('click', closeDelayMenu)
@@ -491,11 +498,11 @@ onBeforeUnmount(() => {
 })
 
 /* ================================================================== */
-/* 8. SHOW RUNNING LATE (fixed times never move)                       */
+/* 8. SHOW RUNNING LATE                                               */
 /* ================================================================== */
 
-const MIN_MEAL_MINUTES = 15 // a meal can be squeezed down to this before it moves
-const DELAY_OPTIONS = [5, 10, 15, 30, 45, 60] // minutes
+const MIN_MEAL_MINUTES = 15
+const DELAY_OPTIONS = [5, 10, 15, 30, 45, 60]
 const customDelayMinutes = ref('')
 
 function handleCustomDelay() {
@@ -509,12 +516,9 @@ function handleCustomDelay() {
   showDelayMenu.value = false
 }
 
-const delayNotice = ref(null) // { summary, warnings[] }
+const delayNotice = ref(null)
 const totalDelay = ref(0)
 
-// Whatever this person is doing now overruns by `mins`. Later blocks move back
-// until a gap or a meal absorbs it. A fixed block never moves: the block
-// before it is cut short instead (or dropped if no time is left for it).
 function delayPerson(person, now, mins) {
   const blocks = sortedBlocks(person)
   const i = blocks.findIndex(b => b.start <= now && now < b.end)
@@ -527,7 +531,7 @@ function delayPerson(person, now, mins) {
   for (let j = i + 1; j < blocks.length; j++) {
     const b = blocks[j]
     const overlap = prev.end - b.start
-    if (overlap <= 0) break // a gap absorbed the rest of the delay
+    if (overlap <= 0) break
 
     if (b.fixed) {
       prev.end = b.start
@@ -578,7 +582,6 @@ async function applyOneClickDelay(mins) {
     warnings: notes.filter(n => n.kind === 'cut').map(n => n.text)
   }
 
-
   try {
     const result = await queueCrewAlert('delayed', mins)
     showToast('Delay saved. Telegram alerts queued for ' + result.queued + ' crew members.')
@@ -587,8 +590,6 @@ async function applyOneClickDelay(mins) {
   }
 }
 
-// Persist live edits first, then let the backend derive the saved event's crew.
-// Local plans send names only; the backend validates exact membership instead of trusting sample IDs.
 async function queueCrewAlert(action, delayMinutes = null) {
   if (!supabase || !event.value || !facilitySession.value.authUserId) throw new Error('Sign in to queue crew alerts.')
   if (dataMode.value === 'supabase') {
@@ -625,7 +626,7 @@ async function publishToMobile() {
 }
 
 /* ================================================================== */
-/* 9. ADD / EDIT AN EVENT (and pick which ExCos are on it)             */
+/* 9. ADD / EDIT AN EVENT & DELETE EVENT                               */
 /* ================================================================== */
 
 const eventEditor = ref(null)
@@ -633,7 +634,6 @@ const eventEditorError = ref('')
 
 function openNewEvent() {
   if (blockedForGuest()) return
-  // Put the signed-in ExCo on the crew to start with
   const signedIn = excoPool.value.find(e => e.memberId === facilitySession.value.memberId || e.name === props.activePersona?.name)
   eventEditor.value = {
     mode: 'add',
@@ -659,7 +659,6 @@ function openEditEvent() {
     date: event.value.date,
     venue: event.value.venue,
     facilityBookingId: event.value.facilityBookingId ?? null,
-    // Older events have no times saved: start from what the tasks cover
     start: formatTime(event.value.start ?? dayStart.value),
     end: formatTime(event.value.end ?? dayEnd.value),
     crewIds: crew.value.map(p => p.memberId)
@@ -667,8 +666,6 @@ function openEditEvent() {
   eventEditorError.value = ''
 }
 
-// The CCA's bookings on the event's date (Master Facility Calendar). Linking one
-// lets Event Risk test "what if this room is unavailable" on this event.
 const bookingOptions = ref([])
 const bookingOptionsNote = ref('')
 watch(() => eventEditor.value?.date, async (date) => {
@@ -679,21 +676,18 @@ watch(() => eventEditor.value?.date, async (date) => {
     const bookings = await loadClubBookings(activeClubId.value, date)
     if (eventEditor.value?.date !== date) return
     bookingOptions.value = bookings
-    // A booking from another date no longer applies
     if (!bookings.some(b => b.id === eventEditor.value.facilityBookingId)) eventEditor.value.facilityBookingId = null
   } catch {
     bookingOptionsNote.value = 'Could not load your bookings. Try again later.'
   }
 })
 
-// Picking a booking fills in the venue if it's still empty
 function pickBooking() {
   const e = eventEditor.value
   const booking = bookingOptions.value.find(b => b.id === e.facilityBookingId)
   if (booking && !e.venue.trim()) e.venue = booking.facility
 }
 
-// People being taken off the crew, and how many tasks they'd lose
 const crewBeingRemoved = computed(() => {
   if (!eventEditor.value || eventEditor.value.mode !== 'edit') return []
   return crew.value.filter(p => !eventEditor.value.crewIds.includes(p.memberId) && p.blocks.length)
@@ -717,7 +711,6 @@ function saveEvent() {
     if (hasMain && (toMinutes(e.mainStart) < start || toMinutes(e.mainEnd) > end)) {
       return (eventEditorError.value = `The fixed time has to be within the event (${e.start}–${e.end}).`)
     }
-    // Everyone on the crew gets the main fixed block (e.g. the show)
     const newEvent = {
       id: newId(),
       name: e.name.trim(),
@@ -753,18 +746,29 @@ function saveEvent() {
 }
 
 async function deleteEvent() {
-  // Sample mode always keeps at least one event to look at
+  if (blockedForGuest()) return
+  if (!event.value) return
+
   if (dataMode.value === 'local' && events.value.length === 1) {
-    eventEditorError.value = 'This is the only event. Create another one before deleting it.'
+    if (eventEditor.value) {
+      eventEditorError.value = 'This is the only event. Create another one before deleting it.'
+    } else {
+      showToast('This is the only event. Create another one before deleting it.')
+    }
     return
   }
-  if (!window.confirm(`Delete ${event.value.name} and its whole plan?`)) return
+
+  if (!window.confirm(`Delete ${event.value.name} and its whole operations plan?`)) return
   const { id, name } = event.value
   if (dataMode.value === 'supabase' && lastSaved.has(id)) {
     try {
       await deleteEventFromDb(id)
     } catch (error) {
-      eventEditorError.value = `Couldn't delete: ${error.message}`
+      if (eventEditor.value) {
+        eventEditorError.value = `Couldn't delete: ${error.message}`
+      } else {
+        showToast(`Couldn't delete event: ${error.message}`, 6000)
+      }
       return
     }
     lastSaved.delete(id)
@@ -772,21 +776,20 @@ async function deleteEvent() {
   events.value = events.value.filter(ev => ev.id !== id)
   selectedEventId.value = events.value.length ? events.value[0].id : null
   eventEditor.value = null
-  showToast(`Deleted ${name}.`)
+  showToast(`Deleted event: "${name}".`)
 }
 
 /* ================================================================== */
 /* 10. PLANNING: add, edit and remove tasks                            */
 /* ================================================================== */
 
-const editor = ref(null) // the task being added or edited
+const editor = ref(null)
 const editorError = ref('')
 
 function roundToQuarter(minutes) {
   return Math.ceil(minutes / 15) * 15
 }
 
-// prefill (from dragging on the grid): { names, start, end } in minutes
 function openAddTask(prefill = null) {
   if (blockedForGuest()) return
   const start = prefill ? prefill.start : roundToQuarter(showClock.value)
@@ -804,7 +807,6 @@ function openAddTask(prefill = null) {
   editorError.value = ''
 }
 
-// Everyone with the same task (same name and times) is edited together
 function sameTaskGroup(b) {
   return crew.value.flatMap(p => p.blocks
     .filter(x => x.title === b.title && x.start === b.start && x.end === b.end)
@@ -836,7 +838,6 @@ function saveTask() {
   if (!e.names.length) return (editorError.value = 'Pick at least one person.')
   if (end <= start) return (editorError.value = 'The end time must be after the start time.')
 
-  // Nobody can be in two places at once (ignoring the task being edited)
   const editingIds = e.mode === 'edit' ? e.group.map(g => g.blockId) : []
   for (const name of e.names) {
     const person = crew.value.find(p => p.name === name)
@@ -848,7 +849,6 @@ function saveTask() {
 
   const fields = { start, end, title: e.title.trim(), type: e.type, venue: e.venue.trim(), fixed: e.fixed }
   if (e.mode === 'edit') {
-    // People who had it: update it, or take it off them if they were unticked
     for (const g of e.group) {
       const person = crew.value.find(p => p.name === g.name)
       if (e.names.includes(g.name)) {
@@ -857,7 +857,6 @@ function saveTask() {
         person.blocks = person.blocks.filter(b => b.id !== g.blockId)
       }
     }
-    // Newly ticked people get their own copy
     for (const name of e.names.filter(n => !e.group.some(g => g.name === n))) {
       crew.value.find(p => p.name === name).blocks.push({ id: newId(), ...fields })
     }
@@ -870,7 +869,6 @@ function saveTask() {
   editor.value = null
 }
 
-// Removes the task from everyone who had it
 function deleteTask() {
   const e = editor.value
   for (const g of e.group) {
@@ -881,14 +879,10 @@ function deleteTask() {
   editor.value = null
 }
 
-/* ---------------- Drag on the grid to add a task (mouse only) ----------------
-   Press on empty space in someone's row and drag: sideways picks the time,
-   up/down picks more people. Letting go opens "Add a task" already filled in.
-   Touch screens keep dragging to scroll the grid, and use "+ Add task". */
+/* ---------------- Drag on grid to add task ---------------- */
 
-const drag = ref(null) // { track, fromRow, toRow, anchor, current }
+const drag = ref(null)
 
-// The time under the pointer, snapped to 15 min and kept inside the timeline
 function minuteAtPointer(e, track) {
   const rect = track.getBoundingClientRect()
   const ratio = Math.min(1, Math.max(0, (e.clientX - rect.left) / rect.width))
@@ -911,7 +905,6 @@ function inDragSelection(rowIndex) {
   return !!s && s.end > s.start && rowIndex >= s.fromRow && rowIndex <= s.toRow
 }
 
-// Red when the dragged time overlaps something this person already has
 function dragClashes(person) {
   const s = dragSelection.value
   return person.blocks.some(b => b.start < s.end && s.start < b.end)
@@ -919,8 +912,8 @@ function dragClashes(person) {
 
 function startDrag(e, rowIndex) {
   if (props.readOnly || e.pointerType !== 'mouse' || e.button !== 0) return
-  if (e.target.closest('.ops-block')) return // clicking a task still opens it
-  e.preventDefault() // no text selection while dragging
+  if (e.target.closest('.ops-block')) return
+  e.preventDefault()
   const track = e.currentTarget
   const minute = minuteAtPointer(e, track)
   drag.value = { track, fromRow: rowIndex, toRow: rowIndex, anchor: minute, current: minute }
@@ -940,7 +933,7 @@ function endDrag() {
   window.removeEventListener('pointerup', endDrag)
   const s = dragSelection.value
   drag.value = null
-  if (!s || s.end - s.start < 15) return // just a click on empty space
+  if (!s || s.end - s.start < 15) return
   openAddTask({
     names: crew.value.slice(s.fromRow, s.toRow + 1).map(p => p.name),
     start: s.start,
@@ -954,17 +947,13 @@ onBeforeUnmount(() => {
 })
 
 /* ================================================================== */
-/* 11. CREW CHECK-IN (each person is due at their first task)          */
+/* 11. CREW CHECK-IN                                                  */
 /* ================================================================== */
 
-// When someone needs to be here: the start of their first task
 function callTime(person) {
   return person.blocks.length ? Math.min(...person.blocks.map(b => b.start)) : null
 }
 
-// 'in' | 'late' | 'due' | 'missing', as at the clock.
-// Check-in only happens on the event day: before it everyone is just due,
-// and after it the check-ins are kept as a record.
 function checkInStatus(p) {
   if (eventDay.value === 'upcoming') return 'due'
   if (eventDay.value === 'past') return p.checkedInAt !== null ? 'in' : 'due'
@@ -983,16 +972,14 @@ const sortedCrewForCheckIn = computed(() => {
 
 const checkedIn = computed(() => crew.value.filter(p => checkInStatus(p) === 'in'))
 
-// Check-in, late and undo only work on the event day
 function blockedBeforeEventDay() {
   if (isEventDay.value) return false
   showToast('Check-in opens on the day of the event.')
   return true
 }
 
-// "Running late" asks how late before marking them
-const LATE_OPTIONS = [5, 10, 15, 30] // minutes
-const lateChoiceFor = ref(null) // memberId whose late options are showing
+const LATE_OPTIONS = [5, 10, 15, 30]
+const lateChoiceFor = ref(null)
 
 function reportLateETA(person, mins) {
   lateChoiceFor.value = null
@@ -1008,19 +995,16 @@ function checkInPerformer(person) {
   showToast(`${person.name} checked in at ${formatTime(showClock.value)}.`)
 }
 
-// 'Rachel Tan' -> 'RT' (the crew picker)
 function initials(name) {
   const parts = name.trim().split(/\s+/)
   return (parts[0][0] + (parts.length > 1 ? parts[parts.length - 1][0] : '')).toUpperCase()
 }
 
-// 'Rachel Tan' -> 'Rachel T' (the grid's name column on phones)
 function shortName(name) {
   const parts = name.trim().split(/\s+/)
   return parts.length > 1 ? `${parts[0]} ${parts[parts.length - 1][0]}` : parts[0]
 }
 
-// For a check-in pressed by mistake
 function undoCheckIn(person) {
   if (blockedForGuest() || blockedBeforeEventDay()) return
   person.checkedInAt = null
@@ -1036,7 +1020,7 @@ function clearLate(person) {
 
 <template>
   <div class="py-2">
-    <p class="text-muted small">Saved events and tasks automatically remind assigned crew on Telegram 15 minutes before they start. Sample plans do not send reminders.</p>
+    <p class="text-muted small">Saved events and tasks automatically remind assigned crew on Telegram 15 minutes before they start.</p>
 
     <!-- Header: which event, plus the main actions -->
     <div class="d-flex flex-wrap justify-content-between align-items-start gap-3 mb-3">
@@ -1052,14 +1036,14 @@ function clearLate(person) {
             <option v-for="ev in events" :key="ev.id" :value="ev.id">{{ ev.name }} • {{ formatDate(ev.date) }}</option>
           </select>
           <template v-if="!readOnly">
-            <button v-if="event" type="button" class="btn btn-sm btn-light border" @click="openEditEvent">Edit event</button>
-            <button type="button" class="btn btn-sm btn-outline-danger fw-semibold" @click="openNewEvent">+ New event</button>
+             <button type="button" class="btn btn-sm btn-outline-danger fw-semibold" @click="openNewEvent">+ New event</button>
+            <button v-if="event" type="button" class="btn btn-sm btn-warning border" @click="openEditEvent">Edit event</button>
+            <button v-if="event" type="button" class="btn btn-sm btn-danger text-white border" @click="deleteEvent">Delete event</button>
           </template>
         </div>
         <p v-if="event" class="text-muted small mb-0 mt-2">
           {{ formatDate(event.date) }}<span v-if="event.venue"> • {{ event.venue }}</span> • {{ crew.length }} ExCo{{ crew.length === 1 ? '' : 's' }} on the crew
         </p>
-        <!-- Where the plan is saved -->
         <div class="ops-small mt-1">
           <span v-if="dataMode === 'supabase'" class="text-success fw-semibold">
             ● Shared with your CCA's ExCos<span v-if="saveState === 'saving'" class="text-muted fw-normal"> • saving…</span><span v-else-if="saveState === 'saved'" class="text-muted fw-normal"> • saved</span><span v-else-if="saveState === 'error'" class="text-danger"> • not saved</span>
@@ -1073,11 +1057,11 @@ function clearLate(person) {
           <button type="button" class="btn btn-sm btn-outline-warning text-dark fw-bold border-warning d-flex align-items-center gap-2" :disabled="!isEventDay" :aria-expanded="showDelayMenu" :title="isEventDay ? 'What\'s happening now runs over. Fixed times (like the performance) never move.' : 'Only on the day of the event'" @click="showDelayMenu = !showDelayMenu">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <circle cx="12" cy="12" r="10"></circle>
-              <polyline points="12 6 12 12 16 14"></polyline>
+              <polyline points="12 6 12 16 14"></polyline>
             </svg>
             <span>Delay current tasks ▾</span>
           </button>
-          <div v-if="showDelayMenu" class="ops-more-menu shadow-lg border rounded-3 py-1 overflow-hidden" style="min-width: 220px; z-index: 1050;">
+          <div v-if="showDelayMenu" class="ops-more-menu shadow-lg border rounded-3 py-2 overflow-hidden" style="min-width: 230px; z-index: 1050;">
             <div class="px-3 py-1.5 text-uppercase fw-bold text-muted border-bottom" style="font-size: 0.65rem; letter-spacing: 0.04em;">
               Quick Presets
             </div>
@@ -1087,11 +1071,11 @@ function clearLate(person) {
                 <span class="text-muted" style="font-size: 0.68rem;">Delay</span>
               </button>
             </div>
-            <div class="p-2.5 border-top bg-light">
-              <label for="customDelayInput" class="small fw-bold text-dark d-block mb-1" style="font-size: 0.72rem;">
+            <div class="p-3 border-top bg-light">
+              <label for="customDelayInput" class="small fw-bold text-dark d-block mb-1.5" style="font-size: 0.72rem;">
                 Custom Delay:
               </label>
-              <div class="input-group input-group-sm mb-1">
+              <div class="input-group input-group-sm mb-2">
                 <input 
                   id="customDelayInput"
                   v-model.number="customDelayMinutes" 
@@ -1113,9 +1097,9 @@ function clearLate(person) {
                   Apply
                 </button>
               </div>
-              <div class="d-flex justify-content-between align-items-center">
-                <small class="text-muted" style="font-size: 0.66rem;">e.g. 45, 90 mins</small>
-                <button type="button" class="btn btn-link p-0 text-muted ops-small text-decoration-none" style="font-size: 0.68rem;" @click="showDelayMenu = false">Close</button>
+              <div class="d-flex justify-content-between align-items-center pt-1 pb-0.5 px-0.5">
+                <small class="text-muted" style="font-size: 0.68rem;">e.g. 45, 90 mins</small>
+                <button type="button" class="btn btn-link p-0 text-muted ops-small text-decoration-none" style="font-size: 0.7rem;" @click="showDelayMenu = false">Close</button>
               </div>
             </div>
           </div>
@@ -1181,7 +1165,6 @@ function clearLate(person) {
             <span v-else>Preview time</span>
           </div>
           <div class="d-flex align-items-center gap-2">
-              <!-- The time being shown, and a slider to move it -->
               <span class="fw-bold fs-5 ops-clock">{{ formatTime(showClock) }}</span>
               <input
                 type="range"
@@ -1193,7 +1176,7 @@ function clearLate(person) {
                 :value="showClock"
                 @input="onSliderInput"
               />
-              <button v-if="isEventDay && !followLive" type="button" class="btn btn-outline-danger btn-sm py-0 px-2 ops-small fw-bold text-nowrap" @click="resetClock">
+              <button v-if="isEventDay && !followLive" type="button" class="btn btn-danger text-white btn-sm py-0.5 px-2.5 ops-small fw-bold text-nowrap rounded-pill shadow-xs" @click="resetClock">
                 Live
               </button>
             </div>
@@ -1239,7 +1222,7 @@ function clearLate(person) {
             <button v-if="!readOnly" type="button" class="btn btn-sm btn-outline-danger fw-semibold" @click="openAddTask()">+ Add task</button>
           </div>
 
-          <!-- My schedule: one person's day as a list -->
+          <!-- My schedule -->
           <div v-if="activeTab === 'me'">
             <div class="d-flex align-items-center gap-2 mb-3">
               <label for="opsPerson" class="small text-muted mb-0">Showing</label>
@@ -1271,7 +1254,7 @@ function clearLate(person) {
             </div>
           </div>
 
-          <!-- Everyone now: where each person should be at the show clock -->
+          <!-- Everyone now -->
           <div v-else-if="activeTab === 'now'">
             <div class="text-muted small mb-2">Where everyone should be at <strong>{{ formatTime(showClock) }}</strong>. Drag the time slider above to change it.</div>
             <div class="d-flex flex-column gap-2">
@@ -1294,10 +1277,10 @@ function clearLate(person) {
             </div>
           </div>
 
-          <!-- Full grid: one row per person, time across (like the crew spreadsheet) -->
+          <!-- Full grid -->
           <div v-else>
             <div v-if="!readOnly" class="text-muted ops-small mb-2 d-none d-md-block">Tip: drag across empty space in someone's row to add a task. Drag up or down to include more people.</div>
-            <div class="ops-grid-scroll" :class="{ 'ops-dragging': drag }">
+            <div ref="gridScrollContainer" class="ops-grid-scroll" :class="{ 'ops-dragging': drag }">
               <div class="ops-grid">
                 <div class="ops-grid-row ops-grid-head">
                   <div class="ops-grid-name"></div>
@@ -1317,7 +1300,6 @@ function clearLate(person) {
                   </div>
                   <div class="ops-grid-track" :class="{ 'ops-drag-target': !readOnly }" @pointerdown="startDrag($event, rowIndex)">
                     <span v-for="t in halfHours" :key="t" class="ops-gridline" :style="{ left: `${percentAt(t)}%` }"></span>
-                    <!-- The time being dragged out for a new task -->
                     <div
                       v-if="inDragSelection(rowIndex)"
                       class="ops-drag-sel"
@@ -1373,7 +1355,6 @@ function clearLate(person) {
           <p v-else-if="eventDay === 'upcoming'" class="text-muted small mb-3">Opens on {{ formatDate(event.date) }}. Each person will be due at their first task.</p>
           <p v-else class="text-muted small mb-3">Check-ins from {{ formatDate(event.date) }}.</p>
 
-          <!-- List of all crew members sorted by status -->
           <div class="d-flex flex-column gap-2 mb-3">
             <div
               v-for="p in sortedCrewForCheckIn"
@@ -1386,7 +1367,6 @@ function clearLate(person) {
                   {{ p.name }}
                 </strong>
 
-                <!-- Status Badges -->
                 <span v-if="checkInStatus(p) === 'in'" class="badge bg-success rounded-pill" style="font-size: 0.65rem;">
                   ✓ Checked In {{ p.checkedInAt ? `@ ${formatTime(p.checkedInAt)}` : '' }}
                 </span>
@@ -1407,7 +1387,6 @@ function clearLate(person) {
                 Was due at {{ formatTime(callTime(p)) }}, not checked in
               </div>
 
-              <!-- Action Buttons (event day only) -->
               <template v-if="isEventDay">
               <div v-if="checkInStatus(p) !== 'in' && lateChoiceFor === p.memberId" class="d-flex flex-wrap align-items-center gap-1 mt-2">
                 <span class="ops-small text-muted me-1">How late?</span>
@@ -1439,7 +1418,6 @@ function clearLate(person) {
     <!-- New / edit event -->
     <div v-if="eventEditor" class="modal-backdrop fade show" style="background: rgba(15, 23, 42, 0.6); z-index: 1065;" @click="eventEditor = null"></div>
     <div v-if="eventEditor" class="modal fade show d-block" tabindex="-1" style="z-index: 1070;" role="dialog" aria-modal="true">
-      <!-- Wider on laptops so the crew picker fits 3 across instead of getting long -->
       <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable modal-lg">
         <form class="modal-content border-0 shadow-lg rounded-4" @submit.prevent="saveEvent">
           <div class="modal-header border-bottom px-4 py-3">
@@ -1487,7 +1465,6 @@ function clearLate(person) {
             </div>
             <div class="text-muted ops-small mb-3">From reporting time to teardown, e.g. 3:00 PM – 11:00 PM</div>
 
-            <!-- The fixed part of the day, added to everyone's plan (new events only) -->
             <div v-if="eventEditor.mode === 'add'" class="p-2 ps-3 rounded-3 mb-3 ops-fixed-box">
               <div class="d-flex justify-content-between align-items-center mb-1">
                 <span class="small fw-bold">Fixed time <span class="fw-normal text-muted">(optional)</span></span>
@@ -1514,7 +1491,6 @@ function clearLate(person) {
               <button v-if="eventEditor.crewIds.length < excoPool.length" type="button" class="btn btn-link btn-sm p-0 ops-small text-decoration-none" @click="eventEditor.crewIds = excoPool.map(e => e.memberId)">Select all</button>
               <button v-else type="button" class="btn btn-link btn-sm p-0 ops-small text-decoration-none" @click="eventEditor.crewIds = []">Clear</button>
             </div>
-            <!-- Laptops: cards with role. Phones: name pills, so a big CCA isn't a long scroll -->
             <div class="ops-crew-grid mb-2">
               <label v-for="exco in excoPool" :key="exco.memberId" class="ops-crew-option" :class="{ active: eventEditor.crewIds.includes(exco.memberId) }" :title="exco.role">
                 <input v-model="eventEditor.crewIds" type="checkbox" class="visually-hidden" :value="exco.memberId" />
@@ -1616,32 +1592,28 @@ function clearLate(person) {
 </template>
 
 <style scoped>
-/* Long event names must fit the header rather than widening the page on phones. */
 .ops-event-heading { min-width: 0; max-width: 100%; }
 #opsEvent { min-width: 0; max-width: 100%; }
 .ops-label { font-size: 0.65rem; letter-spacing: 0.04em; }
 .ops-small { font-size: 0.72rem; }
-.ops-clock { font-variant-numeric: tabular-nums; white-space: nowrap; flex-shrink: 0; } /* digits don't jiggle while sliding */
+.ops-clock { font-variant-numeric: tabular-nums; white-space: nowrap; flex-shrink: 0; }
 .ops-slider { min-width: 90px; }
 
-/* Big cards here hold the timeline, so they shouldn't jump on hover */
 .ops-static-card:hover { transform: none; }
 
 .ops-tabs .nav-link { font-size: 0.8rem; font-weight: 600; padding: 0.35rem 0.8rem; color: var(--pulse-ink, #334155); }
 .ops-tabs .nav-link.active { background-color: #dc3545; color: #fff; }
 
-/* The delay menu opens to the right so it stays on screen on phones */
 .ops-more-menu {
   position: absolute;
   left: 0;
   top: calc(100% + 4px);
   z-index: 1050;
-  min-width: 220px;
+  min-width: 230px;
   max-width: calc(100vw - 2rem);
   background: #fff;
 }
 
-/* Block colours (same as the crew spreadsheet legend) */
 .ops-block-setup { background-color: #f4d4d8; }
 .ops-block-move { background-color: #e3dcf2; }
 .ops-block-perform { background-color: #fbefc4; }
@@ -1652,19 +1624,16 @@ function clearLate(person) {
 .ops-swatch { width: 12px; height: 12px; border-radius: 3px; display: inline-block; border: 1px solid rgba(0, 0, 0, 0.08); }
 .ops-swatch-now { background-color: #dc3545; width: 3px; border: 0; }
 
-/* Check-in status dots next to names */
 .ops-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; flex-shrink: 0; background-color: #cbd5e1; }
 .ops-dot-in { background-color: #16a34a; }
 .ops-dot-late { background-color: #f59e0b; }
 .ops-dot-missing { background-color: #dc3545; }
 
-/* Fixed-time blocks (never moved by a delay) get a dark left edge */
 .ops-fixed { box-shadow: inset 3px 0 0 #1f2937; }
 .ops-swatch-fixed { background-color: #fbefc4; box-shadow: inset 3px 0 0 #1f2937; }
 .ops-editable { cursor: pointer; }
 .ops-editable:hover { filter: brightness(0.96); }
 
-/* People picker in the add-task form */
 .ops-person-pill {
   border: 1px solid #d1d5db;
   border-radius: 9999px;
@@ -1674,10 +1643,8 @@ function clearLate(person) {
 }
 .ops-person-pill.active { background-color: #dc3545; border-color: #dc3545; color: #fff; }
 
-/* New / edit event: the fixed time looks like a fixed block on the grid */
 .ops-fixed-box { background-color: #fdf6dc; border: 1px solid #f3e3a3; box-shadow: inset 3px 0 0 #1f2937; }
 
-/* New / edit event: crew picker */
 .ops-crew-option {
   display: flex;
   align-items: center;
@@ -1691,7 +1658,7 @@ function clearLate(person) {
 }
 .ops-crew-option:hover { border-color: #f1aeb5; }
 .ops-crew-option.active { border-color: #dc3545; background-color: #fdf2f3; }
-.ops-crew-option:has(input:focus-visible) { outline: 2px solid #dc3545; outline-offset: 2px; } /* keyboard only */
+.ops-crew-option:has(input:focus-visible) { outline: 2px solid #dc3545; outline-offset: 2px; }
 .ops-avatar {
   width: 2rem;
   height: 2rem;
@@ -1712,26 +1679,22 @@ function clearLate(person) {
   .ops-crew-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
 
-/* Phones: plain name pills (picked = red), no avatar or role */
 @media (max-width: 576px) {
   .ops-crew-grid { display: flex; flex-wrap: wrap; }
   .ops-crew-option { padding: 0.25rem 0.75rem; border-radius: 9999px; border-color: #d1d5db; }
   .ops-crew-option .ops-avatar,
   .ops-crew-option .ops-crew-role,
-  .ops-crew-option .ops-check { display: none !important; } /* beats Bootstrap's d-block */
+  .ops-crew-option .ops-check { display: none !important; }
   .ops-crew-option.active { background-color: #dc3545; border-color: #dc3545; color: #fff; }
 }
 
-/* My schedule list */
 .ops-list-time { width: 3.2rem; flex-shrink: 0; font-variant-numeric: tabular-nums; }
 .ops-current { outline: 2px solid #dc3545; }
 
-/* Everyone now */
 .ops-now-name { width: 9.5rem; flex-shrink: 0; }
 .ops-chip { display: inline-block; padding: 0.2rem 0.55rem; border-radius: 0.5rem; font-weight: 600; }
 
-/* Full grid: names on the left, time across; scrolls sideways on small screens */
-.ops-grid-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; max-width: 100%; }
+.ops-grid-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; max-width: 100%; scroll-behavior: smooth; }
 .ops-grid { min-width: 1250px; }
 .ops-grid-row { display: flex; align-items: stretch; border-bottom: 1px solid #eef0f3; }
 .ops-grid-name {
@@ -1745,10 +1708,8 @@ function clearLate(person) {
 }
 .ops-grid-me .ops-grid-name { box-shadow: inset 3px 0 0 #dc3545; padding-left: 0.5rem; }
 .ops-name-short { display: none; }
-/* Long names + roles would push the picker past the card on phones */
 .ops-person-select { min-width: 0; max-width: 100%; text-overflow: ellipsis; }
 
-/* Phones only: thinner name column so more of the timeline fits */
 @media (max-width: 576px) {
   .ops-grid-name { width: 84px; }
   .ops-name-full,
@@ -1760,13 +1721,12 @@ function clearLate(person) {
 .ops-tick { position: absolute; top: 0; padding-left: 4px; font-size: 0.65rem; color: #64748b; font-variant-numeric: tabular-nums; }
 .ops-gridline { position: absolute; top: 0; bottom: 0; border-left: 1px dashed #e5e7eb; }
 
-/* Drag on empty space to add a task (laptops) */
 @media (pointer: fine) {
   .ops-drag-target { cursor: crosshair; }
-  .ops-grid { user-select: none; } /* dragging the mouse across the grid shouldn't highlight text */
+  .ops-grid { user-select: none; }
 }
 .ops-dragging { user-select: none; }
-.ops-dragging .ops-block { pointer-events: none; } /* dragging over a task doesn't open it */
+.ops-dragging .ops-block { pointer-events: none; }
 .ops-drag-sel {
   position: absolute;
   top: 5px;
