@@ -8,7 +8,7 @@ const supabase = createClient(
 )
 
 const BOT_TOKEN = Deno.env.get('TELEGRAM_BOT_TOKEN')
-const BASE_URL = Deno.env.get('PULSE_BASE_URL') ?? ''
+let BASE_URL = Deno.env.get('PULSE_BASE_URL') ?? ''
 
 // TEST: All eligible notifications go to YOUR chat.
 // LIVE: Notifications go to their intended member's chat.
@@ -23,6 +23,7 @@ const TEST_CHAT_ID = Deno.env.get('TELEGRAM_TEST_CHAT_ID')
 
 // Only these events should generate Telegram messages.
 const ALLOWED_TYPES = [
+  'OPS_CREW_REMINDER',
   'WAITLIST_OFFER',
   'WAITLIST_REMINDER',
   'TRANSFER_APPROVED',
@@ -31,7 +32,11 @@ const ALLOWED_TYPES = [
   'MEETING_REQUEST',
   'MEETING_NUDGE',
   'MEETING_CONFIRMED',
-  'MEETING_CANCELLED'
+  'MEETING_CANCELLED',
+  'MEETING_REMOVED',
+  'MEETING_AGENDA_UPDATED',
+  'SCHEDULE_CHANGED',
+  'OPS_SCHEDULE_CHANGED'
 ]
 
 type Notification = {
@@ -71,6 +76,9 @@ function buttonLabel(type: string): string {
   if (type === 'MEETING_REQUEST' || type === 'MEETING_NUDGE') return 'Mark my availability'
   if (type === 'MEETING_CONFIRMED') return 'View meeting'
   if (type.startsWith('TRANSFER_')) return 'View booking'
+  if (type === 'SCHEDULE_CHANGED') return 'My Schedule'
+  if (type === 'OPS_SCHEDULE_CHANGED') return 'View run of show'
+  if (type.startsWith('MEETING_')) return 'View meeting'
   return 'Open Pulse'
 }
 
@@ -238,6 +246,18 @@ Deno.serve(async () => {
     )
   }
 
+  // Use the existing public app setting if the optional Edge secret is absent.
+  if (!BASE_URL) {
+    const configured = await supabase.rpc('cfg_text', { p_key: 'pulse_base_url' })
+    if (configured.error || !configured.data || !isPublicUrl(configured.data)) return Response.json({ error: 'Public Pulse URL unavailable' }, { status: 503 })
+    BASE_URL = configured.data
+  }
+
+  const { error: reminderError } = await supabase.rpc('queue_ops_crew_reminders')
+  if (reminderError) {
+    return Response.json({ error: reminderError.message }, { status: 500 })
+  }
+
   const { data: pending, error } = await supabase
     .from('notifications')
     .select(
@@ -285,7 +305,7 @@ Deno.serve(async () => {
       if (DELIVERY_MODE === 'demo') {
         // Uses the LIVE lookup above for the chat linked with Connect Telegram
         const linked = await liveChatId(n.recipient_member_id)
-        targets = demoTelegramTargets(n, demoRoutes, linked, seenEvents)
+        targets = demoTelegramTargets(n, demoRoutes, linked, seenEvents, { allowCopies: !['SCHEDULE_CHANGED', 'OPS_SCHEDULE_CHANGED', 'OPS_CREW_REMINDER'].includes(n.type) })
       } else {
         targets = (await getChatIds(n.recipient_member_id)).map((chatId) => ({ chatId, label: null }))
       }

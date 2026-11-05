@@ -7,7 +7,7 @@ import {test,expect} from '@playwright/test'
 import {bootRefinement} from './helpers/refinementHarness.js'
 import {openTimeline,openFacilityHeatmap} from './helpers/disclosures.js'
 
-// Week 10c: Setup -> Actions -> Assert. Real Vue and engine, isolated records;
+// Setup -> Actions -> Assert. Real Vue and engine, isolated records;
 // these browser tests do not prove live Supabase RLS or deliver notifications.
 async function simulate(page){
  await bootRefinement(page,{many:true})
