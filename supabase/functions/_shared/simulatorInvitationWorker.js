@@ -63,8 +63,7 @@ export function createSimulatorInvitationHandler({client,env,fetchImpl=fetch}) {
     const targets=mode==='demo'?resolveTelegramRecipients({recipient_member_id:invitation.recipient_member_id,recipient_user_id:recipientUserId,type:'SIMULATOR_INVITATION',title:invitation.id,body:''},recipientRoutes,data?.telegram_chat_id,new Set()):data?.telegram_chat_id==null?[]:[{chatId:data.telegram_chat_id}]
     if(!targets.length)delivery='NO_CHAT'
     else{
-     const message={title:'Replacement invitation',
-      body:(invitation.event_name?'Event: '+invitation.event_name+'\n':'')+'You have a replacement request. Sign in to PULSE and open Personal Schedule > My replacement invitations to review and respond.',link}
+     const message=invitationMessage(invitation,link)
      const result=await send({...message,chatId:targets[0].chatId})
      delivery=result.status
      // A copy never changes the recipient's delivery status
@@ -88,4 +87,38 @@ export function createSimulatorInvitationHandler({client,env,fetchImpl=fetch}) {
    unknown:results.filter(r=>['UNKNOWN','UNCONFIRMED'].includes(r.status)).length,results
   },{status:results.some(r=>r.status==='UNCONFIRMED')?207:200})
  }
+}
+
+// Singapore time, e.g. "Sat 14 Nov, 16:30", or just "18:00"
+function sgTime(value,withDay=true){
+ const date=new Date(value)
+ if(!Number.isFinite(date.getTime()))return ''
+ const options=withDay
+  ?{weekday:'short',day:'numeric',month:'short',hour:'2-digit',minute:'2-digit',hourCycle:'h23'}
+  :{hour:'2-digit',minute:'2-digit',hourCycle:'h23'}
+ return date.toLocaleString('en-SG',{timeZone:'Asia/Singapore',...options})
+}
+
+/** What the replacement request says on Telegram. Its button opens Personal
+ * Schedule > My replacement invitations, where they accept or decline.
+ * The details come from rpc_simulator_claim_telegram. Until
+ * 20261106110000_replacement_request_message.sql is run only the event name and
+ * the number of activities are known, so the message is shorter. */
+export function invitationMessage(invitation,link){
+ const lines=[]
+ if(invitation.event_name)lines.push('Event: '+invitation.event_name)
+ lines.push(invitation.replaced_name?'You have been asked to cover for '+invitation.replaced_name+'.':'You have been asked to cover a role.')
+ const activities=Array.isArray(invitation.assignment_snapshot)?invitation.assignment_snapshot:[]
+ for(const a of activities.slice(0,3)){
+  const from=sgTime(a.starts_at)
+  const until=sgTime(a.ends_at,false)
+  lines.push('• '+(a.activity||'Activity')+(a.role_name?' ('+a.role_name+')':'')+(from?', '+from+(until?'–'+until:''):''))
+ }
+ if(activities.length>3)lines.push('• and '+(activities.length-3)+' more')
+ if(!activities.length && invitation.activity_count)lines.push(invitation.activity_count+' '+(invitation.activity_count===1?'activity':'activities')+' to cover.')
+ const deadline=invitation.expires_at?sgTime(invitation.expires_at):''
+ if(deadline)lines.push('Please reply by '+deadline+'.')
+ lines.push('Tap Review request to accept or decline in Personal Schedule > My replacement invitations.')
+ lines.push('Accepting assigns you straight away. No organiser approval is needed.')
+ return {title:'Replacement request',body:lines.join('\n'),link,buttonText:'Review request'}
 }

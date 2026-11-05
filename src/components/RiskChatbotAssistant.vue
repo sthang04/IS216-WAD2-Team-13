@@ -392,7 +392,7 @@ function chooseFix(plan) {
     return
   }
   say(todo.length
-    ? `If you confirm, I'll ${todo.join(' and ')}. Nothing changes in Day Ops until everything is accepted and you press Apply.`
+    ? `If you confirm, I'll ${todo.join(' and ')}. As soon as everyone accepts, Day Ops is updated automatically. You don't need to press Apply.`
     : "If you confirm, I'll save this fix so you can apply it. Nothing changes in Day Ops until you press Apply.",
   { kind: 'confirm', fixId: fix.value.id })
   step.value = 'done'

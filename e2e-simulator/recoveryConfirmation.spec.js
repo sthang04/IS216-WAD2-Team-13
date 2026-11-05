@@ -67,7 +67,7 @@ test('discoverable recipient inbox confirms exact response and refreshes persist
  expect(await page.evaluate(()=>window.__recoveryCalls.filter(c=>c.name==='rpc_simulator_respond_invitation').length)).toBe(0)
  await inbox.getByRole('checkbox').check()
  await inbox.getByRole('button',{name:'Confirm invitation response',exact:true}).click()
- await expect(inbox).toContainText('Response persisted.')
+ await expect(inbox).toContainText('Accepted.')
  await expect(inbox).toContainText('Accepted')
  await expect(inbox.getByRole('button',{name:'Accept this invitation',exact:true})).toBeDisabled()
  expect(await page.evaluate(()=>window.__recoveryCalls.filter(c=>c.name==='rpc_simulator_respond_invitation').length)).toBe(1)

@@ -91,7 +91,7 @@ test('invitation response refreshes history and exact terms, and signals inbox r
   view.state.invitationId='invite';view.state.incoming={id:'invite',status:'Pending'};await flush()
   view.state.respond('Accepted');assert.equal(responses,0);view.state.confirmed=true
   await view.state.executePending();assert.equal(responses,1);assert.equal(reads,2)
-  assert.equal(view.state.incoming.status,'Accepted');assert.match(view.state.message,/persisted/)
+  assert.equal(view.state.incoming.status,'Accepted');assert.match(view.state.message,/^Accepted\. You are assigned/)
  }finally{view.app.unmount()}
 })
 
