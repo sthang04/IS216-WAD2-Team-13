@@ -300,7 +300,7 @@ test('meeting loading and expired voting states expose no active vote controls',
  // Action: release the synthetic response; the real view renders its expired state.
  await page.evaluate(()=>{window.__foundation.configure({holdRpc:null});window.__foundation.release()})
  // Assert: expired feedback replaces loading, with no selectable vote blocks.
- await expect(page.getByText('Expired',{exact:true}).first()).toBeVisible()
+ await expect(page.getByText('Voting closed',{exact:true}).first()).toBeVisible()
  await expect(page.locator('.scheduler-grid [role=button]')).toHaveCount(0)
  await expect(page.getByRole('button',{name:'None of these times work',exact:true})).toHaveCount(0)
 })
@@ -311,7 +311,7 @@ test('meeting member view shows organiser guidance instead of confirmation contr
  // Action: inspect the visible participant workflow.
  await page.locator('.scheduler-grid [role=button]').first().click()
  // Assert: voting works, but organiser confirmation and cancellation are unavailable.
- await expect(page.getByText(/will confirm the meeting time once everyone has responded/)).toBeVisible()
+ await expect(page.getByText(/can confirm the meeting time once everyone has responded/)).toBeVisible()
  await expect(page.getByRole('button',{name:'Choose Meeting Day & Confirm',exact:true})).toHaveCount(0)
  await expect(page.getByRole('button',{name:'Cancel meeting request',exact:true})).toHaveCount(0)
 })

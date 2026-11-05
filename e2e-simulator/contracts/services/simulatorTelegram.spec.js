@@ -44,7 +44,7 @@ function legacy(source=current,{type='WAITLIST_OFFER',mode='live',linked=true,fa
  const row={id:9,recipient_member_id:7,recipient_club_id:3,type,title:'Title',body:'Body',action_url:'/facilities'}
  const client={from(table){let status
   const q={select(){return q},eq(key,value){if(status)updates.push({id:value,status});return q},order(){return q},update(value){status=value.telegram_status;return q},limit:async()=>({data:queueError?null:[row],error:queueError?{message:'legacy queue offline'}:null}),maybeSingle:async()=>({data:linked?{telegram_chat_id:111}:null}),then(resolve,reject){return Promise.resolve(table==='telegram_test_chats'?{data:[{chat_id:222},{chat_id:333}]}:{data:null}).then(resolve,reject)}};return q
- },rpc(){assert.fail('original sender must never claim simulator work')}}
+ },async rpc(name){if(name==='queue_ops_crew_reminders')return {data:0,error:null};assert.fail('original sender must never claim simulator work')}}
  const js=stripTypeScriptTypes(source.replaceAll('\r\n','\n').replace(/import .* from .*\n/g,''))
  new Function('createClient','Deno','fetch','console',js)(()=>client,{env:{get:key=>env[key]},serve:fn=>{handler=fn}},async(url,options)=>{sends.push(JSON.parse(options.body));return Response.json({ok:!fail},{status:fail?400:200})},{error(){},warn(){}})
  return {async run(auth='fake-service'){const r=await handler(new Request('https://worker.test',{method:'POST',headers:{Authorization:'Bearer '+auth}}));return {http:r.status,body:await r.json(),sends,updates}},sends,updates}

@@ -1006,6 +1006,7 @@ function clearLate(person) {
 
 <template>
   <div class="py-2">
+    <p class="text-muted small">Saved events and tasks automatically remind assigned crew on Telegram 15 minutes before they start. Sample plans do not send reminders.</p>
 
     <!-- Header: which event, plus the main actions -->
     <div class="d-flex flex-wrap justify-content-between align-items-start gap-3 mb-3">

@@ -23,6 +23,7 @@ const TEST_CHAT_ID = Deno.env.get('TELEGRAM_TEST_CHAT_ID')
 
 // Only these events should generate Telegram messages.
 const ALLOWED_TYPES = [
+  'OPS_CREW_REMINDER',
   'WAITLIST_OFFER',
   'WAITLIST_REMINDER',
   'TRANSFER_APPROVED',
@@ -253,6 +254,11 @@ Deno.serve(async () => {
     BASE_URL = configured.data
   }
 
+  const { error: reminderError } = await supabase.rpc('queue_ops_crew_reminders')
+  if (reminderError) {
+    return Response.json({ error: reminderError.message }, { status: 500 })
+  }
+
   const { data: pending, error } = await supabase
     .from('notifications')
     .select(
@@ -271,12 +277,19 @@ Deno.serve(async () => {
 
   // Stop before marking anything if the mapping can't be read
   let recipientRoutes: any[] = []
+  // Not every alert records recipient_user_id, so check the member's login directly
+  let membersWithLogin = new Set<number>()
   if (DELIVERY_MODE === 'demo') {
     const routes = await supabase.from('demo_recipient_routes').select('*')
     if (routes.error) {
       return Response.json({ error: routes.error.message }, { status: 500 })
     }
     recipientRoutes = routes.data ?? []
+    const logins = await supabase.from('members').select('id').not('auth_user_id', 'is', null)
+    if (logins.error) {
+      return Response.json({ error: logins.error.message }, { status: 500 })
+    }
+    membersWithLogin = new Set((logins.data ?? []).map((m) => m.id))
   }
   const seenEvents = new Set<string>()
 
@@ -300,7 +313,8 @@ Deno.serve(async () => {
       if (DELIVERY_MODE === 'demo') {
         // Uses the LIVE lookup above for the chat linked with Connect Telegram
         const linked = await liveChatId(n.recipient_member_id)
-        targets = resolveTelegramRecipients(n, recipientRoutes, linked, seenEvents)
+        const hasLogin = n.recipient_member_id !== null && membersWithLogin.has(n.recipient_member_id)
+        targets = resolveTelegramRecipients({ ...n, recipient_user_id: n.recipient_user_id ?? (hasLogin ? 'login' : null) }, recipientRoutes, linked, seenEvents)
       } else {
         targets = (await getChatIds(n.recipient_member_id)).map((chatId) => ({ chatId, label: null }))
       }
