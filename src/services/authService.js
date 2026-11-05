@@ -270,6 +270,30 @@ export async function checkSignupEligibility(email) {
   if (!isSmuEmail(normalized)) {
     throw new Error('Restricted: please use your @smu.edu.sg email.')
   }
+
+  // Demo onboarding placeholder emails (Self-resetting demo accounts for filming & prof evaluation)
+  const DEMO_ONBOARDING_EMAILS = [
+    'new.exco@scis.smu.edu.sg',
+    'new.exco.2025@scis.smu.edu.sg',
+    'demo.onboarding@scis.smu.edu.sg',
+    'onboarding.demo@scis.smu.edu.sg'
+  ]
+  if (DEMO_ONBOARDING_EMAILS.includes(normalized)) {
+    return {
+      email: normalized,
+      fullName: 'New ExCo Member',
+      ccas: ['SMU Eurhythmix'],
+      roles: [
+        { code: 'LOGISTICS_DIRECTOR', name: 'Logistics Director' },
+        { code: 'PRESIDENT', name: 'President' },
+        { code: 'VICE_PRESIDENT', name: 'Vice President' },
+        { code: 'HONORARY_GEN_SEC', name: 'Honorary General Secretary' },
+        { code: 'FINANCE_DIRECTOR', name: 'Finance Director' },
+        { code: 'MARKETING_DIRECTOR', name: 'Marketing Director' }
+      ]
+    }
+  }
+
   if (!isSupabaseConfigured() || !supabase) {
     throw new Error('Sign-up needs the Supabase connection, which is not configured on this device.')
   }
@@ -294,6 +318,42 @@ export async function checkSignupEligibility(email) {
 // The database links the new login to their members row automatically.
 // positions = { [cca]: role_code }; the database only accepts it while the role is still EXCO_MEMBER.
 export async function signUpExco({ email, fullName, positions, telegramHandle, password }) {
+  const normalized = (email || '').trim().toLowerCase()
+
+  // Demo onboarding placeholder emails (Self-resetting demo accounts for filming & prof evaluation)
+  const DEMO_ONBOARDING_EMAILS = [
+    'new.exco@scis.smu.edu.sg',
+    'new.exco.2025@scis.smu.edu.sg',
+    'demo.onboarding@scis.smu.edu.sg',
+    'onboarding.demo@scis.smu.edu.sg'
+  ]
+  if (DEMO_ONBOARDING_EMAILS.includes(normalized)) {
+    const roleCode = positions['SMU Eurhythmix'] || 'LOGISTICS_DIRECTOR'
+    const roleLabels = {
+      'LOGISTICS_DIRECTOR': 'Eurhythmix Logistics Director',
+      'PRESIDENT': 'Eurhythmix President',
+      'VICE_PRESIDENT': 'Eurhythmix Vice President',
+      'HONORARY_GEN_SEC': 'Eurhythmix Hon Gen Sec',
+      'FINANCE_DIRECTOR': 'Eurhythmix Finance Director',
+      'MARKETING_DIRECTOR': 'Eurhythmix Marketing Director'
+    }
+    const persona = {
+      id: 'new-exco-demo',
+      name: fullName || 'New ExCo Member',
+      email: normalized,
+      role: 'club',
+      roleLabel: roleLabels[roleCode] || 'Eurhythmix ExCo Member',
+      cca: 'SMU Eurhythmix',
+      allowedClubs: ['SMU Eurhythmix'],
+      isDev: false,
+      sector: 'ACF • Arts & Culture',
+      smartSearches: ['Studio L7.2', 'Dance Studio', 'Sprung Floor', 'Connexion', 'Evening Slots']
+    }
+    writeLocalSession({ email: normalized, name: fullName, cca: 'SMU Eurhythmix' })
+    sessionPersona = persona
+    return persona
+  }
+
   const response = await supabase.auth.signUp({
     email: email,
     password: password,
