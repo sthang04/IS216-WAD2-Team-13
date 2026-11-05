@@ -433,6 +433,13 @@ const isLive = msg => msg.fixId === fix.value?.id && !!wf.value && wf.value.plan
 const MEMBER_STATE = { Pending: '⏳ Waiting for reply', Accepted: '✅ Accepted', Declined: '❌ Declined', Expired: '⌛ No reply in time', Cancelled: 'Cancelled', 'Invitation required': 'Not sent yet' }
 const ROOM_STATE = { Approved: '✅ Approved', 'Pending approval': '⏳ Waiting for approval', Rejected: '❌ Rejected', 'Booking not linked': 'Not requested yet' }
 const memberLabel = state => MEMBER_STATE[state] || state
+// Colour of a checklist row: done (green), waiting (amber), problem (red), not started (grey)
+function tone(state) {
+  if (['Accepted', 'Approved'].includes(state)) return 'done'
+  if (['Pending', 'Pending approval'].includes(state)) return 'wait'
+  if (['Declined', 'Rejected', 'Expired', 'Cancelled'].includes(state)) return 'bad'
+  return 'todo'
+}
 const DELIVERY = {
   'Awaiting configured sender': 'Telegram message is queued. It also shows in their Pulse inbox.',
   'Account not linked': "They haven't linked Telegram, so it's only in their Pulse inbox.",
@@ -570,28 +577,25 @@ onMounted(handleReset)
 </script>
 
 <template>
-  <div class="pulse-chatbot-card p-3 p-lg-4 mb-4 shadow-sm border-0" style="border-radius: 1.25rem; background: #ffffff;">
+  <div class="pulse-chatbot-card mb-4">
 
     <!-- Chatbot Header -->
-    <div class="d-flex flex-wrap align-items-center justify-content-between gap-3 pb-3 mb-3 border-bottom">
+    <div class="pip-header d-flex flex-wrap align-items-center justify-content-between gap-3">
       <div class="d-flex align-items-center gap-3">
-        <div class="pulse-bot-avatar-box d-flex align-items-center justify-content-center shadow-xs">
-          <span style="font-size: 1.4rem;">🐱</span>
+        <div class="pulse-bot-avatar-box d-flex align-items-center justify-content-center">
+          <span style="font-size: 1.5rem;">🐱</span>
+          <span class="pip-online" aria-hidden="true"></span>
         </div>
         <div>
-          <div class="d-flex align-items-center gap-2">
-            <h5 class="fw-bold mb-0 text-dark" style="letter-spacing: -0.01em;">Pip • Contingency Assistant</h5>
-          </div>
-          <small class="text-muted d-block" style="font-size: 0.75rem;">
-            Answer a few questions and get a suggested fix.
-          </small>
+          <h5 class="fw-bold mb-0 text-dark" style="letter-spacing: -0.01em;">Pip</h5>
+          <small class="d-block pip-header-sub">Your event contingency assistant · answer a few questions, get a fix</small>
         </div>
       </div>
 
       <div class="d-flex align-items-center gap-2">
         <button
           type="button"
-          class="btn btn-sm btn-outline-secondary rounded-pill px-3 py-1 fw-semibold"
+          class="btn btn-sm pip-ghost-btn rounded-pill px-3 py-1 fw-semibold"
           style="font-size: 0.75rem;"
           @click="handleReset"
         >
@@ -603,15 +607,14 @@ onMounted(handleReset)
     <!-- Chat Stream Scrollbox -->
     <div
       ref="chatContainer"
-      class="pulse-chat-stream p-3 rounded-4 mb-3"
-      style="max-height: 540px; min-height: 280px; overflow-y: auto; background: #f8fafc; border: 1px solid #e2e8f0;"
+      class="pulse-chat-stream p-3 p-lg-4"
       aria-live="polite"
     >
       <div v-for="m in messages" :key="m.id" class="mb-3" :data-msg-id="m.id">
 
         <!-- User Bubble -->
         <div v-if="m.sender === 'user'" class="d-flex justify-content-end">
-          <div class="pulse-user-bubble px-3 py-2.5 rounded-4 shadow-2xs text-white" style="max-width: 82%; background: linear-gradient(135deg, var(--pulse-primary, #e11d48), #be123c); font-size: 0.85rem;">
+          <div class="pulse-user-bubble px-3 py-2 text-white">
             {{ m.text }}
             <div class="text-end text-white text-opacity-75 mt-1" style="font-size: 0.65rem;">{{ m.timestamp }}</div>
           </div>
@@ -619,11 +622,11 @@ onMounted(handleReset)
 
         <!-- Assistant Bubble -->
         <div v-else class="d-flex align-items-start gap-2.5">
-          <div class="pulse-bot-mini-avatar flex-shrink-0 rounded-circle d-flex align-items-center justify-content-center bg-white border shadow-2xs" style="width: 32px; height: 32px;">
+          <div class="pulse-bot-mini-avatar flex-shrink-0 rounded-circle d-flex align-items-center justify-content-center">
             <span style="font-size: 1rem;">🐱</span>
           </div>
 
-          <div class="pulse-bot-bubble p-3 rounded-4 bg-white border shadow-xs text-dark flex-grow-1" style="max-width: 92%; font-size: 0.84rem; line-height: 1.5;">
+          <div class="pulse-bot-bubble p-3 text-dark flex-grow-1">
             <div style="white-space: pre-line;">{{ m.text }}</div>
 
             <!-- Result: the sandbox's top-ranked plan -->
@@ -632,8 +635,8 @@ onMounted(handleReset)
               <div
                 v-for="(plan, i) in m.options"
                 :key="plan.id"
-                class="pip-option p-3 rounded-3 mt-2 border"
-                :class="i === 0 ? 'pip-option-best' : 'bg-white'"
+                class="pip-option p-3 mt-2"
+                :class="{ 'pip-option-best': i === 0 && !plan.tied, 'pip-option-chosen': m.chosenId === plan.id }"
               >
                 <div class="d-flex flex-wrap align-items-start justify-content-between gap-2">
                   <div>
@@ -656,7 +659,7 @@ onMounted(handleReset)
                 <button
                   type="button"
                   class="btn btn-sm rounded-pill px-3 mt-2 fw-bold"
-                  :class="i === 0 ? 'btn-pulse-primary text-white' : 'btn-outline-danger'"
+                  :class="m.chosenId === plan.id ? 'btn-pulse-primary text-white' : 'btn-outline-danger'"
                   style="font-size: 0.75rem;"
                   @click="usePlan(m, plan.id)"
                 >
@@ -689,7 +692,7 @@ onMounted(handleReset)
             <!-- Live steps for the fix, read from the recovery workflow -->
             <div v-if="m.kind === 'tracker'" class="mt-2">
               <template v-if="isLive(m)">
-                <div v-for="row in wf.members" :key="row.key" class="pip-step">
+                <div v-for="row in wf.members" :key="row.key" class="pip-step" :class="'tone-' + tone(row.state)">
                   <div class="flex-grow-1">
                     <div>👤 Ask <strong>{{ memberName(row.recipient) }}</strong> to cover {{ memberName(row.replaced) }} ({{ row.count }} {{ row.count === 1 ? 'task' : 'tasks' }})</div>
                     <small v-if="row.state === 'Pending' && row.delivery" class="text-muted d-block">{{ deliveryNote(row.delivery) }}</small>
@@ -697,13 +700,13 @@ onMounted(handleReset)
                   <span class="pip-step-status">{{ memberLabel(row.state) }}</span>
                   <button v-if="row.state === 'Invitation required'" type="button" class="btn btn-sm btn-outline-danger rounded-pill px-3" :disabled="wf.busy || !wf.canRequest" @click="sendInvite(row)">Send request</button>
                 </div>
-                <div v-for="room in wf.rooms" :key="room.key" class="pip-step">
+                <div v-for="room in wf.rooms" :key="room.key" class="pip-step" :class="'tone-' + tone(room.status)">
                   <div class="flex-grow-1">🏛️ Book <strong>{{ room.venue }}</strong>, {{ room.span }}</div>
                   <span class="pip-step-status">{{ roomLabel(room.status) }}</span>
                   <button v-if="!room.linked && room.hasClaim" type="button" class="btn btn-sm btn-outline-danger rounded-pill px-3" :disabled="wf.busy" @click="linkRoom(room)">Link my booking request</button>
                   <button v-else-if="!room.linked" type="button" class="btn btn-sm btn-outline-danger rounded-pill px-3" :disabled="wf.busy" @click="requestRoom(room)">Request room →</button>
                 </div>
-                <div class="pip-step">
+                <div class="pip-step" :class="'tone-' + (wf.applied === 'Applied' || wf.applied === 'Undone' ? 'done' : wf.applyReady ? 'ready' : 'todo')">
                   <template v-if="wf.applied === 'Applied'">
                     <div class="flex-grow-1">✅ <strong>Applied to Day Ops</strong></div>
                     <button type="button" class="btn btn-sm btn-outline-secondary rounded-pill px-3" :disabled="!wf.undoReady" :title="wf.undoReason" @click="undoFix">↩️ Undo</button>
@@ -769,12 +772,12 @@ onMounted(handleReset)
             v-for="c in shownChoices"
             :key="c.id"
             type="button"
-            class="btn btn-sm pulse-scenario-chip text-start d-flex align-items-center gap-2 px-3 py-2 rounded-3 border bg-white text-dark"
+            class="btn btn-sm pulse-scenario-chip text-start d-flex align-items-center gap-2 px-3 py-2 text-dark"
             :class="{ 'pulse-chip-active': step === 'event' && String(c.id) === String(selectedEventId) }"
             :disabled="c.disabled"
             @click="choose(c)"
           >
-            <span v-if="c.icon" style="font-size: 1.05rem;">{{ c.icon }}</span>
+            <span v-if="c.icon" class="pip-chip-icon" :class="'icon-' + c.id">{{ c.icon }}</span>
             <div>
               <strong class="d-block" style="font-size: 0.78rem;">{{ c.label }}</strong>
               <small v-if="c.sub" class="text-muted d-block" style="font-size: 0.68rem;">{{ c.sub }}</small>
@@ -787,7 +790,7 @@ onMounted(handleReset)
           Greyed out = this event has no crew, rooms or movable activities for that yet.
         </p>
 
-        <div v-if="step === 'time'" class="bg-white border rounded-3 p-3">
+        <div v-if="step === 'time'" class="pip-panel p-3">
           <SimulatorDisruptionInterval id="pip-time" :index="1" :event="selectedEvent" v-model:start="draft.start" v-model:end="draft.end" />
           <div class="d-flex flex-wrap gap-2 mt-2">
             <button type="button" class="btn btn-sm btn-pulse-primary text-white fw-bold rounded-pill px-3" @click="draft.intervalMode = ''; confirmTime()">Check this time →</button>
@@ -818,9 +821,9 @@ onMounted(handleReset)
     </div>
 
     <!-- The chat box: searches the current question's options, or takes the minutes late -->
-    <form class="d-flex align-items-center gap-2" @submit.prevent="submitTyped">
+    <form class="pip-input-bar d-flex align-items-center gap-2" @submit.prevent="submitTyped">
       <div class="input-group input-group-sm">
-        <span class="input-group-text bg-white border-end-0 text-muted">
+        <span class="input-group-text border-0 bg-transparent text-muted ps-3">
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
           </svg>
@@ -828,7 +831,7 @@ onMounted(handleReset)
         <input
           v-model="query"
           :type="step === 'minutes' ? 'number' : 'text'"
-          class="form-control border-start-0 py-2"
+          class="form-control border-0 bg-transparent py-2"
           :placeholder="placeholder"
           :disabled="!canType"
           :aria-label="placeholder"
@@ -838,7 +841,7 @@ onMounted(handleReset)
 
       <button
         type="submit"
-        class="btn btn-pulse-primary text-white fw-bold px-3 py-2 rounded-3 flex-shrink-0 d-flex align-items-center gap-1 shadow-xs"
+        class="btn btn-pulse-primary text-white fw-bold px-3 py-2 rounded-pill flex-shrink-0 d-flex align-items-center gap-1"
         style="font-size: 0.8rem;"
         :disabled="!canType || !String(query).trim()"
       >
@@ -851,51 +854,174 @@ onMounted(handleReset)
 </template>
 
 <style scoped>
+/* Pulse colours (src/style.css) with a few soft accents so Pip isn't just red and white */
 .pulse-chatbot-card {
-  box-shadow: 0 4px 20px rgba(15, 23, 42, 0.05);
+  border-radius: 1.25rem;
+  background: #fff;
+  border: 1px solid var(--pulse-border, #e2e8f0);
+  box-shadow: var(--pulse-shadow);
+  overflow: hidden;
+}
+
+.pip-header {
+  padding: 1rem 1.25rem;
+  background: linear-gradient(120deg, #fff1f2 0%, #fdf4ff 55%, #eff6ff 100%);
+  border-bottom: 1px solid var(--pulse-border, #e2e8f0);
+}
+
+.pip-header-sub {
+  font-size: 0.75rem;
+  color: var(--pulse-ink-muted, #64748b);
 }
 
 .pulse-bot-avatar-box {
-  width: 44px;
-  height: 44px;
-  border-radius: 12px;
-  background: linear-gradient(135deg, #ffe4e6, #fecdd3);
-  border: 1px solid #fda4af;
+  position: relative;
+  width: 48px;
+  height: 48px;
+  border-radius: 14px;
+  background: linear-gradient(135deg, #fecdd3, #fbcfe8 55%, #ddd6fe);
+  box-shadow: 0 6px 14px -6px rgba(225, 29, 72, 0.45);
 }
 
+.pip-online {
+  position: absolute;
+  right: -3px;
+  bottom: -3px;
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  background: #22c55e;
+  border: 2px solid #fff;
+}
+
+.pip-ghost-btn {
+  background: rgba(255, 255, 255, 0.8);
+  border: 1px solid var(--pulse-border, #e2e8f0);
+  color: #475569;
+}
+
+.pip-ghost-btn:hover {
+  background: #fff;
+  border-color: var(--pulse-primary-border, #fecdd3);
+  color: var(--pulse-primary, #e11d48);
+}
+
+.pulse-chat-stream {
+  max-height: 560px;
+  min-height: 300px;
+  overflow-y: auto;
+  background:
+    radial-gradient(circle at 0% 0%, rgba(253, 242, 248, 0.9), transparent 45%),
+    radial-gradient(circle at 100% 100%, rgba(239, 246, 255, 0.9), transparent 45%),
+    #f8fafc;
+}
+
+.pulse-bot-mini-avatar {
+  width: 32px;
+  height: 32px;
+  background: linear-gradient(135deg, #ffe4e6, #ede9fe);
+  font-size: 1rem;
+}
+
+.pulse-bot-bubble {
+  max-width: 92%;
+  font-size: 0.84rem;
+  line-height: 1.5;
+  background: #fff;
+  border-radius: 4px 18px 18px 18px;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.05), 0 4px 14px -6px rgba(15, 23, 42, 0.08);
+}
+
+.pulse-user-bubble {
+  max-width: 82%;
+  font-size: 0.85rem;
+  border-radius: 18px 18px 4px 18px;
+  background: linear-gradient(135deg, #f43f5e, #e11d48 55%, #be123c);
+  box-shadow: 0 6px 14px -8px rgba(225, 29, 72, 0.6);
+}
+
+/* Answer chips */
 .pulse-scenario-chip {
-  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
-  border-color: #e2e8f0 !important;
+  background: #fff;
+  border: 1px solid var(--pulse-border, #e2e8f0);
+  border-radius: 14px;
+  transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
 }
 
 .pulse-scenario-chip:hover:not(:disabled) {
   transform: translateY(-1px);
-  border-color: #fda4af !important;
-  background: #fff1f2 !important;
+  border-color: var(--pulse-primary-border, #fecdd3);
+  box-shadow: 0 6px 14px -8px rgba(225, 29, 72, 0.35);
 }
 
 .pulse-scenario-chip:disabled {
   opacity: 0.45;
 }
 
+.pulse-chip-active {
+  background: var(--pulse-primary-light, #fff1f2) !important;
+  border-color: var(--pulse-primary, #e11d48) !important;
+}
+
+.pip-chip-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  font-size: 1.05rem;
+  flex-shrink: 0;
+}
+
+.icon-MEMBER_UNAVAILABLE { background: var(--pulse-blue-bg, #e0f2fe); }
+.icon-FACILITY_UNAVAILABLE { background: var(--pulse-amber-bg, #fef3c7); }
+.icon-SCHEDULE_DELAY { background: #ede9fe; }
+
+.pip-panel {
+  background: #fff;
+  border: 1px solid var(--pulse-border, #e2e8f0);
+  border-radius: 16px;
+  box-shadow: var(--pulse-shadow-sm);
+}
+
+/* Fix options */
+.pip-option {
+  background: #fff;
+  border: 1px solid var(--pulse-border, #e2e8f0);
+  border-radius: 14px;
+  transition: box-shadow 0.15s ease, border-color 0.15s ease;
+}
+
+.pip-option:hover {
+  box-shadow: 0 8px 18px -12px rgba(15, 23, 42, 0.3);
+}
+
 .pip-option-best {
-  background: #fff1f2;
-  border-color: #fda4af !important;
+  border-color: var(--pulse-primary-border, #fecdd3);
+  background: linear-gradient(135deg, #fff1f2, #fff 60%);
+  box-shadow: inset 4px 0 0 var(--pulse-primary, #e11d48);
+}
+
+.pip-option-chosen {
+  border-color: var(--pulse-green-border, #bbf7d0);
+  background: linear-gradient(135deg, #f0fdf4, #fff 60%);
+  box-shadow: inset 4px 0 0 var(--pulse-green, #15803d);
 }
 
 .pip-tag {
   font-size: 0.7rem;
-  padding: 0.15rem 0.5rem;
+  padding: 0.15rem 0.55rem;
   border-radius: 999px;
-  background: #ecfdf5;
-  color: #065f46;
-  border: 1px solid #a7f3d0;
+  background: var(--pulse-green-bg, #dcfce7);
+  color: #166534;
+  border: 1px solid var(--pulse-green-border, #bbf7d0);
 }
 
 .pip-tag-warn {
-  background: #fffbeb;
+  background: var(--pulse-amber-bg, #fef3c7);
   color: #92400e;
-  border-color: #fde68a;
+  border-color: var(--pulse-amber-border, #fde68a);
 }
 
 .pip-change-list {
@@ -903,18 +1029,26 @@ onMounted(handleReset)
   font-size: 0.8rem;
 }
 
+/* Checklist rows, coloured by status */
 .pip-step {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 0.5rem;
-  padding: 0.6rem 0.75rem;
-  margin-top: 0.4rem;
-  border: 1px solid #e2e8f0;
-  border-radius: 0.75rem;
+  padding: 0.65rem 0.8rem;
+  margin-top: 0.45rem;
+  border: 1px solid var(--pulse-border, #e2e8f0);
+  border-left-width: 4px;
+  border-radius: 12px;
   background: #fff;
   font-size: 0.8rem;
 }
+
+.pip-step.tone-done { border-left-color: #22c55e; background: #f0fdf4; }
+.pip-step.tone-wait { border-left-color: #f59e0b; background: #fffbeb; }
+.pip-step.tone-bad { border-left-color: #ef4444; background: #fef2f2; }
+.pip-step.tone-ready { border-left-color: var(--pulse-primary, #e11d48); background: #fff1f2; }
+.pip-step.tone-todo { border-left-color: #cbd5e1; }
 
 .pip-step-status {
   font-size: 0.72rem;
@@ -923,9 +1057,26 @@ onMounted(handleReset)
   white-space: nowrap;
 }
 
-.pulse-chip-active {
-  background: #fff1f2 !important;
-  border-color: #e11d48 !important;
+/* Chat box */
+.pip-input-bar {
+  padding: 0.75rem 1rem;
+  border-top: 1px solid var(--pulse-border, #e2e8f0);
+  background: #fff;
+}
+
+.pip-input-bar .input-group {
+  background: #f1f5f9;
+  border-radius: 999px;
+  transition: box-shadow 0.15s ease, background 0.15s ease;
+}
+
+.pip-input-bar .input-group:focus-within {
+  background: #fff;
+  box-shadow: 0 0 0 3px var(--pulse-primary-light, #fff1f2), 0 0 0 1px var(--pulse-primary-border, #fecdd3);
+}
+
+.pip-input-bar .form-control:focus {
+  box-shadow: none;
 }
 
 .pulse-chat-stream::-webkit-scrollbar {
@@ -937,18 +1088,21 @@ onMounted(handleReset)
 }
 
 @media (max-width: 576px) {
+  .pip-header {
+    padding: 0.85rem 1rem;
+  }
   .pulse-scenario-chip {
     width: 100%;
   }
   .pulse-user-bubble {
-    max-width: 90% !important;
+    max-width: 90%;
   }
   .pulse-bot-bubble {
-    max-width: 95% !important;
+    max-width: 95%;
   }
   .pulse-bot-avatar-box {
-    width: 36px;
-    height: 36px;
+    width: 40px;
+    height: 40px;
   }
 }
 </style>
