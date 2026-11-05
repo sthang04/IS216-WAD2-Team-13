@@ -135,8 +135,12 @@ const filtered = computed(() => {
   return searchAndSort(pendingTransfers.value)
 })
 
+// Always the latest approval or rejection first; the Sort by menu only orders the pending list
 const sortedDecisions = computed(() => {
-  return searchAndSort(decisions.value)
+  const searchText = search.value.trim().toLowerCase()
+  return decisions.value
+    .filter((row) => matchesSearch(row, searchText))
+    .sort((a, b) => new Date(b.decided_at) - new Date(a.decided_at))
 })
 
 // ---------------- Opening one transfer from a link ----------------

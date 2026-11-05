@@ -3,6 +3,26 @@
 // Uses isolated fixture responses; passing UI checks do not prove deployed database or delivery integration.
 ﻿import {test,expect} from './fixtures/app.js'
 
+test('recent decisions list the latest action first and a late transfer reads as rejected',async({page,app})=>{
+ const decision=(transfer_id,state,decided_at,booking_date,fbs_reference,rejection_reason=null)=>({transfer_id,state,decided_at,booking_date,fbs_reference,rejection_reason,
+  start_time:'10:00:00',end_time:'11:00:00',facility_name:'Fixture Studio',releasing_club_name:'Fixture One',claiming_club_name:'Fixture Two',audit_voucher_id:'#V'+transfer_id})
+ await app.open('/facilities/admin',{authenticated:true,role:'admin',facilities:true,decisions:[
+  decision(1,'APPROVED','2026-11-01T01:00:00Z','2026-11-20','FBS-MIDDLE'),
+  decision(2,'EXPIRED','2026-11-03T01:00:00Z','2026-11-04','FBS-LATEST','Late approval: OSL did not sign off'),
+  decision(3,'REJECTED','2026-10-30T01:00:00Z','2026-11-30','FBS-OLDEST','Wrong slip')]})
+ const rows=page.locator('section',{has:page.getByRole('heading',{name:'Recent decisions',exact:true})}).locator('tbody tr')
+ await expect(rows).toHaveCount(3)
+ await expect(rows.nth(0)).toContainText('FBS-LATEST')
+ await expect(rows.nth(0)).toContainText('Rejected')
+ await expect(rows.nth(0)).toContainText('Late approval')
+ await expect(rows.nth(1)).toContainText('FBS-MIDDLE')
+ await expect(rows.nth(2)).toContainText('FBS-OLDEST')
+ await page.getByLabel('Sort transfers',{exact:true}).selectOption('name-asc')
+ await expect(rows.nth(0)).toContainText('FBS-LATEST')
+ await page.getByLabel('Search transfers',{exact:true}).fill('FBS-OLDEST')
+ await expect(rows).toHaveCount(1)
+})
+
 test('OSL searches pending requests, inspects audit evidence and restores search',async({page,app})=>{
  await app.open('/facilities/admin',{authenticated:true,role:'admin',facilities:true,transfers:true})
  await expect(page.getByRole('heading',{name:'Pending Admin Sign-off (1)',exact:true})).toBeVisible()
