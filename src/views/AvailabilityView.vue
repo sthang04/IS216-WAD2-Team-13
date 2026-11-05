@@ -2,7 +2,8 @@
 import { ref, computed, watch, nextTick, onMounted, onBeforeUnmount } from 'vue';
 import { useRoute } from 'vue-router';
 import { session, activeClubName, setActiveClub } from '../services/sessionState';
-import { parseIcs, icsEventAt } from '../services/icsBaseline';
+import { parseIcs, icsEventsOn, takingSlot } from '../services/icsBaseline';
+import { fetchClubCommitments } from '../services/scheduleService';
 import {
   fetchMeetingSnapshot, fetchClubRoster, createMeeting, setAvailability, submitNoAvailability, clearMeetingResponse,
   nudgeParticipants, confirmMeeting, cancelMeeting, updateParticipants, updateAgenda,
@@ -37,14 +38,25 @@ function blockedForGuest() {
 }
 
 /* ================================================================== */
-/* 2. DATE HELPERS (Singapore time; the grid runs 08:00 to 22:00)      */
+/* 2. DATE HELPERS (Singapore time; the grid runs 08:00 to 22:00      */
+/*    in 30-minute slots, each slot = its start in minutes after 00:00) */
 /* ================================================================== */
 const WEEKDAYS_SHORT = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 const WEEKDAYS_LONG = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
 const MONTHS_SHORT = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
-const HOURS = [8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21]
+const SLOT_MIN = 30
+const DAY_START_MIN = 8 * 60
+const DAY_END_MIN = 22 * 60
+const SLOTS = Array.from({ length: (DAY_END_MIN - DAY_START_MIN) / SLOT_MIN }, (_, i) => DAY_START_MIN + i * SLOT_MIN)
 
 function pad(n) { return String(n).padStart(2, '0') }
+// 990 -> '16:30'
+function timeLabel(min) { return `${pad(Math.floor(min / 60))}:${pad(min % 60)}` }
+// 3 slots -> '1.5 hours'
+function slotsAsHours(n) {
+  const hours = (n * SLOT_MIN) / 60
+  return `${Number.isInteger(hours) ? hours : hours.toFixed(1)} hour${hours === 1 ? '' : 's'}`
+}
 function toISO(dt) { return `${dt.getFullYear()}-${pad(dt.getMonth() + 1)}-${pad(dt.getDate())}` }
 function parseISO(s) {
   if (!s) return null
@@ -53,7 +65,6 @@ function parseISO(s) {
 }
 function addDays(dt, n) { return new Date(dt.getFullYear(), dt.getMonth(), dt.getDate() + n) }
 function mondayOf(dt) { return addDays(dt, -((dt.getDay() + 6) % 7)) }
-function hourLabel(h) { return `${pad(h)}:00` }
 function shortLabel(dt) { return `${WEEKDAYS_SHORT[dt.getDay()]} ${dt.getDate()} ${MONTHS_SHORT[dt.getMonth()]}` }
 function longLabel(dt) { return `${WEEKDAYS_LONG[dt.getDay()]}, ${dt.getDate()} ${MONTHS_SHORT[dt.getMonth()]} ${dt.getFullYear()}` }
 function weekLabel(monday) {
@@ -113,6 +124,33 @@ async function loadClubData() {
   } catch (err) {
     console.error('Could not load the CCA timetables:', err.message)
   }
+}
+
+// Personal Schedule events + Day-of Ops tasks for everyone, this week:
+// { 'memberId|YYYY-MM-DD': [{ startMin, endMin, kind: 'class' | 'busy', title }] }.
+// The server only fills in title for your own; other people's come back without one.
+const commitments = ref({})
+
+let commitSeq = 0
+async function loadCommitments() {
+  const seq = ++commitSeq
+  if (!canUse.value) {
+    commitments.value = {}
+    return
+  }
+  try {
+    const data = await fetchClubCommitments(clubId.value, weekKey.value, toISO(addDays(weekStart.value, 6)))
+    if (seq === commitSeq) commitments.value = data
+  } catch (err) {
+    if (seq === commitSeq) commitments.value = {}
+    console.error('Could not load schedules:', err.message)
+  }
+}
+watch([clubId, myId, () => session.value.ready, weekKey], loadCommitments, { immediate: true })
+
+// Schedules are edited on other pages (or by other people), so re-read when you come back to this tab
+function reloadWhenVisible() {
+  if (document.visibilityState === 'visible') loadCommitments()
 }
 
 // A week can have several meetings; this is the one shown in the sidebar (null = the server picks)
@@ -259,6 +297,7 @@ onMounted(() => {
   window.addEventListener('scroll', closeMenu, true)
   window.addEventListener('resize', closeMenu)
   window.addEventListener('keydown', closeMenuOnEscape)
+  document.addEventListener('visibilitychange', reloadWhenVisible)
 })
 
 onBeforeUnmount(() => {
@@ -270,6 +309,7 @@ onBeforeUnmount(() => {
   window.removeEventListener('scroll', closeMenu, true)
   window.removeEventListener('resize', closeMenu)
   window.removeEventListener('keydown', closeMenuOnEscape)
+  document.removeEventListener('visibilitychange', reloadWhenVisible)
 })
 
 /* ================================================================== */
@@ -281,7 +321,7 @@ const menu = ref({ open: false, x: 0, y: 0, meeting: null })
 function editRules(w) {
   const serverNow = now.value + clockOffset.value
   const startsAt = w.status === 'CONFIRMED'
-    ? new Date(`${w.confirmed_date}T${hourLabel(w.confirmed_start_hour)}:00+08:00`).getTime()
+    ? new Date(`${w.confirmed_date}T${timeLabel(w.confirmed_start_minute)}:00+08:00`).getTime()
     : weekEnd(weekKey.value).getTime()
   return {
     people: !!w.is_organiser && w.status === 'COLLECTING' && new Date(w.vote_deadline).getTime() > serverNow,
@@ -381,11 +421,11 @@ async function saveEdit() {
 const participantIds = computed(() => snapshot.value.participants.map((p) => p.member_id))
 const amParticipant = computed(() => !!meeting.value?.is_participant)
 
-// "YYYY-MM-DD|hour" -> member ids free then
+// "YYYY-MM-DD|slotMinute" -> member ids free then
 const freeBySlot = computed(() => {
   const map = {}
   snapshot.value.availability.forEach((a) => {
-    const key = `${a.slot_date}|${a.hour}`
+    const key = `${a.slot_date}|${a.slot_minute}`
     if (!map[key]) map[key] = []
     map[key].push(a.member_id)
   })
@@ -398,35 +438,73 @@ const baselineMemberIds = computed(() => {
   return ids.filter((id) => id !== myId.value)
 })
 
-// The confirmed meeting this week at that hour, or null
-function confirmedAt(iso, hour) {
+// The confirmed meeting this week in that slot, or null
+function confirmedAt(iso, slot) {
   return (snapshot.value.weekMeetings || []).find((w) => w.status === 'CONFIRMED' && w.confirmed_date === iso &&
-    hour >= w.confirmed_start_hour && hour < w.confirmed_end_hour) || null
+    slot >= w.confirmed_start_minute && slot < w.confirmed_end_minute) || null
 }
 
-// Start of the current hour, so the grid below updates hourly and not with every countdown tick
-const HOUR_MS = 60 * 60 * 1000
-const currentHourStart = computed(() => Math.floor((now.value + clockOffset.value) / HOUR_MS) * HOUR_MS)
+// Start of the current slot, so the grid below updates every 30 minutes and not with every countdown tick
+const SLOT_MS = SLOT_MIN * 60 * 1000
+const currentSlotStart = computed(() => Math.floor((now.value + clockOffset.value) / SLOT_MS) * SLOT_MS)
+
+// What fills each person's day, split into classes and busy.
+// Class = timetable import, or a Personal Schedule event in the Academic category.
+// Busy  = other Personal Schedule events, and Day-of Ops tasks (not meals or breaks).
+// { 'memberId|YYYY-MM-DD': { classes: [{ startMin, endMin, title }], busy: [...] } }
+const dayItems = computed(() => {
+  const out = {}
+  const ids = [myId.value, ...baselineMemberIds.value]
+  weekDates.value.forEach((day) => {
+    const iso = toISO(day)
+    ids.forEach((id) => {
+      const timetable = id === myId.value ? myBaseline.value.events : (clubBaselines.value[id] || [])
+      const extra = commitments.value[`${id}|${iso}`] || []
+      out[`${id}|${iso}`] = {
+        classes: [...icsEventsOn(timetable, day), ...extra.filter((c) => c.kind === 'class')],
+        busy: extra.filter((c) => c.kind === 'busy')
+      }
+    })
+  })
+  return out
+})
+
+// Something counts in a 30-minute slot when it fills at least 15 minutes of it (see takingSlot)
+function classIn(id, iso, slot) { return takingSlot(dayItems.value[`${id}|${iso}`]?.classes || [], slot) }
+function busyIn(id, iso, slot) { return takingSlot(dayItems.value[`${id}|${iso}`]?.busy || [], slot) }
 
 // Everything one cell needs, worked out once per change
-const grid = computed(() => HOURS.map((hour) => weekDates.value.map((day) => {
+const grid = computed(() => SLOTS.map((slot) => weekDates.value.map((day) => {
   const iso = toISO(day)
-  const free = freeBySlot.value[`${iso}|${hour}`] || []
-  const othersInClass = baselineMemberIds.value.filter((id) => icsEventAt(clubBaselines.value[id] || [], day, hour))
-  const slotTimestamp = new Date(`${iso}T${pad(hour)}:00:00+08:00`).getTime()
-  const isPast = slotTimestamp <= currentHourStart.value
+  const free = freeBySlot.value[`${iso}|${slot}`] || []
+  const othersInClass = baselineMemberIds.value.filter((id) => classIn(id, iso, slot))
+  // A class wins over busy, so nobody is counted twice
+  const othersBusy = baselineMemberIds.value.filter((id) => !othersInClass.includes(id) && busyIn(id, iso, slot))
+  const myClass = classIn(myId.value, iso, slot)
+  const myBusy = myClass ? null : busyIn(myId.value, iso, slot)
+  const slotTimestamp = new Date(`${iso}T${timeLabel(slot)}:00+08:00`).getTime()
   return {
-    key: `${iso}|${hour}`,
+    key: `${iso}|${slot}`,
     iso,
-    hour,
-    isPast,
-    myClass: icsEventAt(myBaseline.value.events, day, hour),
+    slot,
+    isPast: slotTimestamp <= currentSlotStart.value,
+    myClass: myClass ? (myClass.title || 'Class') : '',
+    myBusy: myBusy ? (myBusy.title || 'Busy') : '',
     othersInClass,
+    othersBusy,
     free,
     mine: free.includes(myId.value),
-    confirmed: confirmedAt(iso, hour)
+    confirmed: confirmedAt(iso, slot)
   }
 })))
+
+// "2 Classes", "1 Busy", "1 Class · 2 Busy"
+function othersText(cell) {
+  const parts = []
+  if (cell.othersInClass.length) parts.push(cell.othersInClass.length === 1 ? '1 Class' : `${cell.othersInClass.length} Classes`)
+  if (cell.othersBusy.length) parts.push(`${cell.othersBusy.length} Busy`)
+  return parts.join(' · ')
+}
 
 const totalParticipants = computed(() => snapshot.value.participants.length)
 
@@ -444,11 +522,13 @@ function heatClass(cell) {
 const canVote = computed(() => !props.readOnly && amParticipant.value && votingOpen.value)
 
 function cellTitle(cell) {
-  const parts = [`${shortLabel(parseISO(cell.iso))} ${hourLabel(cell.hour)}`]
+  const parts = [`${shortLabel(parseISO(cell.iso))} ${timeLabel(cell.slot)}–${timeLabel(cell.slot + SLOT_MIN)}`]
   if (cell.isPast) parts.push('(Past slot — voting closed)')
+  if (cell.myBusy) parts.push(`You're busy: ${cell.myBusy}${canVote.value && !cell.isPast ? ' (you can still mark yourself free)' : ''}`)
   if (isOpenRequest.value) parts.push(`${cell.free.length}/${totalParticipants.value} free`)
   if (cell.free.length) parts.push('Free: ' + cell.free.map((id) => nameOf.value[id] || 'Member').join(', '))
   if (cell.othersInClass.length) parts.push('In class: ' + cell.othersInClass.map((id) => nameOf.value[id] || 'Member').join(', '))
+  if (cell.othersBusy.length) parts.push('Busy: ' + cell.othersBusy.map((id) => nameOf.value[id] || 'Member').join(', '))
   return parts.join('\n')
 }
 
@@ -458,6 +538,8 @@ let votesSaving = 0
 
 function toggleCell(cell) {
   if (!canVote.value || responseSaving.value) return
+  // Classes block voting completely; busy slots can still be marked free
+  if (cell.myClass) return
   if (cell.isPast) {
     showToast('Cannot vote on past time slots.', 'warning')
     return
@@ -467,12 +549,12 @@ function toggleCell(cell) {
   // Show the change straight away; the reload after the last vote confirms it
   const before = snapshot.value.availability
   snapshot.value.availability = nowFree
-    ? [...before, { member_id: myId.value, slot_date: cell.iso, hour: cell.hour }]
-    : before.filter((a) => !(a.member_id === myId.value && a.slot_date === cell.iso && a.hour === cell.hour))
+    ? [...before, { member_id: myId.value, slot_date: cell.iso, slot_minute: cell.slot }]
+    : before.filter((a) => !(a.member_id === myId.value && a.slot_date === cell.iso && a.slot_minute === cell.slot))
   loadSeq++ // a load already running started before this click, so ignore its result
   votesSaving++
   voteQueue = voteQueue
-    .then(() => setAvailability(meetingId, cell.iso, cell.hour, nowFree))
+    .then(() => setAvailability(meetingId, cell.iso, cell.slot, nowFree))
     .catch((err) => showToast(err.message, 'danger'))
     .finally(() => {
       votesSaving--
@@ -705,9 +787,9 @@ async function nudge(memberId = null) {
 /* 11. CHOOSE THE DAY & CONFIRM                                        */
 /* ================================================================== */
 const showConfirmForm = ref(false)
-const pick = ref({ date: '', start: 16, end: 18, venue: '' })
+const pick = ref({ date: '', start: 16 * 60, end: 18 * 60, venue: '' })
 
-// Longest runs of hours where the most participants are free
+// Longest runs of slots where the most participants are free
 const bestTimes = computed(() => {
   if (!isOpenRequest.value) return []
   // The server refuses times already passed or taken by another confirmed meeting
@@ -719,14 +801,14 @@ const bestTimes = computed(() => {
   const isBest = (c) => bookable(c) && c.free.length === best
   const windows = []
   weekDates.value.forEach((day, d) => {
-    let h = 0
-    while (h < HOURS.length) {
-      if (isBest(grid.value[h][d])) {
-        const start = h
-        while (h < HOURS.length && isBest(grid.value[h][d])) h++
-        windows.push({ date: toISO(day), label: longLabel(day), start: HOURS[start], end: HOURS[h - 1] + 1, free: best })
+    let s = 0
+    while (s < SLOTS.length) {
+      if (isBest(grid.value[s][d])) {
+        const start = s
+        while (s < SLOTS.length && isBest(grid.value[s][d])) s++
+        windows.push({ date: toISO(day), label: longLabel(day), start: SLOTS[start], end: SLOTS[s - 1] + SLOT_MIN, free: best })
       } else {
-        h++
+        s++
       }
     }
   })
@@ -743,26 +825,26 @@ function openConfirmForm() {
   if (blockedForGuest()) return
   const top = bestTimes.value[0]
   // Nobody free anywhere: start from the first day that isn't over
-  const firstDay = weekDates.value.findIndex((_, d) => !grid.value[HOURS.length - 1][d].isPast)
+  const firstDay = weekDates.value.findIndex((_, d) => !grid.value[SLOTS.length - 1][d].isPast)
   pick.value = top
     ? { date: top.date, start: top.start, end: top.end, venue: '' }
-    : { date: toISO(weekDates.value[Math.max(firstDay, 0)]), start: 16, end: 18, venue: '' }
+    : { date: toISO(weekDates.value[Math.max(firstDay, 0)]), start: 16 * 60, end: 18 * 60, venue: '' }
   showConfirmForm.value = true
 }
 
 function usePick(w) { pick.value = { ...pick.value, date: w.date, start: w.start, end: w.end } }
 function isPicked(w) { return pick.value.date === w.date && pick.value.start === w.start && pick.value.end === w.end }
 
-const endHourOptions = computed(() => [...HOURS.map((h) => h + 1)].filter((h) => h > pick.value.start))
+const endSlotOptions = computed(() => SLOTS.map((s) => s + SLOT_MIN).filter((m) => m > pick.value.start))
 watch(() => pick.value.start, () => {
-  if (pick.value.end <= pick.value.start) pick.value.end = pick.value.start + 1
+  if (pick.value.end <= pick.value.start) pick.value.end = pick.value.start + SLOT_MIN
 })
 
 const pickFreeCount = computed(() => {
   // People free for the whole chosen window
   const ids = participantIds.value.filter((id) => {
-    for (let h = pick.value.start; h < pick.value.end; h++) {
-      if (!(freeBySlot.value[`${pick.value.date}|${h}`] || []).includes(id)) return false
+    for (let m = pick.value.start; m < pick.value.end; m += SLOT_MIN) {
+      if (!(freeBySlot.value[`${pick.value.date}|${m}`] || []).includes(id)) return false
     }
     return true
   })
@@ -774,7 +856,7 @@ async function submitConfirm() {
   isSubmitting.value = true
   try {
     await confirmMeeting(meeting.value.id, {
-      date: pick.value.date, startHour: pick.value.start, endHour: pick.value.end, venue: pick.value.venue
+      date: pick.value.date, startMinute: pick.value.start, endMinute: pick.value.end, venue: pick.value.venue
     })
     showConfirmForm.value = false
     await loadMeeting()
@@ -803,9 +885,10 @@ async function cancelRequest() {
 /* ================================================================== */
 /* 12. EXPORT THE CONFIRMED MEETING (.ics)                             */
 /* ================================================================== */
-function toUtcStamp(iso, hour) {
+// Singapore date + minutes after midnight -> UTC stamp (Singapore is UTC+8)
+function toUtcStamp(iso, minute) {
   const [y, m, d] = iso.split('-').map(Number)
-  return new Date(Date.UTC(y, m - 1, d, hour - 8)).toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '')
+  return new Date(Date.UTC(y, m - 1, d, -8, minute)).toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '')
 }
 
 // Calendar files treat \ , ; and line breaks as special, so a title like "Budget, costumes" must be escaped
@@ -823,8 +906,8 @@ function exportConfirmed() {
     'BEGIN:VEVENT',
     `UID:pulse-meeting-${m.id}@smu.edu.sg`,
     `DTSTAMP:${new Date().toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '')}`,
-    `DTSTART:${toUtcStamp(m.confirmed_date, m.confirmed_start_hour)}`,
-    `DTEND:${toUtcStamp(m.confirmed_date, m.confirmed_end_hour)}`,
+    `DTSTART:${toUtcStamp(m.confirmed_date, m.confirmed_start_minute)}`,
+    `DTEND:${toUtcStamp(m.confirmed_date, m.confirmed_end_minute)}`,
     `SUMMARY:${icsText(m.title)}`,
     m.agenda ? `DESCRIPTION:${icsText(m.agenda)}` : '',
     m.venue ? `LOCATION:${icsText(m.venue)}` : '',
@@ -896,7 +979,9 @@ function exportConfirmed() {
             <!-- Legend -->
             <div class="d-flex flex-wrap align-items-center gap-3 legend">
               <span><span class="legend-swatch swatch-own-class"></span>Your class</span>
-              <span><span class="legend-swatch swatch-class"></span>Others in class (not you)</span>
+              <span><span class="legend-swatch swatch-own-busy"></span>You're busy</span>
+              <span><span class="legend-swatch swatch-class"></span>Others in class</span>
+              <span><span class="legend-swatch swatch-busy"></span>Others busy</span>
               <template v-if="isOpenRequest">
                 <span><span class="legend-swatch avail-red"></span>Below 50% free</span>
                 <span><span class="legend-swatch avail-amber"></span>50–75%</span>
@@ -918,10 +1003,10 @@ function exportConfirmed() {
                 </tr>
               </thead>
               <tbody>
-                <tr v-for="(row, hIdx) in grid" :key="HOURS[hIdx]">
-                  <td class="text-muted fw-semibold time-col py-1">{{ hourLabel(HOURS[hIdx]) }}</td>
+                <tr v-for="(row, sIdx) in grid" :key="SLOTS[sIdx]" :class="{ 'half-hour-row': SLOTS[sIdx] % 60 !== 0 }">
+                  <td class="text-muted fw-semibold time-col py-0">{{ timeLabel(SLOTS[sIdx]) }}</td>
 
-                  <td v-for="cell in row" :key="cell.key" class="p-1">
+                  <td v-for="cell in row" :key="cell.key" class="px-1 py-0">
                     <!-- Confirmed meeting -->
                     <div
                       v-if="cell.confirmed"
@@ -936,21 +1021,23 @@ function exportConfirmed() {
                     <div
                       v-else-if="cell.myClass"
                       class="pulse-class-pill rounded-2"
-                      :title="`${cellTitle(cell)}\nYou're in class, so you can't mark this hour`"
+                      :title="`${cellTitle(cell)}\nYou're in class, so you can't mark this slot`"
                       aria-disabled="true"
                     >
                       <span class="pulse-class-name">{{ cell.myClass }}</span>
-                      <!-- Others in class at the same time would otherwise be hidden under your own class -->
-                      <span v-if="cell.othersInClass.length" class="slot-class-extra">+{{ cell.othersInClass.length }} in class</span>
+                      <!-- Others' classes or busy time would otherwise be hidden under your own class -->
+                      <span v-if="othersText(cell)" class="slot-class-extra">+{{ othersText(cell) }}</span>
                     </div>
 
-                    <!-- Everyone else: coloured by how many are free; otherwise white, or grey when others have class -->
+                    <!-- Everyone else: coloured by how many are free; otherwise white,
+                         grey when others have class, sand when others are only busy.
+                         Your own busy time is striped and named, but you can still vote. -->
                     <div
                       v-else
                       class="slot rounded-2 position-relative"
                       :class="[
-                        heatClass(cell) || (cell.othersInClass.length ? 'slot-baseline' : ''),
-                        { 'slot-mine': cell.mine, 'slot-clickable': canVote && !cell.isPast, 'slot-past opacity-50': cell.isPast }
+                        heatClass(cell) || (cell.othersInClass.length ? 'slot-baseline' : cell.othersBusy.length ? 'slot-others-busy' : ''),
+                        { 'slot-my-busy': cell.myBusy, 'slot-mine': cell.mine, 'slot-clickable': canVote && !cell.isPast, 'slot-past opacity-50': cell.isPast }
                       ]"
                       :title="cellTitle(cell)"
                       :role="canVote && !cell.isPast ? 'button' : null"
@@ -961,10 +1048,13 @@ function exportConfirmed() {
                       @keydown.enter.prevent="toggleCell(cell)"
                       @keydown.space.prevent="toggleCell(cell)"
                     >
-                      <span v-if="heatClass(cell)" class="slot-count">{{ cell.free.length }}/{{ totalParticipants }}</span>
-                      <span v-else-if="cell.othersInClass.length" class="slot-baseline-text">
-                        {{ cell.othersInClass.length === 1 ? '1 Class' : `${cell.othersInClass.length} Classes` }}
-                      </span>
+                      <!-- Your own busy time: what you're doing (the count moves to the corner) -->
+                      <template v-if="cell.myBusy">
+                        <span class="slot-busy-name">{{ cell.myBusy }}</span>
+                        <span v-if="heatClass(cell)" class="slot-corner-count">{{ cell.free.length }}/{{ totalParticipants }}</span>
+                      </template>
+                      <span v-else-if="heatClass(cell)" class="slot-count">{{ cell.free.length }}/{{ totalParticipants }}</span>
+                      <span v-else-if="othersText(cell)" class="slot-baseline-text">{{ othersText(cell) }}</span>
                       <span v-if="cell.mine" class="slot-you">You</span>
                     </div>
                   </td>
@@ -1004,7 +1094,7 @@ function exportConfirmed() {
                 <strong class="d-block">{{ w.title }}</strong>
                 <span v-if="w.agenda" class="d-block agenda-preview">{{ w.agenda }}</span>
                 <span v-if="w.status === 'CONFIRMED'" class="text-muted member-meta">
-                  {{ shortLabel(parseISO(w.confirmed_date)) }}, {{ hourLabel(w.confirmed_start_hour) }} – {{ hourLabel(w.confirmed_end_hour) }}
+                  {{ shortLabel(parseISO(w.confirmed_date)) }}, {{ timeLabel(w.confirmed_start_minute) }} – {{ timeLabel(w.confirmed_end_minute) }}
                 </span>
                 <span v-else class="text-muted member-meta">Organised by {{ w.organiser_name }}</span>
               </span>
@@ -1138,7 +1228,7 @@ function exportConfirmed() {
               <div class="d-flex justify-content-between align-items-center gap-3 small">
                 <span class="text-muted">Your response</span>
                 <strong :class="myResponse?.responded_at ? 'text-success' : 'text-muted'">
-                  {{ myResponse?.responded_at ? (mySlotCount ? `${mySlotCount} hour${mySlotCount === 1 ? '' : 's'} free` : 'None of these days work') : 'No response yet' }}
+                  {{ myResponse?.responded_at ? (mySlotCount ? `${slotsAsHours(mySlotCount)} free` : 'None of these days work') : 'No response yet' }}
                 </strong>
               </div>
               <button
@@ -1243,11 +1333,11 @@ function exportConfirmed() {
                       @click="usePick(w)"
                     >
                       <div class="fw-bold small">{{ w.label }}</div>
-                      <div class="small">{{ hourLabel(w.start) }} – {{ hourLabel(w.end) }} · {{ w.free }}/{{ totalParticipants }} free</div>
+                      <div class="small">{{ timeLabel(w.start) }} – {{ timeLabel(w.end) }} · {{ w.free }}/{{ totalParticipants }} free</div>
                     </button>
                   </div>
                 </div>
-                <p v-else class="small text-muted">Nobody marked any free hours. Pick a time below.</p>
+                <p v-else class="small text-muted">Nobody marked any free times. Pick a time below.</p>
 
                 <div class="row g-2 mb-2">
                   <div class="col-12">
@@ -1259,13 +1349,13 @@ function exportConfirmed() {
                   <div class="col-6">
                     <label class="form-label small fw-bold text-muted mb-1" for="pickStart">From</label>
                     <select id="pickStart" v-model.number="pick.start" class="form-select form-select-sm">
-                      <option v-for="h in HOURS" :key="h" :value="h">{{ hourLabel(h) }}</option>
+                      <option v-for="s in SLOTS" :key="s" :value="s">{{ timeLabel(s) }}</option>
                     </select>
                   </div>
                   <div class="col-6">
                     <label class="form-label small fw-bold text-muted mb-1" for="pickEnd">To</label>
                     <select id="pickEnd" v-model.number="pick.end" class="form-select form-select-sm">
-                      <option v-for="h in endHourOptions" :key="h" :value="h">{{ hourLabel(h) }}</option>
+                      <option v-for="m in endSlotOptions" :key="m" :value="m">{{ timeLabel(m) }}</option>
                     </select>
                   </div>
                   <div class="col-12">
@@ -1302,7 +1392,7 @@ function exportConfirmed() {
           </div>
           <div class="confirmed-box rounded-3 p-3 mb-3">
             <div class="fw-bold">{{ longLabel(parseISO(meeting.confirmed_date)) }}</div>
-            <div>{{ hourLabel(meeting.confirmed_start_hour) }} – {{ hourLabel(meeting.confirmed_end_hour) }}</div>
+            <div>{{ timeLabel(meeting.confirmed_start_minute) }} – {{ timeLabel(meeting.confirmed_end_minute) }}</div>
             <div v-if="meeting.venue" class="small text-muted mt-1">{{ meeting.venue }}</div>
           </div>
           <div v-if="meeting.agenda" class="agenda-box rounded-3 p-2 mb-3">
@@ -1436,16 +1526,28 @@ function exportConfirmed() {
 .pulse-class-pill .pulse-class-name { background: rgba(255, 255, 255, 0.85); border-radius: 0.35rem; padding: 0 0.3rem; }
 .slot-class-extra { font-size: 0.58rem; font-weight: 700; color: #64748b; white-space: nowrap; }
 /* Make room for the "+N in class" tag: one line of class name */
-.pulse-class-pill:has(.slot-class-extra) .pulse-class-name { -webkit-line-clamp: 1; line-clamp: 1; }
-.pulse-class-name { overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical; }
-.scheduler-grid .time-col { width: 64px; font-size: 0.7rem; }
+.pulse-class-name { overflow: hidden; display: -webkit-box; -webkit-line-clamp: 1; line-clamp: 1; -webkit-box-orient: vertical; font-size: 0.62rem; line-height: 1.15; }
+/* 28 half-hour rows: keep each one short so the week still fits on screen */
+.pulse-class-pill {
+  height: 1.95rem;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0;
+}
+.scheduler-grid .time-col { width: 64px; font-size: 0.7rem; vertical-align: top; }
+.scheduler-grid .half-hour-row .time-col { font-weight: 400 !important; opacity: 0.7; }
 .scheduler-grid .day-col { font-size: 0.75rem; line-height: 1.2; }
-.scheduler-grid td { height: 3.1rem; }
+.scheduler-grid td { height: 2.15rem; }
+/* A faint line on the hour, so 30-minute rows still read as hours */
+.scheduler-grid tbody tr:not(.half-hour-row) td { border-top: 1px solid #f1f5f9; }
 
-/* One hour slot. White when nobody is free, grey when others have class,
-   red / amber / green by the share of participants who are free. */
+/* One 30-minute slot. White when nobody is free, grey when others have class,
+   sand when others are busy, red / amber / green by the share of participants who are free. */
 .slot {
-  height: 2.75rem;
+  height: 1.95rem;
   width: 100%;
   border: 1px solid var(--pulse-border, #e2e8f0);
   background: #fff;
@@ -1465,7 +1567,35 @@ function exportConfirmed() {
 .avail-all   { background: #16a34a; color: #fff; border-color: #16a34a; }
 
 .slot-baseline { background: #f1f5f9; border-color: #cbd5e1; }
-.slot-baseline-text { font-size: 0.68rem; font-weight: 800; color: #475569; }
+.slot-others-busy { background: #f7f1e6; border-color: #e6d6b8; }
+.slot-baseline-text { font-size: 0.62rem; font-weight: 800; color: #475569; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; padding: 0 2px; }
+
+/* You're busy (Personal Schedule / Day-of Ops): amber stripes on the left edge, named.
+   Still clickable: busy doesn't block voting, only classes do. */
+.slot-my-busy {
+  background-image: repeating-linear-gradient(135deg, rgba(217, 119, 6, 0.14) 0 5px, transparent 5px 10px);
+  box-shadow: inset 3px 0 0 #d97706;
+  padding: 0 0.3rem 0 0.4rem;
+}
+.slot-busy-name {
+  font-size: 0.6rem;
+  font-weight: 800;
+  line-height: 1.1;
+  color: #92400e;
+  max-width: 100%;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.avail-all .slot-busy-name { color: #fff; }
+.slot-corner-count {
+  position: absolute;
+  bottom: 1px;
+  right: 3px;
+  font-size: 0.5rem;
+  font-weight: 800;
+  color: inherit;
+}
 
 .slot-mine {
   outline: 2px solid #334155;
@@ -1495,8 +1625,8 @@ function exportConfirmed() {
   line-height: 1.1;
   overflow: hidden;
   display: -webkit-box;
-  -webkit-line-clamp: 2;
-  line-clamp: 2;
+  -webkit-line-clamp: 1;
+  line-clamp: 1;
   -webkit-box-orient: vertical;
 }
 
@@ -1511,6 +1641,11 @@ function exportConfirmed() {
 }
 .swatch-own-class { background: repeating-linear-gradient(135deg, #e2e8f0 0 3px, #cbd5e1 3px 6px); border-color: #94a3b8; }
 .swatch-class { background: #f1f5f9; border-color: #cbd5e1; }
+.swatch-busy { background: #f7f1e6; border-color: #e6d6b8; }
+.swatch-own-busy {
+  background: #fff repeating-linear-gradient(135deg, rgba(217, 119, 6, 0.25) 0 2px, transparent 2px 4px);
+  box-shadow: inset 2px 0 0 #d97706;
+}
 .swatch-empty { background: #fff; }
 .swatch-meeting { background: var(--pulse-primary, #e11d48); border-color: var(--pulse-primary, #e11d48); }
 

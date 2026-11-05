@@ -36,9 +36,10 @@ export function createMeeting({ clubId, title, agenda, weekStart, voteDeadline, 
   })
 }
 
-export function setAvailability(meetingId, slotDate, hour, available) {
+// slotMinute = start of a 30-minute slot in minutes after midnight (480 = 08:00, 510 = 08:30)
+export function setAvailability(meetingId, slotDate, slotMinute, available) {
   return call('rpc_set_meeting_availability', {
-    p_meeting_id: meetingId, p_slot_date: slotDate, p_hour: hour, p_available: available
+    p_meeting_id: meetingId, p_slot_date: slotDate, p_slot_minute: slotMinute, p_available: available
   })
 }
 
@@ -55,9 +56,10 @@ export function nudgeParticipants(meetingId, memberId = null) {
   return call('rpc_nudge_meeting', { p_meeting_id: meetingId, p_member_id: memberId })
 }
 
-export function confirmMeeting(meetingId, { date, startHour, endHour, venue }) {
+// startMinute / endMinute: minutes after midnight, on the half hour (e.g. 990 = 16:30)
+export function confirmMeeting(meetingId, { date, startMinute, endMinute, venue }) {
   return call('rpc_confirm_meeting', {
-    p_meeting_id: meetingId, p_date: date, p_start_hour: startHour, p_end_hour: endHour, p_venue: venue
+    p_meeting_id: meetingId, p_date: date, p_start_minute: startMinute, p_end_minute: endMinute, p_venue: venue
   })
 }
 

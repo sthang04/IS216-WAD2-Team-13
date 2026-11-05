@@ -111,8 +111,9 @@ function occursOn(ev, day) {
   return true
 }
 
-// Everything on this day, in time order: [{ title, startTime: '15:30', endTime: '17:00' }]
-// (used by Personal Schedule to list your classes)
+// Everything on this day, in time order:
+// [{ title, startMin: 930, endMin: 1020, startTime: '15:30', endTime: '17:00' }]
+// (Personal Schedule lists these; the meeting scheduler checks them against half-hour slots)
 export function icsEventsOn(events, day) {
   const hhmm = (min) => `${pad(Math.floor(min / 60) % 24)}:${pad(min % 60)}`
   return events
@@ -120,9 +121,30 @@ export function icsEventsOn(events, day) {
     .map((ev) => {
       const s = new Date(ev.start)
       const startMin = s.getHours() * 60 + s.getMinutes()
-      return { title: ev.title, startMin, startTime: hhmm(startMin), endTime: hhmm(startMin + Math.round((ev.end - ev.start) / 60000)) }
+      const endMin = startMin + Math.round((ev.end - ev.start) / 60000)
+      return { title: ev.title, startMin, endMin, startTime: hhmm(startMin), endTime: hhmm(endMin) }
     })
     .sort((a, b) => a.startMin - b.startMin)
+}
+
+// Minutes something must fill in a 30-minute slot before that slot counts as taken
+export const SLOT_MINUTES = 30
+export const MIN_OVERLAP_MINUTES = 15
+
+// Of these [{ startMin, endMin, ... }], the one filling the most of slotStart..slotStart+30,
+// as long as it fills at least 15 minutes. Otherwise null.
+export function takingSlot(items, slotStart) {
+  const slotEnd = slotStart + SLOT_MINUTES
+  let best = null
+  let bestOverlap = 0
+  for (const item of items) {
+    const overlap = Math.min(item.endMin, slotEnd) - Math.max(item.startMin, slotStart)
+    if (overlap >= MIN_OVERLAP_MINUTES && overlap > bestOverlap) {
+      best = item
+      bestOverlap = overlap
+    }
+  }
+  return best
 }
 
 // Title of the first event that overlaps hour..hour+1 on this day, or ''

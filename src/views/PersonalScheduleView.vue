@@ -8,6 +8,7 @@ import { supabase } from '../supabase';
 import { demoMemberId, session } from '../services/sessionState';
 import { fetchMyBaseline } from '../services/meetingService';
 import { icsEventsOn } from '../services/icsBaseline';
+import { fetchMyPersonalEvents, savePersonalEvent, deletePersonalEvent } from '../services/scheduleService';
 
 const props = defineProps({
   active: { type: Boolean, default: true },
@@ -206,39 +207,53 @@ const defaultEvents = [
   }
 ];
 
-const storageKey = computed(() => `pulse-schedule-${props.activePersona.email || props.activePersona.name}`);
-
-// The old sample class may still be saved in this browser; real classes now come from your timetable
-const isOldSampleClass = (e) => e.id === 4 && !e.isCustom && e.category === 'Academic';
-
-function loadSavedEvents() {
-  try {
-    const saved = JSON.parse(localStorage.getItem(storageKey.value));
-    if (Array.isArray(saved)) return saved.filter(e => !isOldSampleClass(e));
-  } catch (e) { }
-  return null;
+function flash(message, ms = 4000) {
+  toastMsg.value = message;
+  setTimeout(() => { if (toastMsg.value === message) toastMsg.value = ''; }, ms);
 }
+
+// Signed in: your events are saved in Supabase (personal_events), so the meeting scheduler
+// can show them. Guests and the offline demo see the sample events, kept in memory only.
+const usesDatabase = computed(() => !!(supabase && session.value.authUserId && !props.readOnly));
 
 function sampleEvents() {
   const events = JSON.parse(JSON.stringify(defaultEvents));
   const clubName = props.activePersona?.cca || 'CCA';
-  if (events[7]) {
-    events[7].title = `${clubName} ExCo Debrief & Safety Check`;
-    events[7].role = `${clubName} ExCo`;
+  const debrief = events.find(e => e.id === 8);
+  if (debrief) {
+    debrief.title = `${clubName} ExCo Debrief & Safety Check`;
+    debrief.role = `${clubName} ExCo`;
   }
-  return events;
+  // Day-of Ops tasks come from the Operations page (syncOpsTasks), not the samples
+  return events.filter(e => !e.isOpsTask);
 }
 
-const scheduleEvents = ref(loadSavedEvents() ?? sampleEvents());
+const personalEvents = ref([]); // events you added here
+const opsTasks = ref([]);       // your Day-of Ops tasks (edited on the Operations page)
+const scheduleEvents = computed(() => [...personalEvents.value, ...opsTasks.value]);
 
-watch(scheduleEvents, (events) => {
-  try { localStorage.setItem(storageKey.value, JSON.stringify(events)); } catch (e) { }
-}, { deep: true });
+let personalSeq = 0;
+async function loadPersonalEvents() {
+  const seq = ++personalSeq;
+  if (!usesDatabase.value) {
+    personalEvents.value = sampleEvents();
+    return;
+  }
+  try {
+    const rows = await fetchMyPersonalEvents();
+    if (seq === personalSeq) personalEvents.value = rows;
+  } catch (error) {
+    if (seq !== personalSeq) return;
+    personalEvents.value = [];
+    flash(`Couldn't load your schedule: ${error.message}`, 6000);
+  }
+}
 
-watch(storageKey, () => {
-  scheduleEvents.value = loadSavedEvents() ?? sampleEvents();
-  syncOpsTasks(false);
-});
+watch(
+  () => [session.value.ready, session.value.authUserId, session.value.memberId, props.readOnly, props.activePersona?.cca],
+  loadPersonalEvents,
+  { immediate: true }
+);
 
 // Live Cross-Sync with Day-of Operations
 const opsSyncInfo = ref(null);
@@ -268,8 +283,7 @@ async function syncOpsTasks(forceToast = false) {
   if (version !== opsSyncVersion) return;
   const { tasks, eventName, eventDate, tasksCount, eventsCount = 1 } = result;
 
-  const customAndAcademic = scheduleEvents.value.filter(e => !e.isOpsTask && !String(e.id).startsWith('ops-'));
-  scheduleEvents.value = [...customAndAcademic, ...tasks];
+  opsTasks.value = tasks;
 
   if (tasksCount > 0) {
     opsSyncInfo.value = { eventName, eventDate, eventCount: tasksCount, otherEvents: eventsCount - 1 };
@@ -289,7 +303,7 @@ onMounted(() => {
   syncOpsTasks(false);
 });
 
-watch(() => [session.value.ready, session.value.authUserId, session.value.activeClubId, session.value.memberId], () => {
+watch(() => [session.value.ready, session.value.authUserId, session.value.activeClubId, session.value.memberId, props.activePersona?.name, props.activePersona?.cca], () => {
   syncOpsTasks(false);
 });
 
@@ -470,27 +484,40 @@ const activeAssignment = computed(() => {
     || dayTasks.value[0];
 });
 
+// Your own events keep their status in Supabase. Day-of Ops task status is only for this visit.
+async function persistStatus(event, previous) {
+  if (!event.isCustom || !usesDatabase.value) return;
+  try {
+    await savePersonalEvent(event);
+  } catch (error) {
+    event.status = previous;
+    flash(`Couldn't save the status of "${event.title}": ${error.message}`, 6000);
+  }
+}
+
 function toggleEventStatus(event) {
   if (blockedForGuest()) return;
+  const previous = event.status;
   const current = getEffectiveStatus(event);
   if (current === 'Not Started' || current === 'Overdue/Missed') {
     event.status = 'In Progress';
-    toastMsg.value = `Started: "${event.title}" is now active.`;
+    flash(`Started: "${event.title}" is now active.`, 3500);
   } else if (current === 'In Progress') {
     event.status = 'Completed';
-    toastMsg.value = `Completed: "${event.title}" marked as finished.`;
+    flash(`Completed: "${event.title}" marked as finished.`, 3500);
   } else {
     event.status = 'Not Started';
-    toastMsg.value = `Status reset for "${event.title}".`;
+    flash(`Status reset for "${event.title}".`, 3500);
   }
-  setTimeout(() => { toastMsg.value = ''; }, 3500);
+  persistStatus(event, previous);
 }
 
 function markCompletedDirectly(event) {
   if (blockedForGuest()) return;
+  const previous = event.status;
   event.status = 'Completed';
-  toastMsg.value = `Marked as finished: "${event.title}".`;
-  setTimeout(() => { toastMsg.value = ''; }, 3500);
+  flash(`Marked as finished: "${event.title}".`, 3500);
+  persistStatus(event, previous);
 }
 
 async function sendScheduleAlert(action, ev) {
@@ -554,8 +581,10 @@ function closeModal() {
   showModal.value = false;
 }
 
-function saveEvent() {
-  if (blockedForGuest() || !eventForm.value.title.trim()) return;
+const isSaving = ref(false);
+
+async function saveEvent() {
+  if (blockedForGuest() || !eventForm.value.title.trim() || isSaving.value) return;
 
   if (eventForm.value.endTime <= eventForm.value.startTime) {
     formError.value = 'End time must be after start time.';
@@ -567,46 +596,61 @@ function saveEvent() {
     ? `${eventForm.value.room}, ${eventForm.value.building.replace('SMU ', '')}`
     : eventForm.value.building;
 
-  if (isEditing.value && editingId.value) {
-    const idx = scheduleEvents.value.findIndex(e => e.id === editingId.value);
-    if (idx !== -1) {
-      Object.assign(scheduleEvents.value[idx], {
-        ...eventForm.value,
-        building: eventForm.value.building,
-        venue: combinedVenue
-      });
-      toastMsg.value = `Updated: "${eventForm.value.title}" successfully modified.`;
-      sendScheduleAlert('updated', scheduleEvents.value[idx]);
-    }
-  } else {
-    const newEvent = {
-      id: Date.now(),
-      ...eventForm.value,
-      building: eventForm.value.building,
-      venue: combinedVenue,
-      status: 'Not Started',
-      isCustom: true
-    };
-    scheduleEvents.value.push(newEvent);
-    toastMsg.value = `Added: "${eventForm.value.title}" scheduled on your calendar.`;
-    sendScheduleAlert('added', newEvent);
+  const existing = isEditing.value ? personalEvents.value.find(e => e.id === editingId.value) : null;
+  if (isEditing.value && !existing) {
+    formError.value = 'This event is no longer on your schedule.';
+    return;
   }
 
-  if (eventForm.value.date && eventForm.value.date !== selectedDate.value) {
-    selectedDate.value = eventForm.value.date;
+  let record = {
+    ...(existing || {}),
+    ...eventForm.value,
+    title: eventForm.value.title.trim(),
+    venue: combinedVenue,
+    id: existing ? existing.id : crypto.randomUUID(),
+    status: existing ? existing.status : 'Not Started',
+    isCustom: true
+  };
+
+  isSaving.value = true;
+  try {
+    if (usesDatabase.value) record = await savePersonalEvent(record);
+  } catch (error) {
+    formError.value = `Couldn't save: ${error.message}`;
+    return;
+  } finally {
+    isSaving.value = false;
+  }
+
+  if (existing) {
+    Object.assign(existing, record);
+    flash(`Updated: "${record.title}" successfully modified.`);
+    sendScheduleAlert('updated', existing);
+  } else {
+    personalEvents.value.push(record);
+    flash(`Added: "${record.title}" scheduled on your calendar.`);
+    sendScheduleAlert('added', record);
+  }
+
+  if (record.date && record.date !== selectedDate.value) {
+    selectedDate.value = record.date;
   }
   closeModal();
-  setTimeout(() => { toastMsg.value = ''; }, 4000);
 }
 
-function deleteEvent(id) {
+async function deleteEvent(id) {
   if (blockedForGuest()) return;
-  const item = scheduleEvents.value.find(e => e.id === id);
+  const item = personalEvents.value.find(e => e.id === id);
   if (!item) return;
-  scheduleEvents.value = scheduleEvents.value.filter(e => e.id !== id);
-  toastMsg.value = `"${item.title}" was removed from your schedule.`;
+  try {
+    if (usesDatabase.value) await deletePersonalEvent(id);
+  } catch (error) {
+    flash(`Couldn't remove "${item.title}": ${error.message}`, 6000);
+    return;
+  }
+  personalEvents.value = personalEvents.value.filter(e => e.id !== id);
+  flash(`"${item.title}" was removed from your schedule.`);
   sendScheduleAlert('removed', item);
-  setTimeout(() => { toastMsg.value = ''; }, 4000);
 }
 
 function icsEscape(text) {
@@ -1009,6 +1053,10 @@ function exportCalendarICS() {
             <div v-if="event.isClass" class="border-top pt-2 text-muted text-end" style="font-size: 0.7rem;">
               To change classes, import your timetable again in Availability.
             </div>
+            <!-- Day-of Ops tasks belong to the event's run of show -->
+            <div v-else-if="event.isOpsTask" class="border-top pt-2 text-muted text-end" style="font-size: 0.7rem;">
+              To change this task, edit it in Day-of Operations.
+            </div>
             <!-- Actions -->
             <div v-else class="d-flex justify-content-end gap-2 border-top pt-2">
               <button
@@ -1065,9 +1113,14 @@ function exportCalendarICS() {
                   <label class="form-label small fw-bold text-dark">Category <span class="text-danger">*</span></label>
                   <select v-model="eventForm.category" class="form-select form-select-sm" required>
                     <option value="CCA">CCA</option>
-                    <option value="Academic">Academic</option>
+                    <option value="Academic">Academic (class)</option>
                     <option value="Adhoc">Ad hoc</option>
                   </select>
+                  <div class="text-muted mt-1" style="font-size: 0.68rem;">
+                    {{ eventForm.category === 'Academic'
+                      ? 'Shows as Class in the meeting scheduler, and blocks voting at that time.'
+                      : 'Shows as Busy to others in the meeting scheduler. You can still vote then.' }}
+                  </div>
                 </div>
                 <div class="col-6">
                   <label class="form-label small fw-bold text-dark">Date <span class="text-danger">*</span></label>
@@ -1112,7 +1165,8 @@ function exportCalendarICS() {
 
             <div class="modal-footer border-top py-3 px-4 d-flex justify-content-between">
               <button type="button" class="btn btn-outline-secondary btn-sm" @click="closeModal">Cancel</button>
-              <button type="submit" class="btn btn-danger btn-sm fw-bold px-3">
+              <button type="submit" class="btn btn-danger btn-sm fw-bold px-3" :disabled="isSaving">
+                <span v-if="isSaving" class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>
                 {{ isEditing ? 'Save Changes' : 'Add to Schedule' }}
               </button>
             </div>
