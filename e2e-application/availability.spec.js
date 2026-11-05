@@ -104,7 +104,6 @@ test('signed-out access to /availability requests login without exposing protect
  await expect(page.locator('input[name="smu_user_password"]')).toBeVisible()
  await expect(page.getByRole('button',{name:'Submit claim',exact:true})).toHaveCount(0)
 })
-})
 
 test('undo an unavailable response, reload, and choose an available time',async({page,app})=>{
  await open(page,app)

@@ -384,7 +384,7 @@ export function bookingActions(booking, options) {
     if (options.conflictingBooking) {
       actions.push({
         type: 'blocked_conflict',
-        label: 'Time conflict',
+        label: 'Existing Booking',
         hint: 'Your CCA already holds ' + (options.conflictingBooking.facility_name || 'a facility') + ' at this time. Double booking is not permitted.'
       })
       return actions
@@ -405,7 +405,7 @@ export function bookingActions(booking, options) {
   } else if (options.conflictingBooking) {
     actions.push({
       type: 'blocked_conflict',
-      label: 'Time conflict',
+      label: 'Existing Booking',
       hint: 'Your CCA already holds ' + (options.conflictingBooking.facility_name || 'a facility') + ' at this time. Double booking is not permitted.'
     })
   } else {
