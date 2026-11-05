@@ -495,7 +495,19 @@ onBeforeUnmount(() => {
 /* ================================================================== */
 
 const MIN_MEAL_MINUTES = 15 // a meal can be squeezed down to this before it moves
-const DELAY_OPTIONS = [5, 10, 15, 30] // minutes
+const DELAY_OPTIONS = [5, 10, 15, 30, 45, 60] // minutes
+const customDelayMinutes = ref('')
+
+function handleCustomDelay() {
+  const mins = parseInt(customDelayMinutes.value, 10)
+  if (!mins || isNaN(mins) || mins <= 0) {
+    showToast('Please enter a valid number of minutes to delay.')
+    return
+  }
+  applyOneClickDelay(mins)
+  customDelayMinutes.value = ''
+  showDelayMenu.value = false
+}
 
 const delayNotice = ref(null) // { summary, warnings[] }
 const totalDelay = ref(0)
@@ -1028,8 +1040,47 @@ function clearLate(person) {
             </svg>
             <span>Delay current tasks ▾</span>
           </button>
-          <div v-if="showDelayMenu" class="ops-more-menu shadow-sm border rounded-3 py-1">
-            <button v-for="mins in DELAY_OPTIONS" :key="mins" type="button" class="dropdown-item small py-2 px-3" @click="applyOneClickDelay(mins)">+{{ mins }} min</button>
+          <div v-if="showDelayMenu" class="ops-more-menu shadow-lg border rounded-3 py-1 overflow-hidden" style="min-width: 220px; z-index: 1050;">
+            <div class="px-3 py-1.5 text-uppercase fw-bold text-muted border-bottom" style="font-size: 0.65rem; letter-spacing: 0.04em;">
+              Quick Presets
+            </div>
+            <div class="py-1">
+              <button v-for="mins in DELAY_OPTIONS" :key="mins" type="button" class="dropdown-item small py-1.5 px-3 d-flex justify-content-between align-items-center" @click="applyOneClickDelay(mins)">
+                <span class="fw-semibold">+{{ mins }} min</span>
+                <span class="text-muted" style="font-size: 0.68rem;">Delay</span>
+              </button>
+            </div>
+            <div class="p-2.5 border-top bg-light">
+              <label for="customDelayInput" class="small fw-bold text-dark d-block mb-1" style="font-size: 0.72rem;">
+                Custom Delay:
+              </label>
+              <div class="input-group input-group-sm mb-1">
+                <input 
+                  id="customDelayInput"
+                  v-model.number="customDelayMinutes" 
+                  type="number" 
+                  min="1" 
+                  max="300" 
+                  placeholder="Minutes" 
+                  class="form-control form-control-sm px-2"
+                  style="font-size: 0.78rem;"
+                  @keyup.enter="handleCustomDelay"
+                />
+                <button 
+                  type="button" 
+                  class="btn btn-sm btn-warning text-dark fw-bold px-2.5" 
+                  :disabled="!customDelayMinutes || customDelayMinutes <= 0"
+                  style="font-size: 0.75rem;"
+                  @click="handleCustomDelay"
+                >
+                  Apply
+                </button>
+              </div>
+              <div class="d-flex justify-content-between align-items-center">
+                <small class="text-muted" style="font-size: 0.66rem;">e.g. 45, 90 mins</small>
+                <button type="button" class="btn btn-link p-0 text-muted ops-small text-decoration-none" style="font-size: 0.68rem;" @click="showDelayMenu = false">Close</button>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -1324,7 +1375,7 @@ function clearLate(person) {
               <div v-if="checkInStatus(p) !== 'in' && lateChoiceFor === p.memberId" class="d-flex flex-wrap align-items-center gap-1 mt-2">
                 <span class="ops-small text-muted me-1">How late?</span>
                 <button v-for="mins in LATE_OPTIONS" :key="mins" type="button" class="btn btn-sm btn-outline-warning text-dark py-0 px-2 ops-small fw-bold" @click="reportLateETA(p, mins)">{{ mins }} min</button>
-                <button type="button" class="btn btn-link btn-sm p-0 ms-1 text-muted ops-small text-decoration-none" @click="lateChoiceFor = null">Cancel</button>
+                <button type="button" class="btn btn-sm btn-light border py-0 px-2 ops-small text-muted rounded-pill" @click="lateChoiceFor = null">Cancel</button>
               </div>
               <div v-else-if="checkInStatus(p) !== 'in'" class="d-flex gap-2 mt-2">
                 <button type="button" class="btn btn-sm btn-outline-success flex-grow-1 py-1 ops-small fw-bold" @click="checkInPerformer(p)">Check in</button>
@@ -1535,9 +1586,15 @@ function clearLate(person) {
   position: absolute;
   left: 0;
   top: calc(100% + 4px);
-  z-index: 20;
-  min-width: 140px;
+  z-index: 1050;
+  min-width: 220px;
   background: #fff;
+}
+@media (max-width: 768px) {
+  .ops-more-menu {
+    left: auto;
+    right: 0;
+  }
 }
 
 /* Block colours (same as the crew spreadsheet legend) */
