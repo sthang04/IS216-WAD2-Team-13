@@ -50,6 +50,7 @@ const selectedCategory = ref('All'); // 'All', 'CCA', 'Academic', 'Adhoc'
 const showModal = ref(false);
 const isEditing = ref(false);
 const editingId = ref(null);
+const formError = ref('');
 
 // ---- Day being viewed (switch to a future day to prefill it in advance) ----
 const selectedDate = ref('2026-10-23');
@@ -362,15 +363,17 @@ async function sendScheduleAlert(action, ev) {
     console.log('Telegram schedule alert not sent:', err.message);
   }
 }
+
 // Modal Form Actions
 function openAddModal() {
-  if (blockedForGuest()) return
+  if (blockedForGuest()) return;
   isEditing.value = false;
   editingId.value = null;
+  formError.value = ''; // Reset error
   eventForm.value = {
     title: '',
     category: 'CCA',
-    date: selectedDate.value, // defaults to the day you are viewing
+    date: selectedDate.value,
     startTime: '17:15',
     endTime: '18:15',
     building: 'SMU Connexion',
@@ -382,9 +385,10 @@ function openAddModal() {
 }
 
 function openEditModal(event) {
-  if (blockedForGuest()) return
+  if (blockedForGuest()) return;
   isEditing.value = true;
   editingId.value = event.id;
+  formError.value = ''; // Reset error
   eventForm.value = {
     title: event.title,
     category: event.category,
@@ -400,16 +404,20 @@ function openEditModal(event) {
 }
 
 function closeModal() {
+  formError.value = '';
   showModal.value = false;
 }
 
 function saveEvent() {
   if (blockedForGuest() || !eventForm.value.title.trim()) return;
-  // A same-day event must end after it starts; keep invalid input open for correction.
+
+  // Validate start and end times
   if (eventForm.value.endTime <= eventForm.value.startTime) {
-    toastMsg.value = 'End time must be after start time.';
+    formError.value = 'End time must be after start time.';
     return;
   }
+
+  formError.value = '';
 
   const combinedVenue = eventForm.value.room.trim()
     ? `${eventForm.value.room}, ${eventForm.value.building.replace('SMU ', '')}`
@@ -420,21 +428,24 @@ function saveEvent() {
     if (idx !== -1) {
       Object.assign(scheduleEvents.value[idx], {
         ...eventForm.value,
+        building: eventForm.value.building,
         venue: combinedVenue
       });
       toastMsg.value = `Updated: "${eventForm.value.title}" successfully modified.`;
       sendScheduleAlert('updated', scheduleEvents.value[idx]);
     }
   } else {
-    scheduleEvents.value.push({
+    const newEvent = {
       id: Date.now(),
       ...eventForm.value,
+      building: eventForm.value.building,
       venue: combinedVenue,
       status: 'Not Started',
       isCustom: true
-    });
+    };
+    scheduleEvents.value.push(newEvent);
     toastMsg.value = `Added: "${eventForm.value.title}" scheduled on your calendar.`;
-    sendScheduleAlert('added', scheduleEvents.value[scheduleEvents.value.length - 1]);
+    sendScheduleAlert('added', newEvent);
   }
 
   // If the event was saved on a different day, jump to that day so you can see it
@@ -445,6 +456,15 @@ function saveEvent() {
   closeModal();
   setTimeout(() => { toastMsg.value = ''; }, 4000);
 }
+
+  // If the event was saved on a different day, jump to that day so you can see it
+  if (eventForm.value.date && eventForm.value.date !== selectedDate.value) {
+    selectedDate.value = eventForm.value.date;
+  }
+
+  closeModal();
+  setTimeout(() => { toastMsg.value = ''; }, 4000);
+
 
 function deleteEvent(id) {
   if (blockedForGuest()) return
@@ -877,8 +897,23 @@ function exportCalendarICS() {
           </div>
 
           <form @submit.prevent="saveEvent">
-            <div class="modal-body p-4">
+  <div class="modal-body p-4">
 
+    <!-- Modal Error Banner -->
+    <div
+      v-if="formError"
+      class="alert alert-danger py-2 px-3 small border-0 mb-3 d-flex align-items-center gap-2"
+      role="alert"
+      style="border-radius: 0.5rem; background-color: #fef2f2; color: #991b1b;"
+    >
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <circle cx="12" cy="12" r="10"></circle>
+        <line x1="12" y1="8" x2="12" y2="12"></line>
+        <line x1="12" y1="16" x2="12.01" y2="16"></line>
+      </svg>
+      <span>{{ formError }}</span>
+    </div>
+              
               <div class="mb-3">
                 <label class="form-label small fw-bold text-dark">Event or Class Title:</label>
                 <input
