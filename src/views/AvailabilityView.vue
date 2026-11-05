@@ -1173,7 +1173,14 @@ function exportConfirmed() {
                 <div class="small">
                   <strong class="d-block">{{ p.full_name }}{{ p.member_id === myId ? ' (you)' : '' }}</strong>
                   <span v-if="recentlyNudged(p)" class="d-block text-success fw-semibold member-meta">{{ nudgedText(p) }}</span>
-                  <span v-if="!p.telegram_linked" class="d-block text-muted member-meta">Telegram not linked</span>
+                  <span v-if="p.telegram_linked === false" class="member-meta member-warning">
+                    <svg class="member-warning-icon" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                      <path d="M10.3 3.9 2.1 18.1a2 2 0 0 0 1.7 3h16.4a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z" />
+                      <path d="M12 9v4" />
+                      <path d="M12 17h.01" />
+                    </svg>
+                    <span>This member has not verified their Telegram account.</span>
+                  </span>
                 </div>
                 <button
                   v-if="isOrganiser && votingOpen && p.member_id !== myId"
@@ -1508,6 +1515,8 @@ function exportConfirmed() {
 .member-row { cursor: pointer; border-bottom: 1px solid #f1f5f9; }
 .member-row:last-child { border-bottom: 0; }
 .member-meta { font-size: 0.68rem; }
+.member-warning { display: flex; align-items: flex-start; gap: 0.5rem; margin-top: 0.25rem; color: #6b7280; }
+.member-warning-icon { flex-shrink: 0; margin-top: 0.05rem; color: #f97316; }
 .nudge-btn { font-size: 0.7rem; white-space: nowrap; }
 
 .deadline-box { background: var(--pulse-amber-bg, #fffbeb); border: 1px solid var(--pulse-amber-border, #fde68a); }
