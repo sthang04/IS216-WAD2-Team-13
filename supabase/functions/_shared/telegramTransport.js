@@ -2,14 +2,14 @@
  * Uses the SAME backend TELEGRAM_BOT_TOKEN, never another bot or browser secret.
  * No retry: a timeout may mean Telegram accepted the message already. */
 export function createTelegramTransport({botToken,fetchImpl=fetch,timeoutMs=10000}) {
- return async ({chatId,title,body,link}) => {
+ return async ({chatId,title,body,link,buttonText='Open in Pulse'}) => {
   let response,result
   try {
    response=await fetchImpl('https://api.telegram.org/bot'+botToken+'/sendMessage',{
     method:'POST',headers:{'Content-Type':'application/json'},
     signal:AbortSignal.timeout(timeoutMs),
     body:JSON.stringify({chat_id:String(chatId),text:'Pulse: '+title+'\n'+body,
-     reply_markup:{inline_keyboard:[[{text:'Open in Pulse',url:link}]]}})
+     reply_markup:{inline_keyboard:[[{text:buttonText,url:link}]]}})
    })
    result=await response.json()
   } catch {

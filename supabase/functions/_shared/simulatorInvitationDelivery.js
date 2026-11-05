@@ -16,7 +16,7 @@ export async function deliverSimulatorInvitation(invitation,{origin,sendExisting
   const activities=invitation.assignment_snapshot.map(a=>a.activity+' | '+a.role_name+' | '+a.starts_at+' to '+a.ends_at).join('\n')
   const result=await sendExistingNotification({recipientMemberId:invitation.recipient_member_id,
     idempotencyKey:'simulator-invitation:'+invitation.id,title:'Pulse Replacement Invitation',
-    body:invitation.event_name+'\n'+activities+'\nOpen Pulse to Accept or Decline. Acceptance does not apply the assignment.',link:url.toString()})
+    body:invitation.event_name+'\n'+activities+'\nOpen Pulse to Accept or Decline. Accepting assigns you straight away.',link:url.toString()})
   // A queued request is not a delivered message. Report only the backend's
   // confirmed send outcome; a crash/retry needs the existing sender's idempotency.
   if(result?.status!=='Sent' || !result.messageId) throw new Error('Telegram send was not confirmed by the backend.')

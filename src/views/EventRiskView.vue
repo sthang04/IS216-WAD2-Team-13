@@ -691,45 +691,30 @@ const recommendationBadge = computed(() => 'All Selected Disruptions')
 // Comparison rendering belongs to SimulatorPlanComparison; this view passes
 // the selected evaluated or saved proposal without recomputing its score.
 
-// Conversational Contingency Chatbot Mode (Prof Kyong Feedback: reduce cognitive overload)
-// In automated Playwright test suites (window.__foundation), default to matrix to preserve low-level assertions.
+// Users only see Pip. The sandbox (matrix) is kept for the browser tests (window.__foundation)
+// and still runs underneath: Pip uses its simulation, plans and recovery workflow.
 const viewMode = ref(typeof window !== 'undefined' && window.__foundation ? 'matrix' : 'chatbot') // 'chatbot' | 'matrix'
 
-function handleChatbotApplyPlan() {
-  if (bestRecoveryPlan.value) {
-    selectRecoveryPlan(bestRecoveryPlan.value.id)
-  } else if (recoveryOptions.value.length) {
-    selectRecoveryPlan(recoveryOptions.value[0].id)
-  }
+// Pip fills the same single disruption card the sandbox uses and runs the same engine.
+function handlePipEvent(id) {
+  selectedEventId.value = events.value.find(e => String(e.id) === String(id))?.id ?? selectedEventId.value
 }
-
-function handleScenarioTrigger(scenarioKey) {
-  if (!disruptionCards.value.length) {
-    disruptionCards.value = [createNewDisruption()]
-  }
-  const card = disruptionCards.value[0]
-  if (scenarioKey === 'performer_illness') {
-    card.type = 'MEMBER_UNAVAILABLE'
-    const targetMember = eventMembers.value.find(m => m.full_name?.toLowerCase().includes('angel') || m.full_name?.toLowerCase().includes('mei')) || eventMembers.value[0]
-    if (targetMember) card.memberId = targetMember.id
-  } else if (scenarioKey === 'venue_fault') {
-    card.type = 'FACILITY_UNAVAILABLE'
-    if (eventLinkedBookings.value.length) {
-      card.facilityBookingId = eventLinkedBookings.value[0].id
-      setDisruptedBooking(card)
-    }
-  } else if (scenarioKey === 'schedule_delay') {
-    card.type = 'SCHEDULE_DELAY'
-    if (delayActivities.value.length) {
-      card.segmentId = delayActivities.value[0].id
-      card.delayMinutes = 30
-    }
-  }
-  try {
-    runSimulation()
-  } catch (err) {
-    console.warn('Simulation auto-run:', err.message)
-  }
+function handlePipRun(answer) {
+  const card = { ...createDisruption(), ...answer }
+  disruptionCards.value = [card]
+  if (card.type === 'FACILITY_UNAVAILABLE') setDisruptedBooking(card)
+  runSimulation()
+}
+// Choosing a fix in Pip selects it for the workflow; Pip then shows the steps in the chat
+function handlePipUsePlan(id) {
+  selectRecoveryPlan(id)
+}
+// Pip reads the recovery workflow's status and asks it to act, so requests,
+// Apply and Undo keep all of the workflow's checks
+const recoveryWorkflow = ref(null)
+const pipWorkflowState = computed(() => recoveryWorkflow.value?.pipState ?? null)
+function pipWorkflowAct(name, arg) {
+  return recoveryWorkflow.value?.pipAct(name, arg)
 }
 
 </script>
@@ -746,26 +731,17 @@ function handleScenarioTrigger(scenarioKey) {
              align-items-center gap-3 mb-4"
     >
       <div>
-        <div class="d-flex align-items-center gap-2 mb-1">
-          <span
-            v-if="apiMode"
-            class="pulse-api-tag"
-          >
-            Supabase DB Query + JS Matching
-          </span>
-        </div>
-
         <h3 class="fw-bold mb-1" tabindex="-1">
           Event Control Room
         </h3>
 
         <p class="text-muted small mb-0">
-          Simulate disruptions, review recovery options,
-          and compare plans without modifying live records.
+          Tell Pip what went wrong, pick a fix, and follow it through until it's applied.
         </p>
       </div>
 
-      <div><button type="button" class="btn btn-outline-secondary btn-sm" :disabled="loading" @click="refreshSimulator(true)">Refresh event data</button></div>
+      <!-- Users rely on the automatic refresh; the button stays for the sandbox tests only -->
+      <div v-if="viewMode === 'matrix'"><button type="button" class="btn btn-outline-secondary btn-sm" :disabled="loading" @click="refreshSimulator(true)">Refresh event data</button></div>
     </div>
     <!-- STATUS MESSAGES -->
 
@@ -774,7 +750,7 @@ function handleScenarioTrigger(scenarioKey) {
       v-if="loading"
       class="alert alert-info"
     >
-      Loading Supabase event data…
+      Loading your events…
     </div>
 
     <div
@@ -786,34 +762,6 @@ function handleScenarioTrigger(scenarioKey) {
       {{ error }}
     </div>
 
-    <!-- View Switcher Tabs (Prof Kyong feedback: conversational assistant simplifies cognitive load) -->
-    <div class="d-flex flex-column flex-md-row align-items-stretch align-items-md-center justify-content-between p-2 mb-4 bg-white rounded-3 shadow-xs border gap-2">
-      <div class="d-flex flex-column flex-sm-row align-items-stretch align-items-sm-center gap-2">
-        <button
-          type="button"
-          class="btn btn-sm rounded-pill px-3 py-2 fw-bold d-flex align-items-center justify-content-center gap-2 flex-grow-1"
-          :class="viewMode === 'chatbot' ? 'btn-pulse-primary text-white shadow-xs' : 'btn-light text-secondary border-0'"
-          @click="viewMode = 'chatbot'"
-        >
-          <span>💬 AI Contingency Assistant</span>
-          <span class="badge bg-white text-danger rounded-pill" style="font-size: 0.65rem;">Recommended</span>
-        </button>
-        <button
-          type="button"
-          class="btn btn-sm rounded-pill px-3 py-2 fw-bold d-flex align-items-center justify-content-center gap-2 flex-grow-1"
-          :class="viewMode === 'matrix' ? 'btn-pulse-primary text-white shadow-xs' : 'btn-light text-secondary border-0'"
-          @click="viewMode = 'matrix'"
-        >
-          <span>📊 Evaluator Matrix Sandbox</span>
-        </button>
-      </div>
-
-      <div class="text-muted small px-2 py-1 text-center text-md-end" style="font-size: 0.75rem;">
-        <span v-if="viewMode === 'chatbot'">💬 Conversational Flow &middot; Powered by 50/30/20 Multi-Factor Matcher</span>
-        <span v-else>🔬 Low-level multi-scenario matrix for technical inspection</span>
-      </div>
-    </div>
-
     <!-- Mode 1: Conversational Chatbot Assistant (Prof Kyong's Preferred Submission Flow) -->
     <div v-show="viewMode === 'chatbot'">
       <RiskChatbotAssistant
@@ -821,17 +769,19 @@ function handleScenarioTrigger(scenarioKey) {
         :events="events"
         :selected-event-id="selectedEventId"
         :selected-event="selectedEvent"
-        :disruption-cards="disruptionCards"
-        :result="result"
-        :ranked-recovery-plans="recoveryOptions"
-        :best-recovery-plan="bestRecoveryPlan"
-        :member-assessments="memberAssessments"
-        :facility-recovery="facilityRecovery"
+        :members="eventMembers"
+        :bookings="eventLinkedBookings"
+        :activities="delayActivities"
+        :plans="overallRankedPlans"
+        :summary="simulationSummary"
+        :error="error"
         :loading="loading"
-        @trigger-scenario="handleScenarioTrigger"
-        @apply-plan="handleChatbotApplyPlan"
+        :workflow="pipWorkflowState"
+        :workflow-act="pipWorkflowAct"
+        @select-event="handlePipEvent"
+        @run="handlePipRun"
+        @use-plan="handlePipUsePlan"
         @reset="resetSession"
-        @switch-to-matrix="viewMode = 'matrix'"
       />
     </div>
 
@@ -1105,19 +1055,23 @@ function handleScenarioTrigger(scenarioKey) {
     </section>
     </section>
 
+    </div><!-- End Mode 2 sandbox-only sections -->
+
     <!-- ===================================================
          PLAN COMPARISON
     ==================================================== -->
 
+    <!-- Kept mounted in both modes: Pip runs its requests through this same workflow -->
+    <div v-show="viewMode === 'matrix'">
     <SimulatorPlanComparison v-if="result || selectedSavedRecovery" id="simulator-comparison" :data="data" :segments="eventSegments" :before="selectedSavedRecovery?.before_state" :saved-status="selectedSavedRecovery?.application_status" :recovery="comparedRecovery" :result="result" />
 
     <!-- Review the comparison before confirming database recovery. -->
     <section aria-label="Recovery Workflow and Saved Recoveries" class="mt-4">
-    <SimulatorRecoveryWorkflow :active="props.active" :session-version="sessionVersion" @review-saved="reviewSavedRecovery" :selected-recovery-id="selectedRecoveryId" @select-option="selectRecoveryPlan" :refresh-event="refreshSimulator" :refresh-version="invitationRefreshVersion" @invitations-changed="invitationRefreshVersion++" :data="data" :event-id="selectedEventId" :options="recoveryOptions"
+    <SimulatorRecoveryWorkflow ref="recoveryWorkflow" :active="props.active" :session-version="sessionVersion" @review-saved="reviewSavedRecovery" :selected-recovery-id="selectedRecoveryId" @select-option="selectRecoveryPlan" :refresh-event="refreshSimulator" :refresh-version="invitationRefreshVersion" @invitations-changed="invitationRefreshVersion++" :data="data" :event-id="selectedEventId" :options="recoveryOptions"
       :disruptions="result ? buildDisruptions() : []" />
     </section>
-      <SimulatorBackToTop :sections="sectionShortcuts" :active="props.active" />
-    </div><!-- End Mode 2 Matrix Sandbox -->
+    </div>
+    <SimulatorBackToTop v-if="viewMode === 'matrix'" :sections="sectionShortcuts" :active="props.active" />
 
   </div>
   

@@ -20,7 +20,7 @@ async function respond(page,id,verb){
  const box=page.getByLabel('Confirm invitation response',{exact:true})
  await box.getByRole('checkbox').check()
  await box.getByRole('button',{name:'Confirm invitation response',exact:true}).click()
- await expect(page.getByText('Response persisted.',{exact:false})).toBeVisible()
+ await expect(page.getByRole('status').filter({hasText:verb==='Accept'?/Accepted\.|You're assigned/:/Declined\./})).toBeVisible()
 }
 test('ordinary member uses actual PULSE navigation and sees complete invitation terms without organiser permission',async({page})=>{
  await boot(page)

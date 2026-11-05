@@ -201,7 +201,7 @@ function attachBooking(change){
 }
 function cancelPlan(){const current={...plan.value};queueAction('Cancel Recovery Plan',()=>api.cancelPlan(current,true),'Recovery cancelled. Event records are unchanged; handle calendar claims separately.')}
 function invite(target){const id=plan.value.id;queueAction('Invite '+memberName(target.recipient)+' to replace '+memberName(target.replaced),()=>api.invite(id,target.recipient,target.replaced,true),'Invitation saved in the member inbox. Telegram awaits the configured simulator worker; refresh to check delivery status.')}
-function respond(response){const id=incoming.value.id;queueAction(response+' invitation '+id,()=>api.respond(id,response,true),'Response persisted. No assignment was applied.',{refreshInvitation:true})}
+function respond(response){const id=incoming.value.id;queueAction(response+' invitation '+id,()=>api.respond(id,response,true),response==='Accepted'?'Accepted. You are assigned as soon as every replacement has accepted.':'Declined.',{refreshInvitation:true})}
 function cancel(id){queueAction('Cancel invitation '+id,()=>api.cancel(id,true),'Invitation cancelled.')}
 // Apply and Undo use the selected saved revision and a separate confirmation.
 // Local readiness explains blockers; the backend repeats every safety check.
@@ -394,6 +394,42 @@ const appliedDifferences=computed(()=>{
  return rows
 })
 
+// Pip (the guided chat) drives this same workflow instead of a copy of it: it reads
+// pipState and calls pipAct. Every write still goes through queueAction/executePending,
+// so the confirmation key, idempotent Start and server gates above all still apply.
+// Pip's own button press is the user's confirmation, and its Apply button is the organiser review.
+// Ready apart from the organiser review, which Pip's Apply button records when pressed
+const pipApplyReady=computed(()=>{void clock.value;return !historyLoading.value&&!historyError.value&&
+ workflowReadiness({enabled:applicationEnabled.value,plan:plan.value,invites:history.value.invitations,manualAcknowledged:true}).ready&&
+ buildRecoveryTracker({plan:plan.value,invitations:history.value.invitations,audit:history.value.audit,manualAcknowledged:true,enabled:applicationEnabled.value,data:props.data,now:clock.value}).status==='Ready to apply'})
+const pipState=computed(()=>({
+ notice:recoveryNotice.value,canRequest:invitationEnabled.value,canApply:applicationEnabled.value,
+ busy:busy.value,busyAction:busyAction.value,error:error.value,message:message.value,loading:historyLoading.value,
+ planId:plan.value?.id || '',planTitle:plan.value?.title || '',applied:plan.value?.application_status || '',
+ members:memberRequirements.value.map(row=>({key:row.key,recipient:row.recipient,replaced:row.replaced,count:row.activities.size,
+  state:memberState(row),delivery:row.invitations[0]?deliveryLabel(row.invitations[0]):''})),
+ rooms:roomBlocks.value.map(b=>({key:b.key,venue:b.venue,span:blockSpan(b),status:blockStatus(b),hasClaim:!!blockClaim(b),linked:!!b.first.facilityBookingId})),
+ applyReady:pipApplyReady.value,outstanding:outstandingChecks.value,
+ unresolved:plan.value?.application_status==='Applied'?disruptionResolutions.value.filter(r=>!r.resolved).map(r=>({index:r.index,type:r.disruption.type,memberId:r.disruption.memberId,venueName:r.disruption.venueName})):[],
+ undoReady:applicationEnabled.value&&!busy.value&&!historyLoading.value&&!historyError.value&&undoStatus.value.ready,undoReason:undoStatus.value.reason || '',
+ saved:history.value.plans.map(p=>({id:p.id,title:p.title,application_status:p.application_status,lifecycle:p.lifecycle,status:savedTracker(p).status,updated:p.updated_at}))
+}))
+async function pipAct(name,arg){
+ if(name==='refresh')return refreshHistory()
+ if(name==='open-saved'){selectedPlanId.value=arg;return}
+ if(name==='room-target'){const block=roomBlocks.value.find(b=>b.key===arg);return block?blockRequestTarget(block):null}
+ if(name==='start')startPlan()
+ else if(name==='invite'){const row=memberRequirements.value.find(r=>r.key===arg);if(row)invite(row)}
+ else if(name==='link-room'){const block=roomBlocks.value.find(b=>b.key===arg);if(block)await chooseBlockClaim(block)}
+ else if(name==='apply'){manualAcknowledged.value=true;applyPlan()}
+ else if(name==='undo'){manualAcknowledged.value=true;undoPlan()}
+ else if(name==='cancel')cancelPlan()
+ // The organiser confirmed in Pip that the person/room is back; Undo still re-checks on the server
+ else if(name==='resolve'){const row=disruptionResolutions.value.find(r=>r.index===arg);if(row){manualAcknowledged.value=true;resolutionReasons.value[row.index]='Organiser confirmed in Pip that this disruption is over.';resolveDisruption(row)}}
+ if(pendingAction.value){confirmed.value=true;await executePending()}
+}
+defineExpose({pipState,pipAct})
+
 </script>
 
 <template>
@@ -416,7 +452,7 @@ const appliedDifferences=computed(()=>{
      <details v-if="row.invitations.length" class="stage-evidence"><summary>Invitation evidence and actions</summary><div v-for="invitation in row.invitations" :key="invitation.id" class="py-2"><strong>{{ effectiveInvitationStatus(invitation,clock) }}</strong> &middot; Telegram: {{ deliveryLabel(invitation) }}<p>Created: {{ invitation.created_at?localTime(invitation.created_at):'Not supplied' }} &middot; Response recorded: {{ invitation.responded_at?localTime(invitation.responded_at):'Not supplied' }}. Delivery time is not supplied by this view.</p><button type="button" class="btn btn-outline-danger btn-sm" :disabled="!invitationEnabled || busy || !['Pending','Accepted'].includes(invitation.status)" @click="cancel(invitation.id)">Cancel invitation</button></div></details>
     </article>
     <div v-if="!plan && memberRequirements.length" class="workflow-actions"><button type="button" class="btn workflow-secondary-action" :disabled="!invitationEnabled || busy || !preview.draft" @click="startPlan">Prepare recovery requests</button></div>
-    <p v-if="memberRequirements.length" class="stage-description">Preparation saves the proposal and creates pending invitations. Telegram uses the configured worker; refresh to check delivery.</p><p v-if="incoming" class="small">Your invitation is in <RouterLink to="/personal-schedule#simulator-invitation-inbox">Personal Schedule &mdash; My replacement invitations</RouterLink>. Accepting does not apply an assignment.</p>
+    <p v-if="memberRequirements.length" class="stage-description">Preparation saves the proposal and creates pending invitations. Telegram uses the configured worker; refresh to check delivery.</p><p v-if="incoming" class="small">Your invitation is in <RouterLink to="/personal-schedule#simulator-invitation-inbox">Personal Schedule &mdash; My replacement invitations</RouterLink>. Accepting assigns you straight away.</p><p v-if="memberRequirements.length" class="small text-muted">Once every replacement accepts, the plan is applied automatically. No organiser approval is needed.</p>
    </template>
    <template v-else-if="activeStage==='Facility approval'">
     <article v-for="block in roomBlocks" :key="block.key" class="facility-approval-card" :aria-label="'Booking requirement for '+block.venue+' '+blockSpan(block)"><div class="stage-record-heading"><h6 class="fw-bold mb-0">Facility approval</h6><span class="badge" :class="blockBadge(blockStatus(block))">{{ blockStatus(block) }}</span></div><div class="facility-identity"><span aria-hidden="true"><svg width="20" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M3 21h18M6 21V5l6-2v18M12 8h6v13M9 8v2m0 3v2m6-3v2m0 3v2"/></svg></span><div><strong>{{ linkedBooking(block.first)?roomEvidence(block.first).facilityName:block.venue }} &middot; {{ blockSpan(block) }}</strong><p>{{ block.activities.join(', ') }}</p></div></div><template v-if="linkedBooking(block.first)"><div class="facility-booking-status"><strong>{{ blockStatus(block)==='Approved'?'Booking approved':blockStatus(block)==='Pending approval'?'Waiting for facility approval':blockStatus(block)==='Rejected'?'Booking rejected':'Booking status needs verification' }}</strong><p>Booking {{ linkedBooking(block.first).id }} &middot; {{ linkedBooking(block.first).booking_date }} &middot; {{ linkedBooking(block.first).start_time }}&ndash;{{ linkedBooking(block.first).end_time }}</p><div class="d-flex justify-content-between"><span>Booking link</span><span class="badge bg-success-subtle text-success">{{ plan?'Linked':'Selected for preview' }}</span></div></div><details class="stage-evidence booking-view"><summary>View booking details</summary><p>{{ linkedBooking(block.first).status }} &middot; {{ roomState(block.first) }}</p><p>{{ roomEvidence(block.first).reasons?.join(' ') }}</p><p>Approval does not complete other recovery checks.</p></details></template><template v-else><strong>Ready to request a room?</strong><p class="small text-muted mt-2">One booking for {{ block.venue }}, {{ blockSpan(block) }}, covers {{ block.activities.length===1?'this activity':'all '+block.activities.length+' activities' }}.</p><RouterLink :to="blockRequestTarget(block)" class="btn btn-pulse-primary facility-request">Request {{ block.venue }}, {{ blockSpan(block) }}</RouterLink></template><div v-if="blockClaim(block) && !block.first.facilityBookingId" class="facility-booking-status"><strong>Booking {{ blockClaim(block).id }} returned by the calendar</strong><p>{{ blockClaim(block).status }}. Approval is checked separately.</p><button type="button" class="btn btn-pulse-primary btn-sm" :disabled="busy || bookingRefreshing || !!bookingRefreshError || (plan && (!invitationEnabled || plan.application_status!=='Draft'))" @click="chooseBlockClaim(block)">{{ plan?'Confirm booking link':'Use booking in preview' }}</button></div><details class="stage-evidence"><summary>Already have a booking? Link it</summary><p>Choose your CCA's booking for this room that covers {{ blockSpan(block) }}. Pending bookings still need approval.</p><label :for="(plan?'attach-':'booking-')+block.key">Booking to link</label><select :id="(plan?'attach-':'booking-')+block.key" :value="bookingSelections[String(block.first.segmentId)] || ''" @change="setBlockBooking(block,$event.target.value)" class="form-select form-select-sm"><option value="">Select a booking</option><option v-for="booking in blockBookings(block)" :key="booking.id" :value="booking.id">Booking {{ booking.id }} | {{ booking.booking_date }} {{ booking.start_time }}&ndash;{{ booking.end_time }} | {{ booking.status }}</option></select><p v-if="!blockBookings(block).length" class="small text-muted mt-1 mb-0">No booking of yours covers this whole time yet.</p><button v-if="plan" type="button" class="btn btn-pulse-primary btn-sm mt-2" :disabled="!invitationEnabled || busy || historyLoading || !!historyError || bookingRefreshing || !!bookingRefreshError || plan.application_status!=='Draft' || !bookingSelections[String(block.first.segmentId)]" @click="attachBlock(block)">Link booking</button></details></article><div class="workflow-actions"><button v-if="!plan && roomRequirements.length" type="button" class="btn workflow-secondary-action" :disabled="!invitationEnabled || busy || !preview.draft" @click="startPlan">Prepare recovery requests</button><button type="button" class="btn workflow-secondary-action" :disabled="bookingRefreshing || busy" @click="refreshHistory">{{ bookingRefreshing?'Refreshing bookings...':'Refresh booking records' }}</button></div><p v-if="bookingRefreshError" class="small text-warning" role="status">Unable to refresh bookings: {{ bookingRefreshError }}. Previous records may be stale.</p>

@@ -1,7 +1,7 @@
 <script setup>
 // Purpose: Read real invitation terms and confirm exact accept/decline responses; delivery status is not acceptance.
-// This inbox records consent only. Assignment changes belong to the organiser's
-// separately authorized Apply operation; Telegram delivery is independent.
+// Accepting assigns the replacement straight away: the server applies the plan
+// once everyone it is waiting for has accepted. Telegram delivery is independent.
 import {ref,watch,onMounted,onUnmounted,nextTick} from 'vue'
 import {supabase} from '../supabase'
 import {createSimulatorWorkflow,SIMULATOR_WORKFLOW_VERIFIED,effectiveInvitationStatus} from '../services/simulatorWorkflowService.js'
@@ -43,6 +43,15 @@ async function refresh(){
   if(inbox && window.location.hash==='#simulator-invitation-inbox' && document.activeElement===inbox)inbox.scrollIntoView({block:'start',behavior:'instant'})
  }}
 }
+// What happened after the server saved the answer (see rpc_simulator_respond_invitation)
+function responseMessage(response,result){
+ if(response==='Declined')return 'Declined. The organiser will find someone else.'
+ if(result?.assigned)return "You're assigned. It's now in your schedule."
+ const waiting=Number(result?.waiting_for)||0
+ if(waiting>0)return 'Accepted. You\'ll be assigned as soon as the other '+(waiting===1?'replacement accepts.':waiting+' replacements accept.')
+ if(result?.assign_error)return 'Accepted, but you couldn\'t be assigned automatically ('+result.assign_error+'). Your organiser can finish it.'
+ return 'Accepted.'
+}
 function respond(invitation,response){
  if(!invitationEnabled.value||busy.value||effectiveInvitationStatus(invitation)!=='Pending')return
  confirmed.value=false;error.value=''
@@ -59,9 +68,9 @@ async function confirmResponse(){
  const version=generation
  busy.value=true;error.value='';message.value=''
  try{
-  await api.respond(action.id,action.response,true)
+  const result=await api.respond(action.id,action.response,true)
   if(disposed||version!==generation)return
-  message.value='Response persisted. This does not change any assignment.'
+  message.value=responseMessage(action.response,result)
   pending.value=null;confirmed.value=false
   await refresh();emit('responded')
  }catch(e){if(!disposed&&version===generation)error.value=e.message}
@@ -96,7 +105,7 @@ onUnmounted(()=>{clearInterval(expiryTimer);clearInterval(refreshTimer);globalTh
   </div>
   <div id="replacement-invitation-content" v-show="expanded">
   <p class="small text-muted mb-4">Manage requests to cover another member's role.</p>
-  <div class="invitation-explainer small"><span aria-hidden="true">&#9432;</span><div><p class="fw-semibold mb-1">How replacements work</p><p class="text-muted mb-0">Accepting an invitation doesn't automatically assign you. The organiser must confirm the replacement.</p></div></div>
+  <div class="invitation-explainer small"><span aria-hidden="true">&#9432;</span><div><p class="fw-semibold mb-1">How replacements work</p><p class="text-muted mb-0">Accepting assigns you to the role straight away. No organiser approval is needed. If several people were asked to cover for the same event, the swap happens once all of them accept.</p></div></div>
   <p v-if="loading" role="status" class="small">Loading your invitations...</p>
   <p v-if="!invitationEnabled && !loading && !readError && invitations.some(i=>effectiveInvitationStatus(i,clock)==='Pending')" class="small text-muted">Preview: responding is turned off on this site. Contact your organiser if you need assistance.</p>
   <p v-if="readError" role="status" class="small text-warning">{{ readError }}</p>
