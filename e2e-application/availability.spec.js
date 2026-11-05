@@ -88,10 +88,10 @@ test('closing an unsent meeting form discards its title and selected participant
 
 test('a none-work response updates visible scheduling feedback and survives reload',async({page,app})=>{
  await open(page,app)
- await page.getByRole('button',{name:'None of these times work',exact:true}).click()
- await expect(page.getByRole('alert')).toContainText('Response saved: none of these times work for you.')
+ await page.getByRole('button',{name:'None of these days work',exact:true}).click()
+ await expect(page.getByRole('alert')).toContainText('Response saved: none of these days work for you.')
  await page.reload()
- await expect(page.getByText('None work',{exact:true})).toBeVisible()
+ await expect(page.getByText('None of these days work',{exact:true})).toBeVisible()
 })
 
 // Guest entry was removed; verify the supported signed-out boundary instead.
@@ -103,4 +103,45 @@ test('signed-out access to /availability requests login without exposing protect
  await page.reload()
  await expect(page.locator('input[name="smu_user_password"]')).toBeVisible()
  await expect(page.getByRole('button',{name:'Submit claim',exact:true})).toHaveCount(0)
+})
+})
+
+test('undo an unavailable response, reload, and choose an available time',async({page,app})=>{
+ await open(page,app)
+ await page.getByRole('button',{name:'None of these days work',exact:true}).click()
+ const undo=page.getByRole('button',{name:'Undo',exact:true})
+ await expect(undo).toBeEnabled()
+ await page.reload()
+ await expect(undo).toBeEnabled()
+ await undo.click()
+ await expect(page.getByText('Not yet',{exact:true})).toBeVisible()
+ await page.reload()
+ await expect(page.getByText('Not yet',{exact:true})).toBeVisible()
+ const cell=page.locator('.scheduler-grid [role=button]').first()
+ await cell.click()
+ await expect(cell).toHaveAttribute('aria-pressed','true')
+ await expect(page.getByText('1 hour free',{exact:true})).toBeVisible()
+})
+test('confirmation waits for outstanding responses before the deadline',async({page,app})=>{
+ await open(page,app,{waitingResponses:true})
+ await expect(page.getByRole('button',{name:'Choose Meeting Day & Confirm',exact:true})).toBeDisabled()
+ await expect(page.getByText('Waiting for 2 responses or the voting deadline.',{exact:true})).toBeVisible()
+ await expect(page.getByText('Submit your availability before the deadline. Responses cannot be added or changed afterward.',{exact:true})).toBeVisible()
+})
+
+test('everyone responding allows confirmation before the deadline',async({page,app})=>{
+ await open(page,app,{everyoneResponded:true})
+ await expect(page.getByText('Everyone has responded.',{exact:true})).toBeVisible()
+ await page.getByRole('button',{name:'Choose Meeting Day & Confirm',exact:true}).click()
+ await expect(page.getByRole('button',{name:'Confirm & Notify Participants',exact:true})).toBeVisible()
+})
+
+test('closed voting blocks changes but allows confirmation with pending responses',async({page,app})=>{
+ await open(page,app,{meetingClosed:true})
+ await expect(page.getByText('Voting has closed. Responses can no longer be added or changed. The organiser can still confirm the meeting.',{exact:true})).toBeVisible()
+ await expect(page.locator('.scheduler-grid [role=button]')).toHaveCount(0)
+ await expect(page.getByRole('button',{name:'None of these days work',exact:true})).toHaveCount(0)
+ await expect(page.getByRole('button',{name:'Undo',exact:true})).toHaveCount(0)
+ await page.getByRole('button',{name:'Choose Meeting Day & Confirm',exact:true}).click()
+ await expect(page.getByRole('button',{name:'Confirm & Notify Participants',exact:true})).toBeVisible()
 })
