@@ -3,15 +3,16 @@ import { supabase } from '../supabase'
 const coordCache = new Map()
 const walkCache = new Map()
 
-// Official SMU Campus Geocoded Coordinates (Primary High-Accuracy Fallback)
+// SMU building coordinates, checked first so common venues need no lookup.
+// Values come from OneMap's own search (common/elastic/search), so walk routes start at the right building.
 const SMU_BUILDING_COORDS = {
-  'smu school of computing and information systems 1': { lat: 1.29743, lng: 103.8496 },
-  'li ka shing library': { lat: 1.2966, lng: 103.8502 },
-  'smu connexion': { lat: 1.2961, lng: 103.8515 },
-  'smu school of economics / school of social sciences': { lat: 1.2982, lng: 103.8488 },
-  'smu yong pung how school of law': { lat: 1.2948, lng: 103.8502 },
-  'lee kong chian school of business': { lat: 1.2952, lng: 103.8510 },
-  'smu administration building': { lat: 1.2969, lng: 103.8522 }
+  'smu school of computing and information systems 1': { lat: 1.29738, lng: 103.84955 },
+  'li ka shing library': { lat: 1.29666, lng: 103.85011 },
+  'smu connexion': { lat: 1.29558, lng: 103.84933 },
+  'smu school of economics / school of social sciences': { lat: 1.29793, lng: 103.84885 },
+  'smu yong pung how school of law': { lat: 1.29511, lng: 103.84892 },
+  'lee kong chian school of business': { lat: 1.29509, lng: 103.85057 },
+  'smu administration building': { lat: 1.29685, lng: 103.85221 }
 }
 
 // 1. Geocode venue string to lat/lng
