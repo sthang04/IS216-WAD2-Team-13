@@ -851,11 +851,11 @@ function exportConfirmed() {
       </div>
 
       <div class="d-flex flex-wrap align-items-center gap-2">
-        <span v-if="myBaseline.fileName" class="small text-muted text-truncate" style="max-width: 14rem;" :title="myBaseline.fileName">
-          Timetable: {{ myBaseline.fileName }}
+        <span v-if="myBaseline.fileName" class="small text-muted" :title="myBaseline.fileName">
+          Timetable imported
         </span>
         <input ref="icsInput" type="file" accept=".ics,text/calendar" class="d-none" @change="handleIcsFile" />
-        <button type="button" class="btn btn-sm btn-pulse-outline" :disabled="isImporting" @click="pickIcsFile">
+        <button type="button" class="btn btn-sm btn-outline-secondary" :disabled="isImporting" @click="pickIcsFile">
           <span v-if="isImporting" class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>
           {{ myBaseline.fileName ? 'Replace Timetable (.ics)' : 'Import Timetable (.ics)' }}
         </button>
@@ -1113,7 +1113,7 @@ function exportConfirmed() {
           <div class="pulse-card p-4 shadow-sm mb-4">
             <div class="d-flex justify-content-between align-items-start gap-2 mb-1">
               <h6 class="fw-bold mb-0">{{ meeting.title }}</h6>
-              <span class="pulse-badge" :class="votingOpen ? 'pulse-badge-pending' : 'pulse-badge-rejected'">
+              <span class="pulse-badge flex-shrink-0 text-nowrap" :class="votingOpen ? 'pulse-badge-pending' : 'pulse-badge-rejected'">
                 {{ votingOpen ? 'Collecting' : 'Voting closed' }}
               </span>
             </div>
