@@ -24,7 +24,7 @@ const STATUS_OPTIONS = [
   { value: 'Proposed Peer Transfer', label: 'Available to Claim' },
   { value: 'Pending Admin Sign-off', label: 'Awaiting OSL approval' },
   { value: 'Booked', label: 'Booked' },
-  { value: 'Officially Confirmed Booking', label: 'Officially Confirmed' }
+  { value: 'Officially Confirmed Booking', label: 'Successfully Transferred' }
 ]
 
 

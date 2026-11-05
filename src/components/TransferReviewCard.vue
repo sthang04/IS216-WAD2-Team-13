@@ -80,7 +80,6 @@ function stamp(ts) {
             <span class="font-monospace fw-semibold">{{ transfer.fbs_reference }}</span>
             <button type="button" class="btn btn-sm btn-outline-secondary" @click="copy(transfer.fbs_reference, 'fbs')">{{ copied === 'fbs' ? 'Copied' : 'Copy' }}</button>
           </div>
-          <div v-if="transfer.is_demo_reference" class="small text-muted mt-1">Demo reference: check against the real FBS slip.</div>
         </div>
       </div>
       <div class="col-12 col-md-6">

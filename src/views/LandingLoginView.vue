@@ -778,6 +778,7 @@ async function handleManualLogin() {
                 class="btn w-100 rounded-3 d-flex align-items-center justify-content-between demo-toggle-bar text-start overflow-hidden"
                 :class="showDemoLogins ? 'demo-toggle-active' : 'demo-toggle-inactive'"
                 style="padding: 9px 14px; border-radius: 10px;"
+                aria-label="Try a demo account (1-Click Login for different personas)"
                 @click="showDemoLogins = !showDemoLogins"
               >
                 <div class="d-flex align-items-center text-start flex-grow-1 min-w-0" style="gap: 12px;">

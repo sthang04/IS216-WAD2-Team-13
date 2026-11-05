@@ -63,7 +63,7 @@ export function createMeetingBackend(config) {
   }
   if(name==='rpc_nudge_meeting'){
    const people=state.participants.filter(p=>p.member_id!==7001&&(!args.p_member_id||p.member_id===args.p_member_id))
-   people.forEach(p=>p.last_nudged_at='2026-11-03T02:00:00Z');persist();return ok(people.length)
+   people.forEach(p=>p.last_nudged_at=new Date().toISOString());persist();return ok(people.length)
   }
   return undefined
  }

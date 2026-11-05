@@ -92,7 +92,6 @@ const queueNote = computed(() => {
 
     <div v-if="showReference" class="pulse-slot-ref small">
       <span class="font-monospace">{{ booking.fbs_reference }}</span>
-      <span v-if="booking.is_demo_reference" class="pulse-chip pulse-chip-sm ms-1" title="Illustrative reference, not a real FBS slip">demo</span>
     </div>
 
     <div class="pulse-slot-actions">

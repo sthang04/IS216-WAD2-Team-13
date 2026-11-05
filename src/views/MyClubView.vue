@@ -378,7 +378,7 @@ async function confirmPending() {
         <header class="pulse-section-head tone-green">
           <div>
             <h2 class="h6 fw-bold mb-0">Successful Transfers</h2>
-            <p class="text-muted small mb-0">Approved by OSL. Incoming slots also appear under My Assigned Bookings.</p>
+            <p class="text-muted small mb-0">Approved by OSL. Transferred slots also appear under My Assigned Bookings.</p>
           </div>
           <span class="pulse-count">{{ successfulTransfers.length }}</span>
         </header>
@@ -404,7 +404,7 @@ async function confirmPending() {
         <header class="pulse-section-head tone-red">
           <div>
             <h2 class="h6 fw-bold mb-0">Rejected Transfers</h2>
-            <p class="text-muted small mb-0">OSL rejected these, or did not sign off 48 hours before the booking (the slot then stays with the releasing CCA). The history is kept.</p>
+            <p class="text-muted small mb-0">OSL rejected these, or did not sign off 48 hours before the booking (the slot then stays with the releasing CCA).</p>
           </div>
           <span class="pulse-count">{{ rejectedTransfers.length }}</span>
         </header>

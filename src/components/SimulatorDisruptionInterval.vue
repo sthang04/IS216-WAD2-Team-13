@@ -1,7 +1,7 @@
 <script setup>
 // Purpose: Edit disruption dates/times within the selected event using explicit Singapore calendar boundaries.
 import {computed, reactive, ref, watch} from 'vue'
-import {eventDates, scheduleRange, disruptionTimeOptions} from '../services/disruptionScheduleService.js'
+import {eventDates, scheduleRange, disruptionTimeOptions, formatPickerTime} from '../services/disruptionScheduleService.js'
 const props = defineProps({event:Object, start:String, end:String, disabled:Boolean, id:String, index:Number})
 const emit = defineEmits(['update:start','update:end'])
 const dates = reactive({start:'',end:''})
@@ -11,7 +11,7 @@ const availableDates = computed(() => eventDates(props.event))
 const unavailable = computed(() => props.disabled || !scheduleRange(props.event))
 watch(() => [props.start,props.end,props.event], () => {
  for (const key of ['start','end']) if (props[key]) dates[key] = props[key].slice(0,10)
- // No time yet: start on the event's first date so only the time needs typing
+ // No time yet: default to the event's first available date so time options populate
  for (const key of ['start','end']) if (!props[key] && !availableDates.value.includes(dates[key])) dates[key] = availableDates.value[0] || ''
  if (!scheduleRange(props.event)) dates.start = dates.end = ''
 }, {immediate:true})
@@ -49,25 +49,6 @@ function chooseTime(key, value) {
  feedback.value = ''
  emit('update:'+key,value)
 }
-// '2026-11-05T09:30' -> '09:30' for the time box (same input as Day-of Ops), and '9:30 AM' for messages
-const clockOf = value => value ? String(value).split('T')[1]?.slice(0,5) || '' : ''
-function displayTime(value) {
- const clock = clockOf(value)
- if (!clock) return ''
- const [h, m] = clock.split(':').map(Number)
- return (h % 12 || 12) + ':' + String(m).padStart(2,'0') + (h < 12 ? ' AM' : ' PM')
-}
-// Accept a valid time as soon as it is complete; only complain when the box is left,
-// so a half-typed hour never snaps the box back mid-typing.
-function typeTime(key, clock, leaving = false) {
- const value = clock ? dates[key] + 'T' + clock : ''
- if (value && options(key).includes(value) && permitted(key, value)) {
-  feedback.value = ''
-  if (value !== props[key]) emit('update:'+key, value)
- } else if (leaving && clock) {
-  feedback.value = 'Enter a time within the event (' + displayTime(options(key)[0]) + '–' + displayTime(options(key).at(-1)) + '). Until must be later than From.'
- }
-}
 function formatDate(date) {
  return new Date(date+'T00:00:00+08:00').toLocaleDateString('en-SG',{timeZone:'Asia/Singapore',day:'2-digit',month:'short',year:'numeric'})
 }
@@ -89,14 +70,16 @@ function formatDate(date) {
      </div>
     </div>
     <div class="interval-control">
-     <label :for="id+'-'+field.key">Time <span class="time-example">(e.g. {{ field.key==='start'?'10:00 AM':'6:00 PM' }})</span></label>
-     <!-- Typed time with a --:-- mask and an AM/PM switch; checked when the box is left -->
-     <!-- Same time box as the Day-of Ops event form -->
-     <input :id="id+'-'+field.key" type="time" step="900" :aria-label="field.label" :value="clockOf(props[field.key])" :aria-describedby="id+'-picker-help'" :disabled="!dates[field.key]" @change="typeTime(field.key,$event.target.value)" @blur="typeTime(field.key,$event.target.value,true)" class="form-control form-control-sm time-input" />
+     <label :for="id+'-'+field.key">Time</label>
+     <select :id="id+'-'+field.key" :aria-label="field.label" :value="props[field.key] || ''" :aria-describedby="id+'-picker-help'" @change="chooseTime(field.key,$event.target.value)" class="form-select">
+      <option value="" disabled>Select time</option>
+      <option v-if="props[field.key] && !options(field.key).includes(props[field.key])" :value="props[field.key]" disabled>Unavailable selection</option>
+      <option v-for="time in options(field.key)" :key="time" :value="time" :disabled="!permitted(field.key,time)">{{ formatPickerTime(time) }}{{ !permitted(field.key,time) ? ' (unavailable)' : '' }}</option>
+     </select>
     </div>
    </div>
   </fieldset>
-  <p :id="id+'-picker-help'" class="small text-muted mb-0">Times must be within the event<template v-if="options('start').length"> ({{ displayTime(options('start')[0]) }}–{{ displayTime(options('end').at(-1) || options('start').at(-1)) }})</template>, Singapore time.</p>
+  <p :id="id+'-picker-help'" class="small text-muted mb-0">Singapore time. Only event dates and times are available. Until must be later than From.</p>
   <p v-if="feedback" role="status" class="small text-warning-emphasis mb-0">{{ feedback }}</p>
  </div>
 </template>
@@ -107,13 +90,9 @@ function formatDate(date) {
 .interval-section legend{float:none;width:auto;font-size:.9rem;font-weight:700;margin-bottom:.4rem;color:var(--pulse-ink)}
 .interval-controls{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(0,1fr);gap:.55rem}
 .interval-control{min-width:0}.interval-control label{font-size:.75rem;color:var(--pulse-ink-muted);margin-bottom:.25rem}
-.interval-control .form-control{width:100%;min-width:0;border:1px solid var(--pulse-border);border-radius:.65rem;background-color:var(--pulse-card-bg);color:var(--pulse-ink);font-size:.8rem;min-height:44px}
 .interval-control .form-select{width:100%;min-width:0;border:1px solid var(--pulse-border);border-radius:.65rem;background-color:var(--pulse-card-bg);color:var(--pulse-ink);font-size:.8rem;min-height:44px;padding-left:.6rem;padding-right:1.5rem;background-position:right .4rem center;background-size:12px}
 .calendar-control{position:relative}.calendar-control svg{position:absolute;left:.55rem;top:50%;transform:translateY(-50%);width:1rem;height:1rem;pointer-events:none;color:var(--pulse-primary)}
 .calendar-control .form-select{padding-left:1.7rem}.interval-control select:disabled{opacity:.6}
 .interval-control select:focus-visible{outline:2px solid var(--pulse-primary);outline-offset:2px}
 @media(max-width:575px){.interval-control .form-select{font-size:.8rem!important}}
-@media(max-width:575px){.interval-controls{grid-template-columns:1fr}}
-.time-input{min-height:44px;border-radius:.65rem;font-size:.85rem}
-.time-example{color:var(--pulse-ink-muted);font-weight:400}
 </style>

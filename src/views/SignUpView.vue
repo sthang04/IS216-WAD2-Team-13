@@ -42,11 +42,16 @@ async function handleConnectTelegram() {
     return
   }
   telegramOpened.value = true
-  // The bot links them when they press Start, so keep checking until that happens
+  // The bot links them when they press Start, so keep checking until that happens (max 90s to avoid draining Disk IO)
   stopCheckingLink()
+  let attempts = 0
+  const MAX_ATTEMPTS = 30
   linkTimer = setInterval(async () => {
+    attempts++
     if (await fetchTelegramLinked()) {
       telegramLinked.value = true
+      stopCheckingLink()
+    } else if (attempts >= MAX_ATTEMPTS) {
       stopCheckingLink()
     }
   }, 3000)

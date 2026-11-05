@@ -185,7 +185,7 @@ function onExpired() {
     <section class="pulse-panel overflow-hidden mb-4">
       <header class="p-3 border-bottom">
         <h2 class="h6 fw-bold mb-0">In the queue</h2>
-        <p class="text-muted small mb-0">Join a queue from All Facilities by choosing Join waitlist on another CCA's booking.</p>
+        <p class="text-muted small mb-0">Join a queue from All Facilities by choosing Join waitlist.</p>
       </header>
       <div v-if="!waiting.length" class="p-4 text-center">
         <p class="text-muted small">{{ activeClubName }} is not queuing for any slot.</p>

@@ -12,7 +12,7 @@ const LOOK = {
   // Database value stays 'Proposed Peer Transfer'; users see what they can do with it
   'Proposed Peer Transfer': { cls: 'pulse-badge-proposed', label: 'Available to Claim' },
   'Pending Admin Sign-off': { cls: 'pulse-badge-pending', label: 'Awaiting OSL approval' },
-  'Officially Confirmed Booking': { cls: 'pulse-badge-confirmed', label: 'Officially Confirmed' }
+  'Officially Confirmed Booking': { cls: 'pulse-badge-confirmed', label: 'Successfully Transferred' }
 }
 
 const look = computed(() => {
