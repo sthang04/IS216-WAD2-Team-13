@@ -103,43 +103,8 @@ onUnmounted(() => {
       </div>
     </div>
 
-
-    <div class="row g-2 g-md-3">
-      <div class="col-6 col-md-6 col-xl-3">
-        <label class="form-label small fw-bold mb-1" for="f-type">Facility Type</label>
-        <select id="f-type" class="form-select form-select-sm" :value="filters.type" @change="update('type', $event.target.value)">
-          <option value="All">All</option>
-          <option v-for="type in typeOptions" :key="type" :value="type">{{ type }}</option>
-        </select>
-      </div>
-      <div class="col-6 col-md-6 col-xl-3">
-        <label class="form-label small fw-bold mb-1" for="f-equipment">Equipment</label>
-        <select id="f-equipment" class="form-select form-select-sm" :value="filters.equipment" @change="update('equipment', $event.target.value)">
-          <option value="All">All</option>
-          <option v-for="item in equipmentOptions" :key="item" :value="item">{{ item }}</option>
-        </select>
-      </div>
-      <div class="col-6 col-md-6 col-xl-3">
-        <label class="form-label small fw-bold mb-1" for="f-capacity">Capacity</label>
-        <select id="f-capacity" class="form-select form-select-sm" :value="filters.capacity" @change="update('capacity', $event.target.value)">
-          <option v-for="opt in CAPACITY_OPTIONS" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
-        </select>
-      </div>
-      <div class="col-6 col-md-6 col-xl-3">
-        <label class="form-label small fw-bold mb-1" for="f-availability">Availability</label>
-        <select id="f-availability" class="form-select form-select-sm" :value="filters.availability" @change="update('availability', $event.target.value)">
-          <option value="All">All bookings</option>
-          <optgroup label="By status">
-            <option v-for="opt in STATUS_OPTIONS" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
-          </optgroup>
-          <optgroup v-if="hasActiveClub" label="By CCA">
-            <option :value="OTHER_CCA_FILTER">Other CCA Bookings</option>
-          </optgroup>
-        </select>
-      </div>
-    </div>
-
-    <div class="mt-3 pt-3 border-top">
+    <!-- Dynamic Search Box (Immediate Access on Mobile & Desktop) -->
+    <div class="mb-3">
       <div class="pulse-apple-search-box position-relative">
         <svg class="pulse-search-icon position-absolute" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
           <circle cx="11" cy="11" r="8"></circle>
@@ -184,6 +149,42 @@ onUnmounted(() => {
         >
           {{ chip.label }}
         </button>
+      </div>
+    </div>
+
+    <!-- 4 Filter Dropdowns -->
+    <div class="row g-2 g-md-3 pt-2 border-top">
+      <div class="col-6 col-md-6 col-xl-3">
+        <label class="form-label small fw-bold mb-1" for="f-type">Facility Type</label>
+        <select id="f-type" class="form-select form-select-sm" :value="filters.type" @change="update('type', $event.target.value)">
+          <option value="All">All</option>
+          <option v-for="type in typeOptions" :key="type" :value="type">{{ type }}</option>
+        </select>
+      </div>
+      <div class="col-6 col-md-6 col-xl-3">
+        <label class="form-label small fw-bold mb-1" for="f-equipment">Equipment</label>
+        <select id="f-equipment" class="form-select form-select-sm" :value="filters.equipment" @change="update('equipment', $event.target.value)">
+          <option value="All">All</option>
+          <option v-for="item in equipmentOptions" :key="item" :value="item">{{ item }}</option>
+        </select>
+      </div>
+      <div class="col-6 col-md-6 col-xl-3">
+        <label class="form-label small fw-bold mb-1" for="f-capacity">Capacity</label>
+        <select id="f-capacity" class="form-select form-select-sm" :value="filters.capacity" @change="update('capacity', $event.target.value)">
+          <option v-for="opt in CAPACITY_OPTIONS" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
+        </select>
+      </div>
+      <div class="col-6 col-md-6 col-xl-3">
+        <label class="form-label small fw-bold mb-1" for="f-availability">Availability</label>
+        <select id="f-availability" class="form-select form-select-sm" :value="filters.availability" @change="update('availability', $event.target.value)">
+          <option value="All">All bookings</option>
+          <optgroup label="By status">
+            <option v-for="opt in STATUS_OPTIONS" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
+          </optgroup>
+          <optgroup v-if="hasActiveClub" label="By CCA">
+            <option :value="OTHER_CCA_FILTER">Other CCA Bookings</option>
+          </optgroup>
+        </select>
       </div>
     </div>
   </section>
