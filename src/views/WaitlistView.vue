@@ -150,7 +150,7 @@ function onExpired() {
   <PageHero
     tag="Waitlist"
     :title="activeClubName ? `${activeClubName} Waitlist` : 'Waitlist'"
-    subtitle="First come, first served. When a holder releases a slot, the first CCA in the queue gets 30 minutes to accept before it passes on."
+    subtitle="First come, first served. When a slot is released, the first CCA in the queue gets 30 minutes to accept."
     :stats="[
       { label: 'Live offers', value: offers.length, tone: 'green' },
       { label: 'Queues joined', value: waiting.length, tone: 'sky' }
@@ -203,7 +203,7 @@ function onExpired() {
           </div>
           <div class="pulse-slot-who small">
             <strong>{{ entry.facility_name }}</strong>
-            <div class="text-muted">Holder: {{ entry.owner_club_name }} · {{ entry.booking_status }}</div>
+            <div class="text-muted">Holder: {{ entry.owner_club_name }}</div>
           </div>
           <div class="pulse-slot-ref small"><button type="button" class="btn btn-link btn-sm p-0" @click="toggleQueue(entry)">{{ queues[entry.booking_id] ? 'Hide' : 'View' }} queue</button></div>
           <div class="pulse-slot-actions">
@@ -241,7 +241,8 @@ function onExpired() {
   <ConfirmActionModal
     :show="!!accepting"
     title="Accept this waitlist offer?"
-    message="Your claim awaits OSL approval. It is only official once OSL approves it."
+    message="OSL has to approve this claim before it is official."
+    warning="Once OSL approves, this slot is yours and you can’t release it again."
     :details="accepting ? [
       { label: 'Facility', value: accepting.facility_name },
       { label: 'When', value: `${formatDate(accepting.booking_date, true)}, ${formatTime(accepting.start_time)} – ${formatTime(accepting.end_time)}` }

@@ -22,7 +22,7 @@ export function registerCrossFeatureJourneys(){
    await app.open('/facilities',{authenticated:true,facilities:true,bookingConflict:true,...options})
    for(const name of ['Fixture Music Room','Fixture Sports Hall']){
     const card=room(page,name)
-    await expect(card.getByText(/Existing Booking|Time conflict/i)).toBeVisible()
+    await expect(card.getByText('Existing Booking',{exact:false})).toBeVisible()
     await expect(card.getByRole('button',{name:/^(Claim|Join waitlist)$/})).toHaveCount(0)
    }
    await fit(page)

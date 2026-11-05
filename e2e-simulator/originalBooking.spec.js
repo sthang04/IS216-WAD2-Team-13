@@ -43,7 +43,7 @@ test('original booking discovery, explicit association and refresh enable the re
  await expect(page.getByTestId('facility-alternative')).toHaveCount(1)
  await expect(page.getByRole('button',{name:'Apply selected recovery',exact:true})).toHaveCount(0)
  await page.goto('/e2e-simulator/harness.html?panel=invitations')
- await page.getByRole('button',{name:'Refresh my invitations',exact:true}).click()
+ await page.getByRole('button',{name:'Refresh',exact:true}).click()
  await expect(page.getByText('ISOLATED invitation',{exact:true})).toBeVisible()
  await expect(page.getByRole('button',{name:'Accept this invitation',exact:true})).toBeDisabled()
  // Inbox navigation starts a new document; earlier assertions verified the single booking write.

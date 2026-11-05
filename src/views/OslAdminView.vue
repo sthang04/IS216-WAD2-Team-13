@@ -547,7 +547,7 @@ function submitViolation() {
       <!-- Officially Confirmed Bookings -->
       <div v-if="confirmedTransfers.length" class="mb-4">
         <h6 class="fw-bold text-dark d-flex align-items-center gap-2 mb-2" style="font-size: 0.85rem;">
-          <span>Officially Confirmed Transfers ({{ confirmedTransfers.length }})</span>
+          <span>Successful Transfers ({{ confirmedTransfers.length }})</span>
           <span class="badge bg-success text-white" style="font-size: 0.65rem;">Audit Trail Active</span>
         </h6>
 

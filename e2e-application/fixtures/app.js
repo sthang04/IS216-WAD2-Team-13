@@ -33,6 +33,7 @@ export const test=base.extend({
      if(!sessionStorage.getItem('pulse-foundation-initialized')){
       sessionStorage.setItem('pulse-foundation-initialized','true')
       sessionStorage.setItem('pulse-foundation-config',JSON.stringify(config))
+      if(!config.collapsedFacilities)sessionStorage.setItem('pulse-open-facilities','"all"')
       if(config.authenticated){
        sessionStorage.setItem('pulse-foundation-session',JSON.stringify({
         id:'fixture-user',email:config.email||'fixture.exco@smu.edu.sg'}))

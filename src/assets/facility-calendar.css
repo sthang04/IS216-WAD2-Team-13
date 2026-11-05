@@ -12,7 +12,7 @@
   --pf-hero-to: #4a1430;
   --pf-booked-bg: #eef0f3;      --pf-booked-fg: #475467;
   --pf-proposed-bg: #fff4d6;    --pf-proposed-fg: #8a5a00;
-  --pf-claim-bg: #dcfce7;       --pf-claim-fg: #166534;     /* anything you can claim: same green as the Claim button */
+  --pf-claim-bg: #f3e8ff;       --pf-claim-fg: #6b21a8;     /* anything you can claim: same green as the Claim button */
   --pf-pending-bg: #e0f2fe;     --pf-pending-fg: #075985;
   --pf-confirmed-bg: #dcfce7;   --pf-confirmed-fg: #166534;
   --pf-rejected-bg: #fee2e2;    --pf-rejected-fg: #991b1b;
@@ -527,7 +527,7 @@
 .pulse-slot::before { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 4px; background: transparent; }
 .pulse-slot:hover { background: color-mix(in srgb, var(--pf-bg) 70%, transparent); }
 .pulse-slot.is-proposed  { background: color-mix(in srgb, var(--pf-claim-bg) 45%, transparent); }
-.pulse-slot.is-proposed::before  { background: var(--pf-green); }
+.pulse-slot.is-proposed::before  { background: var(--pf-violet); }
 .pulse-slot.is-pending::before   { background: var(--pf-sky); }
 .pulse-slot.is-confirmed::before { background: var(--pf-green); }
 .pulse-slot.is-rejected::before  { background: var(--pf-red); }
@@ -557,8 +557,8 @@
 .btn-pulse-amber:hover { background: var(--pf-amber); color: #1f1300; }
 
 /* Claim (take a slot) is green so it stands apart from the red Release button */
-.btn-pulse-claim { background: linear-gradient(135deg, #16a34a, #15803d); border: 0; color: #fff; font-weight: 600; box-shadow: 0 4px 12px rgba(22, 163, 74, .25); }
-.btn-pulse-claim:hover:not(:disabled), .btn-pulse-claim:focus { color: #fff; box-shadow: 0 6px 18px rgba(22, 163, 74, .38); transform: translateY(-1px); }
+.btn-pulse-claim { background: linear-gradient(135deg, #8b5cf6, #7c3aed); border: 0; color: #fff; font-weight: 600; box-shadow: 0 4px 12px rgba(124, 58, 237, .25); }
+.btn-pulse-claim:hover:not(:disabled), .btn-pulse-claim:focus { color: #fff; box-shadow: 0 6px 18px rgba(124, 58, 237, .38); transform: translateY(-1px); }
 .pulse-attention { animation: pulse-ping-red 2s ease-out infinite; }
 @keyframes pulse-ping-red {
   0%   { box-shadow: 0 0 0 0 rgba(225, 29, 72, .5); }
@@ -897,3 +897,145 @@
 .pulse-deadline.is-ok { background: var(--pf-confirmed-bg, #e7f6ec); color: var(--pf-confirmed-fg, #1e6b3a); }
 .pulse-deadline.is-soon { background: #fff4d6; color: #8a5a00; }
 .pulse-deadline.is-expired { background: var(--pf-rejected-bg); color: var(--pf-rejected-fg); }
+
+/* ---------- Standard colours: green transferred, blue pending, purple claim, grey unavailable, red ours ---------- */
+.pulse-badge-own { background: var(--pf-primary-soft); color: var(--pf-primary-dark); }
+.pulse-slot.is-mine::before { background: var(--pf-primary); }
+.pulse-slot.is-mine.is-proposed::before { background: var(--pf-violet); }
+.pulse-slot.is-mine.is-confirmed::before { background: var(--pf-green); }
+.pulse-slot.is-handed-over::before { background: var(--pf-primary); }
+.pulse-slot.is-plain .pulse-slot-when .fw-semibold { color: inherit; }
+.pulse-slot.is-plain.is-mine::before { background: #98a2b3; }
+.pulse-slot.is-plain.is-mine.is-confirmed::before { background: var(--pf-green); }
+.pulse-slot.is-plain.is-mine.is-proposed::before { background: var(--pf-violet); }
+.pulse-slot-actions .pulse-existing,
+.pulse-existing { display: inline-flex; align-items: center; gap: .35rem; padding: .25rem .6rem; border-radius: 999px; font-size: .74rem; font-weight: 600; color: var(--pf-booked-fg); background: var(--pf-booked-bg); }
+.pulse-existing svg, .pulse-lock-note svg, .pulse-cal-tag svg, .pulse-cal-step svg { width: 1em; height: 1em; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; flex: none; }
+.pulse-transfer-tag { display: inline-block; padding: .3rem .75rem; border-radius: 999px; font-size: .85rem; font-weight: 700; }
+.pulse-transfer-tag.in { background: var(--pf-confirmed-bg); color: var(--pf-confirmed-fg); }
+.pulse-transfer-tag.out { background: var(--pf-primary-soft); color: var(--pf-primary-dark); }
+
+/* Waitlist blocks: live offers green, queues joined blue */
+.pulse-stat-green { background: rgba(34, 197, 94, .28); border-color: rgba(74, 222, 128, .55); }
+.pulse-stat-sky { background: rgba(14, 165, 233, .28); border-color: rgba(56, 189, 248, .55); }
+.pulse-stat-violet { background: rgba(139, 92, 246, .3); border-color: rgba(167, 139, 250, .6); }
+.pulse-stat-violet::after { background: #a78bfa; }
+
+/* A warning in a confirmation: hard to miss */
+.pulse-modal-warning { display: flex; align-items: flex-start; gap: .6rem; margin-bottom: 1rem; padding: .7rem .85rem; border: 1px solid #f59e0b; border-left-width: 5px; border-radius: .6rem; background: #fef3c7; color: #78350f; font-size: .9rem; font-weight: 700; line-height: 1.35; }
+.pulse-modal-warning svg { width: 1.25rem; height: 1.25rem; flex: none; fill: none; stroke: #b45309; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+
+/* ---------- Week navigator ---------- */
+.pulse-cal-nav { display: flex; flex-wrap: wrap; align-items: center; gap: .4rem; }
+.pulse-cal-step {
+  position: relative; display: inline-flex; align-items: center; gap: .35rem; margin: 0;
+  padding: .4rem .8rem; border-radius: 999px; border: 1px solid rgba(255, 255, 255, .4);
+  background: rgba(255, 255, 255, .12); color: #fff; font-size: .8rem; font-weight: 600; cursor: pointer;
+  transition: background .2s, transform .2s;
+}
+.pulse-cal-step:hover:not(:disabled) { background: rgba(255, 255, 255, .26); transform: translateY(-1px); }
+.pulse-cal-step:disabled { opacity: .4; cursor: not-allowed; }
+.pulse-cal-step:focus-within, .pulse-cal-step:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+/* The real date field sits over the pill, so tapping anywhere opens the browser's picker */
+.pulse-cal-choose input { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; border: 0; padding: 0; }
+
+.pulse-cal-grid { gap: .6rem; }
+.pulse-cal-day {
+  min-height: 112px; padding: .6rem .7rem; gap: .15rem;
+  background-image: repeating-linear-gradient(to bottom, transparent 0 25px, color-mix(in srgb, var(--pf-border) 70%, transparent) 25px 26px);
+  background-position: 0 30px; background-repeat: no-repeat;
+}
+.pulse-cal-top { display: flex; align-items: center; justify-content: space-between; gap: .25rem; min-height: 1.1rem; }
+.pulse-cal-tag { display: inline-flex; align-items: center; gap: .2rem; font-size: .62rem; font-weight: 700; color: var(--pf-muted); }
+.pulse-cal-tag.today { color: var(--pf-primary); }
+.pulse-cal-num { font-size: 1.6rem; }
+/* Written into the day like an agenda entry */
+.pulse-cal-entry {
+  margin-top: auto; padding: .15rem .4rem; border-left: 3px solid var(--pf-violet); border-radius: 2px;
+  background: var(--pf-claim-bg); color: var(--pf-claim-fg); font-size: .68rem; font-weight: 700; line-height: 1.25; text-align: left;
+}
+.pulse-cal-day.locked, .pulse-cal-day.passed { opacity: 1; cursor: not-allowed; }
+.pulse-cal-day.passed { background: #f0f0f3; background-image: none; }
+.pulse-cal-day.passed .pulse-cal-num, .pulse-cal-day.passed .pulse-cal-weekday { color: #a9a6b2; }
+.pulse-cal-day.locked { background-color: #f6f5f8; background-image: repeating-linear-gradient(135deg, transparent 0 7px, rgba(107, 100, 117, .08) 7px 8px); background-position: 0 0; }
+.pulse-cal-day.locked .pulse-cal-num { color: var(--pf-muted); }
+.pulse-cal-foot { gap: .6rem .9rem; }
+.pulse-lock-note { display: inline-flex; align-items: center; gap: .4rem; padding: .35rem .75rem; font-size: .85rem; font-weight: 700; }
+.pulse-lock-note:not(.open) { background: var(--pf-booked-bg); color: var(--pf-booked-fg); }
+.pulse-cal-hint { font-size: .85rem; color: var(--pf-ink, #334155); }
+.pulse-cal-key { display: none; }
+.pulse-cal-key-dot { width: .7rem; height: .7rem; border-radius: 50%; background: var(--pf-violet); flex: none; }
+@media (max-width: 575.98px) {
+  .pulse-cal-nav { width: 100%; justify-content: space-between; flex-wrap: nowrap; gap: .3rem; }
+  .pulse-cal-step { padding: .4rem .65rem; font-size: .75rem; gap: .25rem; white-space: nowrap; }
+  .pulse-cal-long, .pulse-cal-tag-text, .pulse-cal-entry-text { display: none; }
+  .pulse-facility-head { padding-right: 3.25rem !important; }
+  .pulse-facility-chevron { position: absolute; top: 1rem; right: .9rem; }
+  /* The whole week fits, like a phone's calendar: number, then a marker */
+  .pulse-cal-grid { grid-template-columns: repeat(7, minmax(0, 1fr)) !important; gap: .3rem !important; padding: .75rem .75rem .6rem !important; overflow: visible; }
+  .pulse-cal-day { min-height: 74px !important; padding: .45rem .1rem !important; align-items: center; text-align: center; background-image: none; }
+  .pulse-cal-day.locked { background-image: repeating-linear-gradient(135deg, transparent 0 6px, rgba(107, 100, 117, .08) 6px 7px); }
+  .pulse-cal-top { justify-content: center; flex-direction: column; gap: .1rem; min-height: 0; }
+  .pulse-cal-num { font-size: 1.15rem !important; }
+  .pulse-cal-entry { margin-top: auto; padding: 0; border: 0; background: none; }
+  .pulse-cal-entry-count { display: inline-grid; place-items: center; min-width: 1.2rem; height: 1.2rem; padding: 0 .2rem; border-radius: 999px; background: var(--pf-violet); color: #fff; font-size: .68rem; font-weight: 700; line-height: 1; }
+  .pulse-cal-key { display: inline-flex; align-items: center; gap: .4rem; font-size: .8rem; color: var(--pf-muted); }
+  .pulse-cal-foot { padding: .15rem .85rem 1rem; }
+  .pulse-lock-note { font-size: .8rem; padding: .3rem .65rem; align-items: flex-start; }
+  .pulse-lock-note .pulse-dot { margin-top: .35rem; flex: none; }
+  .pulse-cal-hint { font-size: .8rem; color: var(--pf-muted); }
+}
+
+/* ---------- Facility cards fold open ---------- */
+.pulse-facility-head { position: relative; cursor: pointer; transition: background .2s; }
+.pulse-facility-head:hover { background: color-mix(in srgb, var(--pf-bg) 65%, transparent); }
+.pulse-facility-toggle { all: unset; cursor: pointer; }
+.pulse-facility-toggle:focus-visible { outline: 2px solid var(--type); outline-offset: 3px; border-radius: 4px; }
+.pulse-facility-chevron { align-self: center; display: grid; place-items: center; width: 2rem; height: 2rem; border-radius: 50%; background: var(--pf-bg); color: var(--pf-muted); transition: transform .45s var(--pf-ease), background .2s, color .2s; }
+.pulse-facility-chevron svg { width: 1.1rem; height: 1.1rem; fill: none; stroke: currentColor; stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; }
+.pulse-facility.is-open .pulse-facility-chevron { transform: rotate(180deg); background: var(--type); color: #fff; }
+
+.pulse-facility-fold { display: grid; grid-template-rows: 0fr; visibility: hidden; perspective: 1100px; transition: grid-template-rows .5s var(--pf-ease), visibility 0s linear .5s; }
+.pulse-facility.is-open .pulse-facility-fold { grid-template-rows: 1fr; visibility: visible; transition: grid-template-rows .5s var(--pf-ease), visibility 0s; }
+.pulse-facility-fold-inner { min-height: 0; overflow: hidden; }
+/* Each row unfolds down from the one above it, like a paper schedule opening */
+.pulse-facility.is-open .pulse-facility-fold .pulse-slot {
+  transform-origin: top center;
+  animation: pulse-unfold .5s var(--pf-ease) both;
+  animation-delay: calc(var(--i, 0) * 55ms + 40ms);
+}
+@keyframes pulse-unfold {
+  from { opacity: 0; transform: rotateX(-72deg); }
+  to { opacity: 1; transform: rotateX(0); }
+}
+
+/* ---------- My Club: a folder with tabs ---------- */
+.pulse-folder { position: relative; margin-bottom: 1.5rem; }
+.pulse-folder-tabs { display: flex; gap: .2rem; padding: .5rem .9rem 0; overflow-x: auto; scrollbar-width: none; position: relative; z-index: 1; }
+.pulse-folder-tab {
+  --tab: var(--pf-muted);
+  flex: none; position: relative; top: 1px; padding: .55rem 1.1rem .5rem; border: 1px solid var(--pf-border); border-bottom-color: transparent;
+  border-radius: .75rem .75rem 0 0; background: var(--pf-bg); color: var(--pf-muted); font-size: .85rem; font-weight: 600;
+  box-shadow: inset 0 3px 0 color-mix(in srgb, var(--tab) 45%, transparent);
+  transform: translateY(5px); transition: transform .25s var(--pf-ease), color .2s, background .2s, box-shadow .2s;
+}
+.pulse-folder-tab:hover { transform: translateY(2px); color: var(--pf-ink, #1f1a2b); }
+.pulse-folder-tab.active { transform: translateY(0); background: var(--tab); border-color: var(--tab); color: #fff; font-weight: 700; box-shadow: 0 -3px 10px color-mix(in srgb, var(--tab) 30%, transparent); }
+.pulse-folder-tab.tone-own { --tab: var(--pf-primary); }
+.pulse-folder-tab.tone-pending { --tab: var(--pf-sky); }
+.pulse-folder-tab.tone-claim { --tab: var(--pf-violet); }
+.pulse-folder-tab.tone-success { --tab: var(--pf-green); }
+.pulse-folder-tab.tone-rejected { --tab: #8a8494; }
+.pulse-folder-alert { display: inline-block; width: 7px; height: 7px; margin-left: .4rem; border-radius: 50%; background: var(--pf-red); vertical-align: middle; }
+.pulse-folder-page { border-top: 3px solid var(--active-tab, var(--pf-border)) !important; background: var(--pf-panel); border: 1px solid var(--pf-border); border-radius: 1rem; box-shadow: 0 10px 26px rgba(20, 10, 30, .06); overflow: hidden; }
+.pulse-folder-swap-enter-active { transition: opacity .25s ease, transform .25s var(--pf-ease); }
+.pulse-folder-swap-leave-active { transition: opacity .12s ease; }
+.pulse-folder-swap-enter-from { opacity: 0; transform: translateY(8px); }
+.pulse-folder-swap-leave-to { opacity: 0; }
+
+@media (prefers-reduced-motion: reduce) {
+  .pulse-facility-fold, .pulse-facility.is-open .pulse-facility-fold { transition: none; }
+  .pulse-facility.is-open .pulse-facility-fold .pulse-slot { animation: none; }
+  .pulse-facility-chevron, .pulse-folder-tab, .pulse-cal-step { transition: none; }
+  .pulse-folder-swap-enter-active, .pulse-folder-swap-leave-active { transition: none; }
+}

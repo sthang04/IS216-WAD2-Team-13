@@ -471,7 +471,7 @@ onMounted(async () => {
             <!-- Case C: Regular Club ExCo (Strictly Scoped to their CCA) -->
             <div v-else class="d-flex align-items-center flex-shrink-0">
               <!-- If single CCA, show a sleek verified badge instead of an awkward 1-item dropdown -->
-              <div v-if="allowedClubs.length <= 1" class="d-flex align-items-center gap-1.5 px-2 px-sm-2.5 py-1 bg-white border shadow-2xs rounded-pill">
+              <div v-if="allowedClubs.length <= 1" class="d-flex align-items-center px-2 py-1 bg-white border shadow-2xs rounded-pill" style="gap: 0.45rem; padding-inline: 0.7rem !important;">
                 <span class="pulse-cca-dot" aria-hidden="true"></span>
                 <span class="fw-bold text-dark text-nowrap" style="font-size: 0.78rem;">{{ selectedClub }}</span>
               </div>

@@ -1,7 +1,7 @@
 <script setup>
 import { computed } from 'vue'
 import BookingStatusBadge from './BookingStatusBadge.vue'
-import { formatDate, formatTime } from '../services/facilityService'
+import { formatDate, formatTime, formatReference } from '../services/facilityService'
 
 const props = defineProps({
   booking: { type: Object, required: true },
@@ -10,6 +10,7 @@ const props = defineProps({
   showFacility: { type: Boolean, default: false },
   showReference: { type: Boolean, default: true },    // the All Facilities calendar hides the FBS reference column
   highlightClubId: { type: Number, default: null },   // the CCA the viewer is acting for
+  plainOwner: { type: Boolean, default: false },      // My Club: everything is ours, so don't mark the holder
   waitlistEntry: { type: Object, default: null },     // our CCA's place in this booking's queue (Logistics Directors only)
   index: { type: Number, default: 0 }
 })
@@ -29,6 +30,7 @@ const rowClass = computed(() => [
   // Officially Confirmed only gets the green stripe when the slot is ours
   props.booking.status === 'Officially Confirmed Booking' && !isOurs.value ? '' : (STATUS_CLASS[props.booking.status] || ''),
   {
+    'is-plain': props.plainOwner,
     'is-mine': props.highlightClubId && props.booking.owner_club_id === props.highlightClubId,
     'is-offered-to-me': props.highlightClubId && props.booking.offered_club_id === props.highlightClubId
   }
@@ -68,7 +70,7 @@ const queueNote = computed(() => {
     </div>
 
     <div class="pulse-slot-status">
-      <BookingStatusBadge :status="booking.status" :ours="isOurs" />
+      <BookingStatusBadge :status="booking.status" :ours="highlightClubId ? isOurs : null" :plain="plainOwner" />
       <div v-if="booking.offered_club_name" class="small mt-1" :class="booking.offered_club_id === highlightClubId ? 'text-pulse fw-semibold' : 'text-muted'">
         {{ booking.offered_club_id === highlightClubId ? 'Offered to you (30 min)' : `Held for ${booking.offered_club_name}` }}
       </div>
@@ -78,12 +80,12 @@ const queueNote = computed(() => {
 
     <div class="pulse-slot-who small">
       <div>
-        <span class="text-muted">Holder:</span>
-        <strong :class="{ 'text-pulse': isOurs }">{{ booking.owner_club_name || 'Unknown CCA' }}</strong>
-        <span v-if="highlightClubId && booking.owner_club_id === highlightClubId" class="pulse-you">you</span>
+        <span class="text-muted">Holder: </span>
+        <strong :class="{ 'text-pulse': isOurs && !plainOwner }">{{ booking.owner_club_name || 'Unknown CCA' }}</strong>
+        <span v-if="isOurs && !plainOwner" class="pulse-you">you</span>
       </div>
       <div v-if="booking.status === 'Pending Admin Sign-off' && booking.claiming_club_name">
-        <span class="text-muted">Claiming:</span> <strong :class="{ 'text-pulse': booking.claiming_club_id === highlightClubId }">{{ booking.claiming_club_name }}</strong>
+        <span class="text-muted">Claiming: </span><strong :class="{ 'text-pulse': booking.claiming_club_id === highlightClubId }">{{ booking.claiming_club_name }}</strong>
       </div>
       <div v-if="booking.status === 'Officially Confirmed Booking' && booking.releasing_club_name">
         <span class="text-muted">From:</span> {{ booking.releasing_club_name }}
@@ -91,7 +93,7 @@ const queueNote = computed(() => {
     </div>
 
     <div v-if="showReference" class="pulse-slot-ref small">
-      <span class="font-monospace">{{ booking.fbs_reference }}</span>
+      <span class="font-monospace">{{ formatReference(booking.fbs_reference) }}</span>
     </div>
 
     <div class="pulse-slot-actions">
@@ -100,8 +102,9 @@ const queueNote = computed(() => {
           <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>
           {{ action.label }}
         </span>
-        <span v-else-if="action.type === 'blocked_conflict'" class="badge bg-light text-muted border py-1 px-2" :title="action.hint">
-          ⚠️ {{ action.label }}
+        <span v-else-if="action.type === 'blocked_conflict'" class="pulse-existing" :title="action.hint">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="5" width="16" height="16" rx="2"/><path d="M16 3v4M8 3v4M4 11h16"/></svg>
+          {{ action.label }}
         </span>
         <button
           v-else
@@ -121,7 +124,6 @@ const queueNote = computed(() => {
         </button>
       </template>
       <span v-if="!actions.length && booking.status === 'Pending Admin Sign-off'" class="small text-muted">Only OSL can approve</span>
-      <span v-else-if="!actions.length && booking.status === 'Officially Confirmed Booking'" class="small fw-semibold" :class="isOurs ? 'text-success' : 'text-muted'">✓ Confirmed</span>
     </div>
   </div>
 </template>

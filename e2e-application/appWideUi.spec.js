@@ -130,7 +130,7 @@ test('calendar status filtering and day selection show real empty and restored s
  await page.getByLabel('Jump to week',{exact:true}).fill('2026-11-16')
  // Assert: a different week shows empty booking states and can return to its populated week.
  await expect(page.getByText('No bookings at this facility for the selected week.')).toHaveCount(3)
- await page.getByRole('button',{name:'Back to next week',exact:true}).click()
+ await page.getByRole('button',{name:'Go to upcoming week',exact:true}).click()
  await expect(room(page,'Fixture Music Room').getByRole('button',{name:'Claim',exact:true})).toBeVisible()
  await assertPageLayout(page)
 })

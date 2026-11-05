@@ -1,7 +1,7 @@
 <script setup>
 import { ref, computed } from 'vue'
 import BookingStatusBadge from './BookingStatusBadge.vue'
-import { formatDate, formatTime } from '../services/facilityService'
+import { formatDate, formatTime, formatReference } from '../services/facilityService'
 import { AUDIT_ACTION_LABELS } from '../services/transferService'
 
 const props = defineProps({
@@ -77,8 +77,8 @@ function stamp(ts) {
         <div class="pulse-ref-box">
           <div class="pulse-eyebrow">Official FBS reference</div>
           <div class="d-flex justify-content-between align-items-center gap-2">
-            <span class="font-monospace fw-semibold">{{ transfer.fbs_reference }}</span>
-            <button type="button" class="btn btn-sm btn-outline-secondary" @click="copy(transfer.fbs_reference, 'fbs')">{{ copied === 'fbs' ? 'Copied' : 'Copy' }}</button>
+            <span class="font-monospace fw-semibold">{{ formatReference(transfer.fbs_reference) }}</span>
+            <button type="button" class="btn btn-sm btn-outline-secondary" @click="copy(formatReference(transfer.fbs_reference), 'fbs')">{{ copied === 'fbs' ? 'Copied' : 'Copy' }}</button>
           </div>
         </div>
       </div>

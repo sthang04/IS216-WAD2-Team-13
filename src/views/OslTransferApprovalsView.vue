@@ -10,7 +10,7 @@ import PageHero from '../components/PageHero.vue'
 import FacilityTabs from '../components/FacilityTabs.vue'
 import ConfirmActionModal from '../components/ConfirmActionModal.vue'
 import { session, showToast } from '../services/sessionState'
-import { listenForCalendarChanges, formatDate, formatTime } from '../services/facilityService'
+import { listenForCalendarChanges, formatDate, formatTime, formatReference } from '../services/facilityService'
 import { fetchPendingTransfers, fetchRecentDecisions, fetchAuditHistory, approveTransfer, rejectTransfer } from '../services/transferService'
 
 const route = useRoute()
@@ -194,7 +194,7 @@ const modal = computed(() => {
   }
   const t = decision.value.transfer
   const details = [
-    { label: 'FBS reference', value: t.fbs_reference },
+    { label: 'FBS reference', value: formatReference(t.fbs_reference) },
     { label: 'Facility', value: t.facility_name },
     { label: 'When', value: formatDate(t.booking_date, true) + ', ' + formatTime(t.start_time) + ' – ' + formatTime(t.end_time) },
     { label: 'Transfer', value: t.releasing_club_name + ' → ' + t.claiming_club_name }
@@ -249,7 +249,7 @@ async function confirmDecision(reason) {
     variant="admin"
     tag="Office of Student Life"
     title="Transfer approvals"
-    subtitle="Verify each claim against FBS before it becomes an Officially Confirmed Booking."
+    subtitle="Check each claim against FBS before approving the transfer."
     :stats="session.isOslAdmin ? [
       { label: 'Awaiting OSL approval', value: pendingTransfers.length, tone: 'sky' },
       { label: 'Approved', value: decisions.filter(d => d.state === 'APPROVED').length, tone: 'green' },
@@ -316,7 +316,7 @@ async function confirmDecision(reason) {
                 </td>
                 <td>{{ d.facility_name }}<div class="text-muted">{{ formatDate(d.booking_date) }}, {{ formatTime(d.start_time) }}</div></td>
                 <td>{{ d.releasing_club_name }} → {{ d.claiming_club_name }}</td>
-                <td class="font-monospace">{{ d.fbs_reference }}</td>
+                <td class="font-monospace">{{ formatReference(d.fbs_reference) }}</td>
                 <td class="font-monospace">{{ d.audit_voucher_id }}</td>
                 <td>{{ d.confirmation_email_status || '—' }}</td>
               </tr>
