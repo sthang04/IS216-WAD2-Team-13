@@ -47,6 +47,9 @@ export const test=base.extend({
    value.get=async path=>{const r=await context.request.get(backend+path,{headers});expect(r.ok(),'Backend read '+path.split('?')[0]).toBe(true);return r.json()}
    value.rpcRaw=(name,data)=>context.request.post(backend+'/rest/v1/rpc/'+name,{headers,data})
    value.rpc=async(name,data)=>{const r=await value.rpcRaw(name,data);if(!r.ok())throw Error(name+' refused: '+await r.text());return r.status()===204?null:r.json()}
+   // Test-data preparation uses the same authenticated account and its normal table policies.
+   value.insert=async(table,data)=>{const r=await context.request.post(backend+'/rest/v1/'+table,{headers:{...headers,Prefer:'return=representation'},data});if(!r.ok())throw Error(table+' setup refused: '+await r.text());return r.json()}
+   value.remove=async(table,query)=>{const r=await context.request.delete(backend+'/rest/v1/'+table+'?'+query,{headers});expect(r.ok()).toBe(true)}
    value.patch=(table,query,data)=>context.request.patch(backend+'/rest/v1/'+table+'?'+query,{headers:{...headers,Prefer:'return=representation'},data})
    return value
   }

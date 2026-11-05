@@ -156,14 +156,14 @@ async function disconnectChat(chatId: number) {
     )
   }
 
-  const { error: demoError } = await supabase
+  const { error: recipientError } = await supabase
     .from('demo_recipients')
     .update({ telegram_chat_id: null, updated_at: new Date().toISOString() })
     .eq('telegram_chat_id', chatId)
 
-  if (demoError) {
+  if (recipientError) {
     throw new Error(
-      `Unable to disconnect demo recipient: ${demoError.message}`
+      `Unable to disconnect notification recipient: ${recipientError.message}`
     )
   }
 
@@ -377,7 +377,7 @@ Deno.serve(async (req) => {
 
         await reply(
           chatId,
-          'Your Telegram username is not on the PULSE tester list. Please contact your team administrator.'
+          'To receive your own PULSE alerts, sign in to PULSE, open Notifications and choose Connect Telegram. Then press Start using that account link. You do not need to join the tester list.'
         )
 
         return new Response('ok')

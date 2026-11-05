@@ -68,3 +68,9 @@ These journeys establish real staging persistence and specific database/RPC writ
 The application schema reused for staging carries existing Supabase advisories, including owner-executed calendar/membership views. Specific write denials passing is not a complete security audit. See [Supabase's view advisory](https://supabase.com/docs/guides/database/database-linter?lint=0010_security_definer_view). The existing view/permission architecture was retained rather than silently changing the deployed app's access design.
 
 Only Playwright browser tests are used for automated verification. SQL inspection/provisioning, schema-generator checks, the production build and Git whitespace checks support the setup; they are not an additional test framework. Existing unit/contract files are retained, and no existing files were deleted.
+
+## Telegram alert follow-up (5 November 2026)
+
+telegramAlerts.spec.js adds real browser/database journeys for personal schedule CRUD notices and saved Day-of Ops crew notices, including outsider read/queue denial. Both run at all six sizes. Staging remains isolated from external Telegram delivery. The schema printer now includes Ops events/times and the new alert RPCs, while still excluding delivery Cron activation.
+
+See [Telegram wiring and current verification](../supabase/telegram-alerts.md) for the deployment status, routing rules and the additional retained non-browser/Node checks used for this follow-up. The earlier evidence section above describes its original change, not this new run.

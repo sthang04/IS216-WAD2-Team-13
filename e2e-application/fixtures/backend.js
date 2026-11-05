@@ -129,7 +129,8 @@ export function createBackend(config,calls){
    id:'fixture-saved-'+args.p_event_id,event_id:args.p_event_id,title:'Fixture saved recovery '+args.p_event_id,
    application_status:'Draft',lifecycle:'In Progress',workflow_status:'In Progress',changes:[],disruptions:[],version:1}],invitations:[],audit:[]})
   // Scheduling alerts are recorded locally; this fixture never sends Telegram.
-  if(name==='rpc_notify_schedule_change')return ok({})
+  if(name==='rpc_notify_schedule_change')return ok({queued:1})
+  if(name==='rpc_notify_ops_schedule_change')return ok({queued:3})
   if(name==='rpc_my_notifications')return ok(state.notifications)
   if(name==='rpc_mark_notifications_read'){for(const n of state.notifications)if(args.p_notification_id==null||n.id===args.p_notification_id)n.is_read=true;persist();return ok({})}
   if(name==='rpc_delete_notifications'){state.notifications=state.notifications.filter(n=>args.p_notification_id!=null&&n.id!==args.p_notification_id);persist();return ok({})}

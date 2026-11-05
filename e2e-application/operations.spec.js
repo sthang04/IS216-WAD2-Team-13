@@ -75,11 +75,12 @@ test('task editor accepts a title and Cancel discards the unsaved task',async({p
  await expect(page.getByText('Fixture unsaved task',{exact:true})).toHaveCount(0)
 })
 
-test('notify crew shows sample feedback without an external delivery request',async({page,app})=>{
+test('notify crew queues recipient-scoped alerts without claiming Telegram delivery',async({page,app})=>{
  await open(page,app)
- await page.getByRole('button',{name:'Notify crew',exact:true}).click()
+ await page.getByRole('button',{name:/^Notify crew/}).click()
  await expect(page.getByRole('alert')).toContainText('Updated run of show for Showcase')
- // This page currently reports local feedback; the fixture guard proves no real message is sent.
+ // This verifies the UI/API boundary with synthetic recipients, not actual Telegram delivery.
+ await expect(page.getByRole('alert')).toContainText('Telegram alerts queued for 3 crew members.')
 })
 
 // Guest entry was removed; verify the supported signed-out boundary instead.

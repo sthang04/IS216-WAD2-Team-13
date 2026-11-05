@@ -1,6 +1,6 @@
 
 import { createClient } from 'jsr:@supabase/supabase-js@2'
-import { demoTelegramTargets } from '../_shared/demoDelivery.js'
+import { resolveTelegramRecipients } from '../_shared/notificationRecipientRouting.js'
 
 const supabase = createClient(
   Deno.env.get('SUPABASE_URL')!,
@@ -8,12 +8,12 @@ const supabase = createClient(
 )
 
 const BOT_TOKEN = Deno.env.get('TELEGRAM_BOT_TOKEN')
-const BASE_URL = Deno.env.get('PULSE_BASE_URL') ?? ''
+let BASE_URL = Deno.env.get('PULSE_BASE_URL') ?? ''
 
 // TEST: All eligible notifications go to YOUR chat.
 // LIVE: Notifications go to their intended member's chat.
-// DEMO: Notifications go to the teammate set for that persona in demo_recipients,
-//       or else to the chat that persona linked with Connect Telegram.
+// Configured routing: notifications use the linked account first, then a persona route.
+// Private alerts exclude observer copies.
 const DELIVERY_MODE = Deno.env.get('TELEGRAM_DELIVERY_MODE')
 
 // Optional: your personal Telegram chat ID. In test mode alerts also go to
@@ -31,7 +31,11 @@ const ALLOWED_TYPES = [
   'MEETING_REQUEST',
   'MEETING_NUDGE',
   'MEETING_CONFIRMED',
-  'MEETING_CANCELLED'
+  'MEETING_CANCELLED',
+  'MEETING_REMOVED',
+  'MEETING_AGENDA_UPDATED',
+  'SCHEDULE_CHANGED',
+  'OPS_SCHEDULE_CHANGED'
 ]
 
 type Notification = {
@@ -58,7 +62,7 @@ function isPublicUrl(url: string): boolean {
   }
 }
 
-// The page the message is about. as/club make the demo open as the recipient.
+// The page the message is about. as/club select the intended recipient context.
 function linkFor(n: Notification): string {
   const url = new URL(n.action_url ?? '/facilities', BASE_URL || 'http://localhost:5173')
   if (n.recipient_member_id) url.searchParams.set('as', String(n.recipient_member_id))
@@ -71,6 +75,9 @@ function buttonLabel(type: string): string {
   if (type === 'MEETING_REQUEST' || type === 'MEETING_NUDGE') return 'Mark my availability'
   if (type === 'MEETING_CONFIRMED') return 'View meeting'
   if (type.startsWith('TRANSFER_')) return 'View booking'
+  if (type === 'SCHEDULE_CHANGED') return 'My Schedule'
+  if (type === 'OPS_SCHEDULE_CHANGED') return 'View run of show'
+  if (type.startsWith('MEETING_')) return 'View meeting'
   return 'Open Pulse'
 }
 
@@ -238,6 +245,13 @@ Deno.serve(async () => {
     )
   }
 
+  // Use the existing public app setting if the optional Edge secret is absent.
+  if (!BASE_URL) {
+    const configured = await supabase.rpc('cfg_text', { p_key: 'pulse_base_url' })
+    if (configured.error || !configured.data || !isPublicUrl(configured.data)) return Response.json({ error: 'Public Pulse URL unavailable' }, { status: 503 })
+    BASE_URL = configured.data
+  }
+
   const { data: pending, error } = await supabase
     .from('notifications')
     .select(
@@ -255,13 +269,13 @@ Deno.serve(async () => {
   }
 
   // Stop before marking anything if the mapping can't be read
-  let demoRoutes: any[] = []
+  let recipientRoutes: any[] = []
   if (DELIVERY_MODE === 'demo') {
     const routes = await supabase.from('demo_recipient_routes').select('*')
     if (routes.error) {
       return Response.json({ error: routes.error.message }, { status: 500 })
     }
-    demoRoutes = routes.data ?? []
+    recipientRoutes = routes.data ?? []
   }
   const seenEvents = new Set<string>()
 
@@ -285,7 +299,7 @@ Deno.serve(async () => {
       if (DELIVERY_MODE === 'demo') {
         // Uses the LIVE lookup above for the chat linked with Connect Telegram
         const linked = await liveChatId(n.recipient_member_id)
-        targets = demoTelegramTargets(n, demoRoutes, linked, seenEvents)
+        targets = resolveTelegramRecipients(n, recipientRoutes, linked, seenEvents, { allowCopies: !['SCHEDULE_CHANGED', 'OPS_SCHEDULE_CHANGED'].includes(n.type) })
       } else {
         targets = (await getChatIds(n.recipient_member_id)).map((chatId) => ({ chatId, label: null }))
       }

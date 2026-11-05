@@ -400,7 +400,8 @@ async function sendScheduleAlert(action, ev) {
     });
     if (error) throw error;
   } catch (err) {
-    console.log('Telegram schedule alert not sent:', err.message);
+    console.log('Telegram schedule alert not queued:', err.message);
+    toastMsg.value += ' Telegram alert could not be queued: ' + err.message;
   }
 }
 

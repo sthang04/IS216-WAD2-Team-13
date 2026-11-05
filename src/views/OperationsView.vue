@@ -578,41 +578,47 @@ async function applyOneClickDelay(mins) {
     warnings: notes.filter(n => n.kind === 'cut').map(n => n.text)
   }
 
-  if (supabase && event.value) {
-    try {
-      await supabase.rpc('rpc_notify_schedule_change', {
-        p_action: 'updated',
-        p_title: `⚠️ Rehearsal Delay (+${mins}m): ${event.value.name}`,
-        p_date: event.value.date,
-        p_start_time: formatTime(now),
-        p_end_time: formatTime(Math.min(1439, now + mins)),
-        p_venue: event.value.venue || 'SMU Main Hall',
-        p_demo_member_id: demoMemberId()
-      })
-    } catch (err) {
-      console.log('Telegram delay notice not sent:', err.message)
-    }
+
+  try {
+    const result = await queueCrewAlert('delayed', mins)
+    showToast('Delay saved. Telegram alerts queued for ' + result.queued + ' crew members.')
+  } catch (error) {
+    showToast('Delay applied, but Telegram alerts could not be queued: ' + error.message, 6000)
   }
 }
 
+// Persist live edits first, then let the backend derive the saved event's crew.
+// Local plans send names only; the backend validates exact membership instead of trusting sample IDs.
+async function queueCrewAlert(action, delayMinutes = null) {
+  if (!supabase || !event.value || !facilitySession.value.authUserId) throw new Error('Sign in to queue crew alerts.')
+  if (dataMode.value === 'supabase') {
+    clearTimeout(saveTimer)
+    await saveChangedEvents()
+    if (saveState.value === 'error') throw new Error('Save the event changes before notifying crew.')
+  }
+  const { data, error } = await supabase.rpc('rpc_notify_ops_schedule_change', {
+    p_club_id: activeClubId.value,
+    p_event_id: dataMode.value === 'supabase' ? event.value.id : null,
+    p_member_names: dataMode.value === 'local' ? crew.value.map(person => person.name) : null,
+    p_action: action,
+    p_delay_minutes: delayMinutes,
+    p_event_name: event.value.name,
+    p_event_date: event.value.date,
+    p_venue: event.value.venue || null
+  })
+  if (error) throw error
+  if (!data || !Number.isInteger(data.queued) || data.queued < 1) throw new Error('No active crew alerts were queued.')
+  return data
+}
+
 async function publishToMobile() {
-  if (blockedForGuest()) return
+  if (blockedForGuest() || isNotifyingCrew.value) return
   isNotifyingCrew.value = true
   try {
-    if (supabase && event.value) {
-      await supabase.rpc('rpc_notify_schedule_change', {
-        p_action: 'updated',
-        p_title: `📋 Live Run of Show: ${event.value.name}`,
-        p_date: event.value.date,
-        p_start_time: formatTime(event.value.start || 900),
-        p_end_time: formatTime(event.value.end || 1350),
-        p_venue: event.value.venue || 'SMU Main Hall',
-        p_demo_member_id: demoMemberId()
-      })
-    }
-    showToast(`⚡ Updated run of show for ${event.value.name} dispatched to ${crew.value.length} crew via Telegram Bot API!`, 5000)
-  } catch (err) {
-    showToast(`Updated run of show for ${event.value.name} sent to ${crew.value.length} crew on Telegram.`, 5000)
+    const result = await queueCrewAlert('updated')
+    showToast('Updated run of show for ' + event.value.name + ': Telegram alerts queued for ' + result.queued + ' crew members.', 5000)
+  } catch (error) {
+    showToast('Telegram alerts could not be queued: ' + error.message, 6000)
   } finally {
     isNotifyingCrew.value = false
   }
