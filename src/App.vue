@@ -29,11 +29,18 @@ import OslAdminView from './views/OslAdminView.vue';
 const currentView = ref('landing') // 'landing', 'admin', 'facilities', 'schedule', 'heatmap', 'operations', 'risk'
 // OSL's header has two tabs inside the facility module: the calendar and OSL Review
 const isOslReviewRoute = computed(() => route.path.startsWith('/facilities/admin'))
- 
-// Keep currentView and the URL in step (src/router/index.js): clicking a tab
-// changes the URL, and opening or refreshing a URL opens that page.
+
+// Mobile Hamburger Navigation Drawer State
+const mobileMenuOpen = ref(false)
+
 const router = useRouter()
 const route = useRoute()
+
+// Close mobile drawer automatically when switching views
+watch(currentView, () => {
+  mobileMenuOpen.value = false
+})
+
 watch(currentView, async (view) => {
   if (route.meta.view !== view && VIEW_PATHS[view]) {
     const failure = await router.push(VIEW_PATHS[view])
@@ -52,7 +59,7 @@ watch(() => route.path, (newPath) => {
     showSignUp.value = false
   }
 })
-const apiMode = ref(false) // Toggle API badge tags on/off across all views (Default: OFF as requested)
+const apiMode = ref(false) // Toggle API badge tags on/off across all views
 const slots = ref([])
 const loading = ref(true)
 const processingId = ref(null)
@@ -60,21 +67,19 @@ const toast = ref('')
 const toastType = ref('info')
  
 // User & Role State with Strict CCA Scoping
-const authReady = ref(false) // false until the saved session has been checked on load
+const authReady = ref(false)
 const isLoggedIn = ref(false)
-const sessionPersona = ref(null) // who signed in
-const activePersona = ref(GUEST_PERSONA) // who the app is acting as (only Dev can switch this)
+const sessionPersona = ref(null)
+const activePersona = ref(GUEST_PERSONA)
 const selectedClub = ref(null)
 const profileMenuOpen = ref(false)
  
-// 'Darren Koh' -> 'DK' for the round avatar in the header
 const personaInitials = computed(() => {
   const words = (activePersona.value.name || '').trim().split(/\s+/).filter(Boolean)
   return words.slice(0, 2).map((w) => w[0].toUpperCase()).join('') || '?'
 })
 const profileMenu = ref(null)
  
-// Close the profile menu when pressing outside it, or with Escape (same as the bell)
 function closeProfileOnOutside(event) {
   if (profileMenuOpen.value && profileMenu.value && !profileMenu.value.contains(event.target)) {
     profileMenuOpen.value = false
@@ -93,7 +98,6 @@ const allowedClubs = computed(() => activePersona.value.allowedClubs || [])
 const canSwitchPersona = computed(() => !!sessionPersona.value?.isDev)
 const canResetDemo = computed(() => canResetDemoFor(sessionPersona.value))
  
-// The facility pages act for the club picked in this header (their own navbar is gone)
 watch([selectedClub, () => facilitySession.value.memberships], ([club]) => {
   if (!club) return
   if (activePersona.value && activePersona.value.cca !== club) {
@@ -112,7 +116,6 @@ watch([selectedClub, () => facilitySession.value.memberships], ([club]) => {
   }
 })
  
-// Route protection: send users back to their home page if they open a page their role can't see
 watch(currentView, (view) => {
   if (!isLoggedIn.value || view === 'landing') return
   if (!canOpenView(activePersona.value, view)) {
@@ -127,7 +130,6 @@ function handleMeetingScheduled(meeting) {
   toastType.value = 'success'
 }
  
-// Dev-only: view the app as another persona (permissions still come from the Dev sign-in)
 function switchPersona(personaKey) {
   const p = DEMO_PERSONAS[personaKey]
   if (!p || !canSwitchPersona.value) return
@@ -146,13 +148,10 @@ function switchPersona(personaKey) {
   toastType.value = 'info'
 }
  
-// The OSL console (OslAdminView) shows bookings from the facility calendar database.
-// Each row of v_master_facility_calendar is turned into the "slot" shape that
-// OslAdminView already understands, so that page did not need to change.
 function toSlot(booking) {
   let status = booking.status
   if (status === 'Officially Confirmed Booking') {
-    status = 'Officially Confirmed'   // the name OslAdminView uses
+    status = 'Officially Confirmed'
   }
   return {
     id: booking.booking_id,
@@ -169,7 +168,6 @@ function toSlot(booking) {
   }
 }
  
-// Load bookings from today to the end of the calendar
 async function loadSlots() {
   const bookings = await fetchCalendar({ from: singaporeToday(), to: CALENDAR_END })
   const result = []
@@ -179,11 +177,8 @@ async function loadSlots() {
   slots.value = result
 }
  
-// Run an OSL action, reload, and show the result
 async function handleAction(slot, action, message) {
-  if (processingId.value !== null) {
-    return
-  }
+  if (processingId.value !== null) return
   processingId.value = slot.id
   try {
     await action()
@@ -198,7 +193,6 @@ async function handleAction(slot, action, message) {
   processingId.value = null
 }
  
-// OSL approves a claimed transfer (database checks they are an OSL admin)
 async function handleConfirm(slot) {
   await handleAction(
     slot,
@@ -207,7 +201,6 @@ async function handleConfirm(slot) {
   )
 }
  
-// OSL rejects a claimed transfer; the slot goes back on offer
 async function handleReject(slot) {
   await handleAction(
     slot,
@@ -216,7 +209,6 @@ async function handleReject(slot) {
   )
 }
  
-// "Reset Demo" button
 async function handleResetDemo() {
   try {
     await resetDemoData()
@@ -231,16 +223,11 @@ async function handleResetDemo() {
   }
 }
  
-// Autopilot demo was Dev-only and has been removed with the Dev persona.
 const isAutoRunning = ref(false)
 const autoStepText = ref('')
  
-// Who you are comes from the team's sign-in, so the facility module's
-// demo persona switcher stays off
 facilitySession.value.demoMode = false
  
-// The bell and Pip (on every page) read the facility session's notifications,
-// so load that session whenever someone signs in or out
 async function loadNotificationSession() {
   try {
     await initSession()
@@ -252,7 +239,6 @@ async function loadNotificationSession() {
  
 const pipVisible = computed(() => isLoggedIn.value && facilitySession.value.ready && !!facilitySession.value.memberId)
  
-// Pip's buttons: open the bell, or go to the waitlist offer
 function openNotifications() {
   notificationStore.value.bellOpen = true
 }
@@ -262,7 +248,6 @@ function openOffer() {
   router.push('/facilities/waitlist')
 }
  
-// stayOnLanding: a restored sign-in opened at "/" keeps showing the landing page
 function applySession(persona, { stayOnLanding = false } = {}) {
   sessionPersona.value = persona
   activePersona.value = persona
@@ -276,7 +261,6 @@ function applySession(persona, { stayOnLanding = false } = {}) {
     currentView.value = 'landing'
     return
   }
-  // Stay on the page in the URL (refresh, or a link someone opened) when this role can see it
   const wanted = route.query.redirect ? router.resolve(String(route.query.redirect)) : route
   const view = wanted.meta.view
   if (view && view !== 'landing' && canOpenView(persona, view)) {
@@ -287,7 +271,6 @@ function applySession(persona, { stayOnLanding = false } = {}) {
   }
 }
  
-// Handle Login from LandingLoginView (the password was already checked by authService)
 let toastTimer = null
 
 function handleUserLogin(persona) {
@@ -295,16 +278,11 @@ function handleUserLogin(persona) {
   toast.value = `Signed in as ${persona.name} (${persona.roleLabel})`
   toastType.value = 'success'
 
-  // Clear any existing timer to prevent premature hiding
   clearTimeout(toastTimer)
-
-  // Hide toast after 30 seconds (30,000 ms)
   toastTimer = setTimeout(() => {
     toast.value = ''
   }, 10000)
 }
- 
-
  
 function startSignUp() {
   showSignUp.value = true
@@ -320,7 +298,6 @@ function handleSignUpCancel() {
   }
 }
 
-// New ExCo finished sign-up (already signed in by authService)
 function handleSignUpDone(persona) {
   showSignUp.value = false
   if (persona) {
@@ -372,7 +349,6 @@ onUnmounted(() => {
 })
  
 onMounted(async () => {
-  // Clean enterprise light theme enforcement
   document.body.classList.remove('dark-mode')
   try {
     localStorage.removeItem('pulse_theme')
@@ -397,25 +373,21 @@ onMounted(async () => {
     loading.value = false
   }
 })
- 
 </script>
  
 <template>
   <div>
     
-    <!-- Checking for a saved session on page load -->
     <div v-if="!authReady" class="min-vh-100 d-flex align-items-center justify-content-center">
       <div class="spinner-border text-danger" role="status"></div>
     </div>
  
-    <!-- ExCo sign-up (email must be on OSL's ExCo list) -->
     <SignUpView
       v-else-if="showSignUp"
       @done="handleSignUpDone"
       @cancel="handleSignUpCancel"
     />
  
-    <!-- View 0: Landing & Interactive Login Experience (Shown when logged out) -->
     <div v-else-if="!isLoggedIn || currentView === 'landing'">
       <LandingLoginView 
         @login="handleUserLogin"
@@ -423,14 +395,12 @@ onMounted(async () => {
       />
     </div>
  
-    <!-- Authenticated App Shell (All 5 views) -->
     <div v-else class="min-vh-100 d-flex flex-column" style="background-color: var(--pulse-bg);">
       
-      <!-- Top Modern SaaS Header -->
+      <!-- Top SaaS Header -->
       <header class="pulse-header px-3 px-lg-4 py-2">
         <div class="container-fluid d-flex flex-nowrap align-items-center justify-content-between gap-1 gap-sm-2 gap-lg-3">
           
-          <!-- Left: Logo & Community Switcher (Scoped per persona) -->
           <div class="d-flex align-items-center gap-2 gap-sm-3 flex-shrink-0">
             <a href="#" class="pulse-brand-logo text-decoration-none flex-shrink-0" @click.prevent="router.push('/facilities')">
               <div class="pulse-logo-badge">
@@ -440,12 +410,10 @@ onMounted(async () => {
               <span class="d-none d-sm-inline">Pulse</span>
             </a>
  
-            <!-- Case A: Admin Mode -->
             <div v-if="isAdmin" class="badge bg-danger px-2 px-sm-3 py-2 text-truncate" style="border-radius: 0.65rem; font-size: 0.75rem; max-width: 150px;">
               <span class="d-none d-sm-inline">OSL Facility </span>Admin<span class="d-none d-sm-inline">istration</span>
             </div>
  
-            <!-- Case B: Dev Mode (All 24 CCAs Unlocked) -->
             <div v-else-if="isDev" class="d-flex align-items-center gap-1.5 flex-shrink-0">
               <div class="input-group input-group-sm">
                 <span class="input-group-text bg-white border-end-0 text-muted d-none d-md-flex px-2" style="border-radius: 0.65rem 0 0 0.65rem;">
@@ -463,23 +431,14 @@ onMounted(async () => {
                   <option v-for="club in ALL_CLUBS" :key="club" :value="club">{{ club }}</option>
                 </select>
               </div>
-              <span class="badge bg-purple text-white px-2 py-1 d-none d-xxl-inline" style="background-color: var(--pulse-purple-transit); font-size: 0.65rem;">
-                All 24 CCAs Unlocked
-              </span>
             </div>
 
-            <!-- Case C: Regular Club ExCo (Strictly Scoped to their CCA) -->
             <div v-else class="d-flex align-items-center flex-shrink-0">
-              <!-- If single CCA, show a sleek verified badge instead of an awkward 1-item dropdown -->
               <div v-if="allowedClubs.length <= 1" class="d-flex align-items-center px-2 py-1 bg-white border shadow-2xs rounded-pill" style="gap: 0.45rem; padding-inline: 0.7rem !important;">
                 <span class="pulse-cca-dot" aria-hidden="true"></span>
                 <span class="fw-bold text-dark text-nowrap" style="font-size: 0.78rem;">{{ selectedClub }}</span>
               </div>
-              <!-- If multiple CCAs, show clean dropdown -->
               <div v-else class="input-group input-group-sm">
-                <span class="input-group-text bg-white border-end-0 text-muted d-none d-md-flex px-2" style="border-radius: 0.65rem 0 0 0.65rem;">
-                  <span style="font-size: 0.7rem; font-weight: 700; text-transform: uppercase; color: var(--pulse-primary);">Club:</span>
-                </span>
                 <select 
                   id="clubSwitcher"
                   aria-label="Club scope"
@@ -494,8 +453,7 @@ onMounted(async () => {
             </div>
           </div>
  
-          <!-- Center: Navigation Tabs (Role-tailored) -->
-          <!-- OSL Admin View: Administrative Oversight & Governance -->
+          <!-- Desktop Tabs -->
           <nav v-if="isAdmin" class="d-none d-lg-flex align-items-center gap-1 pulse-header-nav flex-shrink-1">
             <button
               type="button"
@@ -513,7 +471,6 @@ onMounted(async () => {
             </button>
           </nav>
  
-          <!-- Student ExCo View: Complete 5-Feature Operational Suite -->
           <nav v-else class="d-none d-lg-flex align-items-center gap-1 pulse-header-nav flex-shrink-1">
             <button 
               type="button" 
@@ -551,10 +508,9 @@ onMounted(async () => {
             ><span class="d-none d-xxl-inline">Event </span>Risk Planning</button>
           </nav>
  
-          <!-- Right: Presentation Utility Bar (API Mode, Reset, Role & Sign Out) -->
+          <!-- Right Controls + Mobile Hamburger Toggle -->
           <div class="d-flex align-items-center gap-2 ms-auto flex-shrink-0">
             
-            <!-- Reset Demo Button -->
             <button
               v-if="canResetDemo"
               type="button"
@@ -565,12 +521,8 @@ onMounted(async () => {
               Reset Demo
             </button>
  
-
- 
-            <!-- One bell for the whole site (Pip's "Open notifications" opens it too) -->
             <NotificationBell />
  
-            <!-- Persona Switcher Dropdown (Pitch Presentation Helper) -->
             <div ref="profileMenu" class="position-relative">
               <button
                 type="button"
@@ -588,91 +540,20 @@ onMounted(async () => {
                 class="card shadow-lg position-absolute end-0 mt-2 p-2 border-0 pulse-account-menu"
                 style="min-width: 260px; z-index: 1050; border-radius: 0.85rem;"
               >
-                <!-- Signed-in identity (the avatar only shows initials) -->
                 <div class="p-2 border-bottom mb-2">
                   <div class="fw-bold" style="font-size: 0.825rem;">{{ activePersona.name }}</div>
                   <small class="text-muted d-block" style="font-size: 0.7rem;">{{ activePersona.roleLabel }}</small>
-                  <small v-if="activePersona.email" class="text-muted d-block" style="font-size: 0.7rem;">{{ activePersona.email }}</small>
                 </div>
  
-                <!-- Dev only: switch persona for live demo -->
                 <template v-if="canSwitchPersona">
-                <div class="p-2 border-bottom mb-2 text-muted" style="font-size: 0.7rem; font-weight: 700; text-transform: uppercase;">
-                  Switch Persona (Live Demo)
-                </div>
- 
-                <!-- Option 1: Rachel Tan -->
-                <button 
-                  type="button" 
-                  class="btn text-start mb-1 py-2 px-3 rounded-3" 
-                  :class="activePersona.id === 'rachel' ? 'btn-light fw-bold text-danger' : 'btn-white'"
-                  @click="switchPersona('rachel')"
-                >
-                  <div class="d-flex justify-content-between align-items-center">
-                    <span>Rachel Tan</span>
-                    <span class="badge bg-danger bg-opacity-10 text-danger" style="font-size: 0.65rem;">Eurhythmix</span>
+                  <div class="p-2 border-bottom mb-2 text-muted" style="font-size: 0.7rem; font-weight: 700; text-transform: uppercase;">
+                    Switch Persona (Live Demo)
                   </div>
-                  <small class="text-muted" style="font-size: 0.7rem;">Release studio & manage crew ops</small>
-                </button>
- 
-                <!-- Option 2: Darren Koh -->
-                <button 
-                  type="button" 
-                  class="btn text-start mb-1 py-2 px-3 rounded-3" 
-                  :class="activePersona.id === 'darren' ? 'btn-light fw-bold text-danger' : 'btn-white'"
-                  @click="switchPersona('darren')"
-                >
-                  <div class="d-flex justify-content-between align-items-center">
-                    <span>Darren Koh</span>
-                    <span class="badge bg-warning bg-opacity-25 text-dark" style="font-size: 0.65rem;">Samba Masala</span>
-                  </div>
-                  <small class="text-muted" style="font-size: 0.7rem;">Claim studio & browse marketplace</small>
-                </button>
- 
-                <!-- Option 3: Marcus Lim -->
-                <button 
-                  type="button" 
-                  class="btn text-start mb-1 py-2 px-3 rounded-3" 
-                  :class="activePersona.id === 'marcus' ? 'btn-light fw-bold text-danger' : 'btn-white'"
-                  @click="switchPersona('marcus')"
-                >
-                  <div class="d-flex justify-content-between align-items-center">
-                    <span>Marcus Lim</span>
-                    <span class="badge bg-secondary bg-opacity-10 text-secondary" style="font-size: 0.65rem;">Symphonia</span>
-                  </div>
-                  <small class="text-muted" style="font-size: 0.7rem;">Symphonia ExCo / View Only</small>
-                </button>
- 
-                <!-- Option 4: Chloe Ang -->
-                <button 
-                  type="button" 
-                  class="btn text-start mb-1 py-2 px-3 rounded-3" 
-                  :class="activePersona.id === 'chloe' ? 'btn-light fw-bold text-danger' : 'btn-white'"
-                  @click="switchPersona('chloe')"
-                >
-                  <div class="d-flex justify-content-between align-items-center">
-                    <span>Chloe Ang</span>
-                    <span class="badge bg-dark text-white" style="font-size: 0.65rem;">OSL Admin</span>
-                  </div>
-                  <small class="text-muted" style="font-size: 0.7rem;">Verify compliance & issue audit ticket</small>
-                </button>
-
-                <!-- Option 5: Dev Administrator -->
-                <button 
-                  type="button" 
-                  class="btn text-start mb-1 py-2 px-3 rounded-3" 
-                  :class="activePersona.id === 'dev' ? 'btn-light fw-bold text-danger' : 'btn-white'"
-                  @click="switchPersona('dev')"
-                >
-                  <div class="d-flex justify-content-between align-items-center">
-                    <span>Dev Administrator</span>
-                    <span class="badge text-white" style="background-color: var(--pulse-purple-transit); font-size: 0.65rem;">Dev</span>
-                  </div>
-                  <small class="text-muted" style="font-size: 0.7rem;">Super-Admin / All CCAs</small>
-                </button>
- 
-                <hr class="my-1">
+                  <button type="button" class="btn text-start mb-1 py-2 px-3 rounded-3 btn-white" @click="switchPersona('rachel')">Rachel Tan</button>
+                  <button type="button" class="btn text-start mb-1 py-2 px-3 rounded-3 btn-white" @click="switchPersona('darren')">Darren Koh</button>
+                  <hr class="my-1">
                 </template>
+
                 <button 
                   type="button" 
                   class="btn btn-sm btn-link text-danger text-start px-3 py-1 text-decoration-none"
@@ -682,176 +563,146 @@ onMounted(async () => {
                 </button>
               </div>
             </div>
+
+            <!-- Hamburger Button (< 992px) -->
+            <button 
+              type="button"
+              class="btn btn-light border rounded-3 p-2 d-lg-none d-flex align-items-center justify-content-center"
+              style="width: 38px; height: 38px;"
+              aria-label="Toggle Navigation Menu"
+              @click="mobileMenuOpen = !mobileMenuOpen"
+            >
+              <span style="font-size: 1.25rem; line-height: 1;">{{ mobileMenuOpen ? '✕' : '☰' }}</span>
+            </button>
  
           </div>
  
         </div>
       </header>
-      <!-- Responsive Website Mobile Top Navigation (clean scrollable pill bar under the sticky header) -->
-      <!-- Decorative icons are hidden from assistive technology so each control has its visible text name. -->
-      <nav class="d-lg-none pulse-mobile-nav-container" aria-label="Mobile PULSE navigation">
-        <!-- Case A: OSL Admin Mobile Navigation -->
-        <div v-if="isAdmin" class="pulse-mobile-nav">
-          <button
-            type="button"
-            class="pulse-mobile-pill"
-            :class="{ active: currentView === 'facilities' && !isOslReviewRoute }"
-            @click="router.push('/facilities')"
-          >
-            <span class="pill-icon" aria-hidden="true">🏛️</span>
-            <span>Facility Calendar</span>
-          </button>
-          <button
-            type="button"
-            class="pulse-mobile-pill"
-            :class="{ active: isOslReviewRoute }"
-            @click="router.push('/facilities/admin')"
-          >
-            <span class="pill-icon" aria-hidden="true">⚖️</span>
-            <span>OSL Review</span>
-          </button>
+
+      <!-- Mobile Navigation Drawer Overlay -->
+      <div 
+        v-if="mobileMenuOpen" 
+        class="pulse-mobile-drawer-backdrop" 
+        @click="mobileMenuOpen = false"
+      ></div>
+
+      <aside class="pulse-mobile-drawer" :class="{ open: mobileMenuOpen }">
+        <div class="d-flex align-items-center justify-content-between p-3 border-bottom bg-light">
+          <div class="fw-bold text-dark d-flex align-items-center gap-2" style="font-size: 0.95rem;">
+            <span style="color: var(--pulse-primary, #e11d48);">●</span> Navigation Menu
+          </div>
+          <button type="button" class="btn-close" aria-label="Close" @click="mobileMenuOpen = false"></button>
         </div>
 
-        <!-- Case B: Student ExCo Mobile Navigation (All 5 Core Features) -->
-        <div v-else class="pulse-mobile-nav">
-          <button 
-            type="button" 
-            class="pulse-mobile-pill" 
-            :class="{ active: currentView === 'facilities' }"
-            aria-label="Facilities"
-            @click="currentView = 'facilities'"
-          >
-            <span class="pill-icon" aria-hidden="true">🏛️</span>
-            <span>Venues</span>
-          </button>
-          <button 
-            v-if="canOpenView(activePersona, 'schedule')"
-            type="button" 
-            class="pulse-mobile-pill" 
-            :class="{ active: currentView === 'schedule' }"
-            aria-label="My Schedule"
-            @click="currentView = 'schedule'"
-          >
-            <span class="pill-icon" aria-hidden="true">📋</span>
-            <span>Schedule</span>
-          </button>
-          <button 
-            v-if="canOpenView(activePersona, 'heatmap')"
-            type="button" 
-            class="pulse-mobile-pill" 
-            :class="{ active: currentView === 'heatmap' }"
-            aria-label="Heatmap"
-            @click="currentView = 'heatmap'"
-          >
-            <span class="pill-icon" aria-hidden="true">🟢</span>
-            <span>Heatmap</span>
-          </button>
-          <button 
-            v-if="canOpenView(activePersona, 'operations')"
-            type="button" 
-            class="pulse-mobile-pill" 
-            :class="{ active: currentView === 'operations' }"
-            aria-label="Day-of Ops"
-            @click="currentView = 'operations'"
-          >
-            <span class="pill-icon" aria-hidden="true">⚡</span>
-            <span>Day Ops</span>
-          </button>
-          <button 
-            v-if="canOpenView(activePersona, 'risk')"
-            type="button" 
-            class="pulse-mobile-pill" 
-            :class="{ active: currentView === 'risk' }"
-            aria-label="Risk Sandbox"
-            @click="currentView = 'risk'"
-          >
-            <span class="pill-icon" aria-hidden="true">🛡️</span>
-            <span>Risk</span>
-          </button>
-        </div>
-      </nav>
+        <div class="p-3 d-flex flex-column gap-2">
+          <template v-if="isAdmin">
+            <button
+              type="button"
+              class="pulse-drawer-link"
+              :class="{ active: currentView === 'facilities' && !isOslReviewRoute }"
+              @click="router.push('/facilities'); mobileMenuOpen = false;"
+            >
+              <span></span> Master Facility Calendar
+            </button>
+            <button
+              type="button"
+              class="pulse-drawer-link"
+              :class="{ active: isOslReviewRoute }"
+              @click="router.push('/facilities/admin'); mobileMenuOpen = false;"
+            >
+              <span></span> OSL Review
+            </button>
+          </template>
 
-      <!-- Main Content Area -->
+          <template v-else>
+            <button 
+              type="button" 
+              class="pulse-drawer-link" 
+              :class="{ active: currentView === 'facilities' }"
+              @click="currentView = 'facilities'; mobileMenuOpen = false;"
+            >
+              <span></span> Master Facility Calendar
+            </button>
+            <button 
+              v-if="canOpenView(activePersona, 'schedule')"
+              type="button" 
+              class="pulse-drawer-link" 
+              :class="{ active: currentView === 'schedule' }"
+              @click="currentView = 'schedule'; mobileMenuOpen = false;"
+            >
+              <span></span> Personal Schedule
+            </button>
+            <button 
+              v-if="canOpenView(activePersona, 'heatmap')"
+              type="button" 
+              class="pulse-drawer-link" 
+              :class="{ active: currentView === 'heatmap' }"
+              @click="currentView = 'heatmap'; mobileMenuOpen = false;"
+            >
+              <span></span> Availability Heatmap
+            </button>
+            <button 
+              v-if="canOpenView(activePersona, 'operations')"
+              type="button" 
+              class="pulse-drawer-link" 
+              :class="{ active: currentView === 'operations' }"
+              @click="currentView = 'operations'; mobileMenuOpen = false;"
+            >
+              <span></span> Day-of Operations
+            </button>
+            <button 
+              v-if="canOpenView(activePersona, 'risk')"
+              type="button" 
+              class="pulse-drawer-link" 
+              :class="{ active: currentView === 'risk' }"
+              @click="currentView = 'risk'; mobileMenuOpen = false;"
+            >
+              <span></span> Event Risk Planning
+            </button>
+          </template>
+        </div>
+      </aside>
+
+      <!-- Main View Container -->
       <main class="container-xl py-4 flex-grow-1">
         <div :class="{ 'pulse-pip-gutter': pipVisible }">
  
-        <!-- Autopilot Banner -->
-        <div v-if="isAutoRunning" class="alert alert-dark border-0 shadow-lg text-white mb-4 d-flex align-items-center justify-content-between p-3" style="border-radius: 1rem; background: linear-gradient(135deg, #1e1020, #2a1435);">
-          <div class="d-flex align-items-center gap-3">
-            <div class="spinner-grow spinner-grow-sm text-danger" role="status"></div>
-            <div>
-              <div class="fw-bold" style="font-size: 0.85rem;">Live Presentation Autopilot Active</div>
-              <small class="text-white-50" style="font-size: 0.75rem;">{{ autoStepText }}</small>
-            </div>
-          </div>
-          <span class="badge bg-danger rounded-pill px-3 py-2">Pitch Mode</span>
-        </div>
- 
-        <!-- Global Toast Alert -->
-        <div 
-          v-if="toast" 
-          class="alert fade show shadow-sm mb-3 py-2 px-3 d-flex align-items-center justify-content-between gap-2" 
-          :class="`alert-${toastType}`" 
-          role="alert"
-          style="border-radius: 0.85rem;"
-        >
+        <div v-if="toast" class="alert fade show shadow-sm mb-3 py-2 px-3 d-flex align-items-center justify-content-between gap-2" :class="`alert-${toastType}`" role="alert" style="border-radius: 0.85rem;">
           <div class="d-flex align-items-center gap-2 min-w-0" style="font-size: 0.825rem;">
             <strong class="text-nowrap flex-shrink-0">Notice:</strong>
             <span class="flex-grow-1" style="word-break: break-word;">{{ toast }}</span>
           </div>
-          <button 
-            type="button" 
-            class="btn-close flex-shrink-0" 
-            aria-label="Close notice" 
-            style="position: static; padding: 0.35rem; font-size: 0.725rem; margin-left: auto;" 
-            @click="toast = ''"
-          ></button>
+          <button type="button" class="btn-close flex-shrink-0" aria-label="Close notice" style="position: static; padding: 0.35rem; font-size: 0.725rem;" @click="toast = ''"></button>
         </div>
- 
 
- 
-        <!-- VIEW 0: OSL Administrative Console (Chloe Ang - OSL Staff Advisor) -->
         <div v-show="currentView === 'admin'">
-          <OslAdminView 
-            :slots="slots" 
-            :api-mode="apiMode" 
-            @endorse-transfer="handleConfirm" 
-            @reject-transfer="handleReject" 
-          />
+          <OslAdminView :slots="slots" :api-mode="apiMode" @endorse-transfer="handleConfirm" @reject-transfer="handleReject" />
         </div>
  
-        <!-- VIEW 1: Master Facility Calendar (routes /facilities, /facilities/my-club,
-             /facilities/waitlist, /facilities/admin). The earlier inline facility_slots
-             marketplace is replaced by this module. -->
         <div v-show="currentView === 'facilities'">
           <RouterView />
         </div>
  
-        <!-- VIEW 2: Personal Schedule & Attendance -->
         <div v-show="currentView === 'schedule'">
           <PersonalScheduleView :active="currentView === 'schedule'" :api-mode="apiMode" :active-persona="activePersona" :read-only="isGuest" />
         </div>
  
-        <!-- VIEW 3: Availability Heatmap -->
         <div v-show="currentView === 'heatmap'">
           <AvailabilityView :api-mode="apiMode" :read-only="isGuest" @meeting-scheduled="handleMeetingScheduled" />
         </div>
  
-        <!-- VIEW 4: Day-of Operations & Multi-Track Timeline -->
         <div v-show="currentView === 'operations'">
           <OperationsView :api-mode="apiMode" :active-persona="activePersona" :read-only="isGuest" />
         </div>
  
-        <!-- VIEW 5: Event Risk Planning & What-If Simulator -->
         <div v-show="currentView === 'risk'">
           <EventRiskView :active="route.meta.view === 'risk'" :api-mode="apiMode" :read-only="isGuest" />
-
         </div>
  
         </div>
       </main>
  
-      <!-- Notifications Pip is consistently shown on every view for logged-in users -->
       <PipMascot
         v-if="pipVisible"
         class="d-none d-lg-block"
@@ -866,19 +717,15 @@ onMounted(async () => {
         @open-offer="openOffer"
       />
  
-      <!-- Footer -->
       <footer class="py-3 border-top text-muted small bg-white mt-auto">
         <div class="container d-flex flex-wrap justify-content-between align-items-center gap-2">
           <div class="d-flex align-items-center gap-2 flex-wrap">
             <span class="fw-semibold text-dark">Singapore Management University</span>
             <span class="text-muted">•</span>
             <span>Office of Student Life (OSL)</span>
-            
           </div>
           <div class="d-flex align-items-center gap-3 text-muted" style="font-size: 0.775rem;">
             <span>Pulse Co-Curricular & Arts Facilities Management</span>
-            
-            
           </div>
         </div>
       </footer>
@@ -887,4 +734,61 @@ onMounted(async () => {
  
   </div>
 </template>
- 
+
+<style>
+/* Mobile Drawer Overlay Backdrop */
+.pulse-mobile-drawer-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.4);
+  backdrop-filter: blur(2px);
+  z-index: 1040;
+}
+
+/* Mobile Slide-out Navigation Drawer */
+.pulse-mobile-drawer {
+  position: fixed;
+  top: 0;
+  right: -300px;
+  width: 280px;
+  height: 100vh;
+  background: #ffffff;
+  box-shadow: -4px 0 20px rgba(0, 0, 0, 0.15);
+  z-index: 1050;
+  transition: right 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  display: flex;
+  flex-direction: column;
+}
+
+.pulse-mobile-drawer.open {
+  right: 0;
+}
+
+/* Mobile Navigation Drawer Links */
+.pulse-drawer-link {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  width: 100%;
+  padding: 0.75rem 1rem;
+  border-radius: 0.65rem;
+  border: 1px solid transparent;
+  background: transparent;
+  color: #334155;
+  font-weight: 600;
+  font-size: 0.875rem;
+  text-align: left;
+  transition: all 0.15s ease;
+}
+
+.pulse-drawer-link:hover {
+  background: #f8fafc;
+  color: #0f172a;
+}
+
+.pulse-drawer-link.active {
+  background: #fff1f2;
+  color: #e11d48;
+  border-color: #fda4af;
+}
+</style>
