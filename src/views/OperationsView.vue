@@ -1020,7 +1020,7 @@ function clearLate(person) {
 
 <template>
   <div class="py-2">
-    <p class="text-muted small">Saved events and tasks automatically remind assigned crew on Telegram 15 minutes before they start. Sample plans do not send reminders.</p>
+    <p class="text-muted small">Saved events and tasks automatically remind assigned crew on Telegram 15 minutes before they start.</p>
 
     <!-- Header: which event, plus the main actions -->
     <div class="d-flex flex-wrap justify-content-between align-items-start gap-3 mb-3">
@@ -1036,9 +1036,9 @@ function clearLate(person) {
             <option v-for="ev in events" :key="ev.id" :value="ev.id">{{ ev.name }} • {{ formatDate(ev.date) }}</option>
           </select>
           <template v-if="!readOnly">
-            <button v-if="event" type="button" class="btn btn-sm btn-light border" @click="openEditEvent">Edit event</button>
-            <button v-if="event" type="button" class="btn btn-sm btn-outline-danger border" @click="deleteEvent">Delete event</button>
-            <button type="button" class="btn btn-sm btn-outline-danger fw-semibold" @click="openNewEvent">+ New event</button>
+             <button type="button" class="btn btn-sm btn-outline-danger fw-semibold" @click="openNewEvent">+ New event</button>
+            <button v-if="event" type="button" class="btn btn-sm btn-warning border" @click="openEditEvent">Edit event</button>
+            <button v-if="event" type="button" class="btn btn-sm btn-danger text-white border" @click="deleteEvent">Delete event</button>
           </template>
         </div>
         <p v-if="event" class="text-muted small mb-0 mt-2">
