@@ -8,9 +8,9 @@ export function createMeetingBackend(config) {
   {member_id:7002,full_name:'Fixture Dancer',role_name:'Dancer',subcommittee:'Dancers',is_me:false}]
  const initial={meeting:config().meetings&&!config().emptyMeeting?{
   id:601,club_id:71,title:'Fixture team meeting',agenda:'Review rehearsal',week_start:'2026-11-02',
-  vote_deadline:'2026-11-05T15:00:00Z',server_now:'2026-11-03T02:00:00Z',
-  status:'COLLECTING',is_participant:true,is_organiser:true,can_confirm:true,organiser_name:'Fixture Exco'}:null,
-  participants:roster.map(m=>({...m,responded_at:null,telegram_linked:true})),availability:[]}
+  vote_deadline:config().meetingClosed?'2026-11-03T01:00:00Z':'2026-11-05T15:00:00Z',server_now:'2026-11-03T02:00:00Z',
+  status:config().meetingClosed?'EXPIRED':'COLLECTING',is_participant:true,is_organiser:true,can_confirm:!config().waitingResponses,organiser_name:'Fixture Exco'}:null,
+  participants:roster.map(m=>({...m,responded_at:config().everyoneResponded?'2026-11-03T02:00:00Z':null,telegram_linked:true})),availability:[]}
  // Explicit UI scenarios supply confirmed/expired/member states; ordinary fixtures stay unchanged.
  if(initial.meeting)Object.assign(initial.meeting,config().meetingOptions||{})
  const state=JSON.parse(sessionStorage.getItem(key)||'null')||initial
@@ -51,6 +51,11 @@ export function createMeetingBackend(config) {
    state.participants.find(p=>p.member_id===7001).responded_at='2026-11-03T02:00:00Z'
    persist();return ok({})
   }
+  if(name==='rpc_clear_meeting_response'){
+   state.availability=state.availability.filter(a=>a.member_id!==7001)
+   state.participants.find(p=>p.member_id===7001).responded_at=null
+   persist();return ok({})
+  }
   if(name==='rpc_confirm_meeting'){
    Object.assign(state.meeting,{status:'CONFIRMED',confirmed_date:args.p_date,
     confirmed_start_hour:args.p_start_hour,confirmed_end_hour:args.p_end_hour,venue:args.p_venue})
@@ -58,7 +63,7 @@ export function createMeetingBackend(config) {
   }
   if(name==='rpc_nudge_meeting'){
    const people=state.participants.filter(p=>p.member_id!==7001&&(!args.p_member_id||p.member_id===args.p_member_id))
-   people.forEach(p=>p.last_nudged_at='2026-11-03T02:00:00Z');persist();return ok(people.length)
+   people.forEach(p=>p.last_nudged_at=new Date().toISOString());persist();return ok(people.length)
   }
   return undefined
  }

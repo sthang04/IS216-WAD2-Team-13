@@ -853,37 +853,7 @@ function exportCalendarICS() {
           </div>
         </div>
 
-        <!-- Day-of Operations Live Sync Banner -->
-        <div v-if="opsSyncInfo" class="alert alert-light border shadow-xs py-2 px-3 mb-3 d-flex flex-wrap align-items-center justify-content-between gap-2" style="border-radius: 0.75rem;">
-          <div class="d-flex align-items-center gap-2">
-            <span class="badge bg-warning bg-opacity-25 text-dark border border-warning-subtle px-2 py-1" style="font-size: 0.7rem; font-weight: 700;">
-              ⚡ DAY-OF OPS SYNCED
-            </span>
-            <span class="small text-dark fw-semibold" style="font-size: 0.8rem;">
-              {{ opsSyncInfo.eventCount }} Day-of Ops task{{ opsSyncInfo.eventCount === 1 ? '' : 's' }} linked from <strong>{{ opsSyncInfo.eventName }}</strong> ({{ opsSyncInfo.eventDate }}){{ opsSyncInfo.otherEvents ? ` and ${opsSyncInfo.otherEvents} other event${opsSyncInfo.otherEvents === 1 ? '' : 's'}` : '' }}
-            </span>
-          </div>
-          <div class="d-flex align-items-center gap-2">
-            <button 
-              v-if="selectedDate !== opsSyncInfo.eventDate"
-              type="button" 
-              class="btn btn-sm btn-outline-danger py-1 px-2.5 rounded-pill fw-bold"
-              style="font-size: 0.72rem;"
-              @click="selectedDate = opsSyncInfo.eventDate"
-            >
-              Jump to {{ opsSyncInfo.eventName }} Day →
-            </button>
-            <button 
-              type="button" 
-              class="btn btn-sm btn-light border py-1 px-2 rounded-pill text-muted"
-              style="font-size: 0.72rem;"
-              title="Refresh tasks from Day-of Operations"
-              @click="syncOpsTasks(true)"
-            >
-              ↻ Refresh Sync
-            </button>
-          </div>
-        </div>
+
 
         <!-- Schedule Items List -->
         <div class="d-flex flex-column gap-3">

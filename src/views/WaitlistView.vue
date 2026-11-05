@@ -207,7 +207,7 @@ function onExpired() {
           </div>
           <div class="pulse-slot-ref small"><button type="button" class="btn btn-link btn-sm p-0" @click="toggleQueue(entry)">{{ queues[entry.booking_id] ? 'Hide' : 'View' }} queue</button></div>
           <div class="pulse-slot-actions">
-            <button v-if="canManageActiveClub" type="button" class="btn btn-sm btn-outline-secondary" :disabled="busyId === entry.entry_id" @click="leave(entry)">Leave</button>
+            <button v-if="canManageActiveClub" type="button" class="btn btn-sm btn-outline-secondary" :disabled="busyId === entry.entry_id" @click="leave(entry)">Leave queue</button>
           </div>
         </div>
         <ol v-if="queues[entry.booking_id]" class="pulse-queue small">

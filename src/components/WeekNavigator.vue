@@ -106,7 +106,7 @@ function pickDay(day) {
       </div>
 
       <div class="pulse-cal-nav">
-        <button type="button" class="pulse-cal-step" aria-label="Previous week" :disabled="weekStart <= minWeek" @click="shift(-1)">
+        <button type="button" class="pulse-cal-step" aria-label="Previous week" title="Previous week" :disabled="weekStart <= minWeek" @click="shift(-1)">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg>Previous<span class="pulse-cal-long"> week</span>
         </button>
         <label class="pulse-cal-step pulse-cal-choose" for="week-jump">
@@ -123,7 +123,7 @@ function pickDay(day) {
             @change="jumpTo($event.target.value)"
           />
         </label>
-        <button type="button" class="pulse-cal-step" aria-label="Next week" :disabled="weekStart >= maxWeek" @click="shift(1)">
+        <button type="button" class="pulse-cal-step" aria-label="Next week" title="Next week" :disabled="weekStart >= maxWeek" @click="shift(1)">
           Next<span class="pulse-cal-long"> week</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg>
         </button>
       </div>

@@ -11,6 +11,8 @@ const availableDates = computed(() => eventDates(props.event))
 const unavailable = computed(() => props.disabled || !scheduleRange(props.event))
 watch(() => [props.start,props.end,props.event], () => {
  for (const key of ['start','end']) if (props[key]) dates[key] = props[key].slice(0,10)
+ // No time yet: default to the event's first available date so time options populate
+ for (const key of ['start','end']) if (!props[key] && !availableDates.value.includes(dates[key])) dates[key] = availableDates.value[0] || ''
  if (!scheduleRange(props.event)) dates.start = dates.end = ''
 }, {immediate:true})
 watch(() => props.event, () => { feedback.value = '' })

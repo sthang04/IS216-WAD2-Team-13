@@ -26,6 +26,7 @@ import {
 } from '../services/simulationService.js'
 
 import { prepareDisruptionCards, assessCombinedRecovery, buildCombinedRecoveryOptions } from '../services/combinedSimulationService.js'
+import { groupActivities } from '../services/simulatorActivityGroups.js'
 
 import {
   evaluateRecoveryPlans
@@ -46,6 +47,7 @@ import SimulatorFacilitySetup from '../components/SimulatorFacilitySetup.vue'
 import SimulatorCandidateChooser from '../components/SimulatorCandidateChooser.vue'
 import SimulatorFacilityChoices from '../components/SimulatorFacilityChoices.vue'
 import {presentSimulatorFacilities} from '../services/simulatorFacilityPresentationService.js'
+import RiskChatbotAssistant from '../components/RiskChatbotAssistant.vue'
 
 /*
 ========================================================
@@ -106,6 +108,9 @@ const initialized = ref(false)
 const sessionVersion = ref(0)
 const invitationRefreshVersion = ref(0)
 let dataRequestVersion=0
+// Background re-checks of saved data: at most every 3 minutes (a full load is ~50 requests).
+const BACKGROUND_REFRESH_MS=180000
+let lastLoadedAt=0
 
 const selectedRecoveryId = ref('')
 const selectedSavedRecovery=shallowRef(null)
@@ -139,10 +144,13 @@ const simulationSummary=computed(()=>{
 function adoptPreviewInputs(){
  const selected=selectedRecoveryPlan.value;if(!selected || selected.id==='combined-selected')return
  replacementSelections.value=Object.fromEntries(selected.changes.filter(c=>c.replacementMemberId!=null).map(c=>[String(c.replacedMemberId),c.replacementMemberId]))
- selectedFacilityOptions.value=selected.sourceFacilityOptionIds || (combinedAssessment.value.facilityOptions.some(o=>o.id===selected.id)?[selected.id]:[])
+ selectedFacilityOptions.value=selected.sourceFacilityOptionIds || (allFacilityChoices.value.some(o=>o.id===selected.id)?[selected.id]:[])
 }
+// Per-activity room options plus whole-venue moves ("Move Main Hall activities to X")
+const allFacilityChoices=computed(()=>{const moves=(combinedAssessment.value.venueMoves || []).flatMap(v=>v.options);return [...(combinedAssessment.value.facilityOptions || []),...moves,...moves.flatMap(o=>o.fill || [])]})
+const venueMoveCovered=computed(()=>new Set((combinedAssessment.value.venueMoves || []).flatMap(v=>v.segmentIds)))
 function previewMemberId(id){return selectedRecoveryPlan.value?selectedRecoveryPlan.value.changes.find(c=>String(c.replacedMemberId)===String(id))?.replacementMemberId:replacementSelections.value[String(id)]}
-const displayedFacilityChoices=computed(()=>selectedRecoveryPlan.value?.sourceFacilityOptionIds || (selectedRecoveryPlan.value && combinedAssessment.value.facilityOptions.some(o=>o.id===selectedRecoveryPlan.value.id)?[selectedRecoveryPlan.value.id]:[]))
+const displayedFacilityChoices=computed(()=>selectedRecoveryPlan.value?.sourceFacilityOptionIds || (selectedRecoveryPlan.value && allFacilityChoices.value.some(o=>o.id===selectedRecoveryPlan.value.id)?[selectedRecoveryPlan.value.id]:[]))
 async function selectCandidate(assessment,candidate){
  adoptPreviewInputs()
  replacementSelections.value={...replacementSelections.value,[String(assessment.memberId)]:candidate.id}
@@ -172,13 +180,14 @@ const replacementSelections = ref({})
 const selectedFacilityOptions = ref([])
 const setupDialog=ref(null)
 const setupActivityId=computed(()=>{const card=disruptionCards.value.find(d=>d.type==='FACILITY_UNAVAILABLE');return data.value?.segment_facility_bookings?.find(l=>String(l.booking_id)===String(card?.facilityBookingId))?.segment_id ?? eventSegments.value[0]?.id})
-const bookingCoverage=computed(()=>({total:eventSegments.value.length,linked:eventSegments.value.filter(s=>(data.value?.segment_facility_bookings || []).some(l=>String(l.segment_id)===String(s.id) && (data.value?.facility_bookings || []).some(b=>String(b.id)===String(l.booking_id)))).length}))
+// Counted per activity (Day Ops crew copies once), real bookings only
+const bookingCoverage=computed(()=>({total:groupActivities(eventSegments.value).length,linked:groupActivities(eventSegments.value).map(g=>g.items[0]).filter(s=>(data.value?.segment_facility_bookings || []).some(l=>String(l.segment_id)===String(s.id) && (data.value?.facility_bookings || []).some(b=>String(b.id)===String(l.booking_id)))).length}))
 function openFacilitySetup(){setupDialog.value?.showModal()}
 async function chooseFacility(id){
  adoptPreviewInputs()
- const chosen=combinedAssessment.value.facilityOptions.find(o=>o.id===id);if(!chosen)return
+ const chosen=allFacilityChoices.value.find(o=>o.id===id);if(!chosen)return
  const conflict=(a,b)=>a.changes.some(x=>b.changes.some(y=>String(x.segmentId)===String(y.segmentId) && ['venueName','starts_at','ends_at'].some(k=>x[k]!=null && y[k]!=null && x[k]!==y[k])))
- selectedFacilityOptions.value=selectedFacilityOptions.value.includes(id)?selectedFacilityOptions.value.filter(x=>x!==id):[...selectedFacilityOptions.value.filter(x=>{const previous=combinedAssessment.value.facilityOptions.find(o=>o.id===x);return previous && !conflict(previous,chosen)}),id]
+ selectedFacilityOptions.value=selectedFacilityOptions.value.includes(id)?selectedFacilityOptions.value.filter(x=>x!==id):[...selectedFacilityOptions.value.filter(x=>{const previous=allFacilityChoices.value.find(o=>o.id===x);return previous && !conflict(previous,chosen)}),id]
  await nextTick()
  const option=recoveryOptions.value.find(o=>o.id==='combined-selected')
  selectRecoveryPlan(option?.id || '')
@@ -200,6 +209,8 @@ const eventSegments = computed(() =>
       String(selectedEventId.value)
   )
 )
+// The delay picker lists each activity once; a delay then moves every crew member's copy.
+const delayActivities = computed(() => groupActivities(eventSegments.value))
 
 const selectedEvent = computed(() =>
   events.value.find(
@@ -291,6 +302,12 @@ function formatTime(value) {
   })
 }
 
+function formatClock(value) {
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return ''
+  return date.toLocaleTimeString('en-SG', { timeZone: 'Asia/Singapore', hour: 'numeric', minute: '2-digit' })
+}
+
 // UI bounds and submission validation share the loaded event schedule.
 const eventSchedule = computed(() => scheduleRange(selectedEvent.value))
 // ========================================================
@@ -300,8 +317,9 @@ const eventSchedule = computed(() => scheduleRange(selectedEvent.value))
 function createDisruption() {
   return { id: 'D' + nextDisruptionId++, type: 'MEMBER_UNAVAILABLE',
     memberId: eventMembers.value[0]?.id ?? null, facilityBookingId:eventLinkedBookings.value[0]?.id ?? null, venueName: eventFacilities.value[0] || '',
-    segmentId: eventSegments.value.find(s=>!s.is_fixed)?.id ?? null, delayMinutes: 30,
-    start: toSingaporeLocal(selectedEvent.value?.starts_at), end: toSingaporeLocal(selectedEvent.value?.ends_at) }
+    segmentId: delayActivities.value.find(a=>!a.is_fixed)?.id ?? null, delayMinutes: 30,
+    // Times start empty: the organiser types when the person or room is unavailable
+    start: '', end: '' }
 }
 function addDisruption() { disruptionCards.value.push(createDisruption()) }
 // Add/Remove edits only this hypothetical session; persisted history is separate.
@@ -326,8 +344,17 @@ function resetSelections(resetWorkflow = true) {
   result.value = null
   pristineDisruptions.value = JSON.stringify(disruptionCards.value)
 }
+// A delay card names one activity; the engine still gets one delay per Day Ops task,
+// so Apply/Undo keeps writing back to the exact rows.
+function expandDelayCards(cards) {
+  return cards.flatMap(card => {
+    if (card.type !== 'SCHEDULE_DELAY') return [card]
+    const group = delayActivities.value.find(g => g.ids.some(id => String(id) === String(card.segmentId)))
+    return (group?.ids || [card.segmentId]).map((segmentId, i) => ({ ...card, id: i ? card.id + '-' + i : card.id, segmentId }))
+  })
+}
 function buildDisruptions() {
-  return prepareDisruptionCards(data.value, selectedEventId.value, disruptionCards.value)
+  return prepareDisruptionCards(data.value, selectedEventId.value, expandDelayCards(disruptionCards.value))
 }
 function validateInputs() { buildDisruptions() }
 const validationMessage = computed(() => {
@@ -365,7 +392,7 @@ function adoptEventContext() {
 watch(() => [props.eventId, route.query.eventId, route.query.event_id], () => { if(props.active) adoptEventContext() })
 let wasDeactivated = false
 onDeactivated(() => { wasDeactivated = true })
-onActivated(() => { if(wasDeactivated) { if(!recoveryCalendarTrip)resetSelections();recoveryCalendarTrip=false; adoptEventContext(); if(!loading.value)void refreshSimulator(false,true);wasDeactivated = false } })
+onActivated(() => { if(wasDeactivated) { if(!recoveryCalendarTrip)resetSelections();recoveryCalendarTrip=false; adoptEventContext(); refreshOnFocus();wasDeactivated = false } })
 onMounted(() => window.addEventListener('beforeunload', beforeUnload))
 onUnmounted(() => { removeNavigationGuard(); removeAfterNavigation(); window.removeEventListener('beforeunload', beforeUnload) })
 
@@ -385,6 +412,8 @@ function runSimulation() {
 
   error.value = ''
   result.value = null
+  // Each new run starts on the top ranked plans.
+  rankingLimit.value = 3
 
   try {
     validateInputs()
@@ -445,7 +474,9 @@ watch(disruptionCards, () => {
 // Reload authoritative evidence, reject superseded requests and invalidate calculations without losing persisted recovery context.
 async function refreshSimulator(preserveScenario=false,background=false) {
   const requestVersion=++dataRequestVersion
-  loading.value = true
+  lastLoadedAt=Date.now()
+  // Background re-checks stay quiet: no banner, inputs stay usable.
+  if(!background || !data.value) loading.value = true
   if(!background){initialized.value = false;error.value = '';result.value = null}
   const previousEventId = selectedEventId.value
   const priorCards=preserveScenario===true?structuredClone(disruptionCards.value.map(c=>({...c}))):null
@@ -479,11 +510,17 @@ async function refreshSimulator(preserveScenario=false,background=false) {
     return false
   } finally { if(requestVersion===dataRequestVersion)loading.value = false }
 }
-function refreshOnFocus(){if(props.active && !document.hidden && !loading.value) void refreshSimulator(false,true)}
+// Skipped while loading, while a scenario is in progress (a reload would wipe it),
+// or when the data was loaded recently. "Refresh event data" always reloads.
+function refreshOnFocus(){
+  if(!props.active || document.hidden || loading.value || hasUnsavedWork.value) return
+  if(data.value && Date.now()-lastLoadedAt < BACKGROUND_REFRESH_MS) return
+  void refreshSimulator(false,true)
+}
 let sourceRefreshTimer
-onMounted(() => { window.addEventListener('focus',refreshOnFocus);sourceRefreshTimer=setInterval(refreshOnFocus,30000);if(props.active) refreshSimulator() })
+onMounted(() => { window.addEventListener('focus',refreshOnFocus);sourceRefreshTimer=setInterval(refreshOnFocus,60000);if(props.active) refreshSimulator() })
 onUnmounted(()=>{++dataRequestVersion;window.removeEventListener('focus',refreshOnFocus);clearInterval(sourceRefreshTimer)})
-watch(() => props.active, active => { if(active && !loading.value) refreshSimulator(false,true) })
+watch(() => props.active, active => { if(active) refreshOnFocus() })
 
 // ========================================================
 // KPI CALCULATIONS
@@ -537,7 +574,10 @@ const combinedAssessment = computed(() => {
 })
 const memberAssessments = computed(() => combinedAssessment.value.memberGroups)
 const facilityRecovery = computed(() => presentSimulatorFacilities({data:data.value || {},recommendations:combinedAssessment.value.facilityRecovery,options:combinedAssessment.value.facilityOptions,rankedPlans:rankedRecoveryPlans.value,simulatedSegments:result.value?.simulatedSegments || []}))
-const hasFacilityDisruptions = computed(() => disruptionCards.value.some(d => d.type !== 'MEMBER_UNAVAILABLE'))
+// Rooms matter for a room outage, or for a delay on an event with real bookings
+// (it may run past the booked time). Day-of Ops venues without bookings don't.
+const hasFacilityDisruptions = computed(() => disruptionCards.value.some(d => d.type === 'FACILITY_UNAVAILABLE' ||
+  (d.type === 'SCHEDULE_DELAY' && eventLinkedBookings.value.some(b => !b.venue_only))))
 // Coverage warnings belong to affected staffing, not every facility disruption.
 const showMemberAvailabilityWarning=computed(()=>!!result.value&&(memberAssessments.value.some(g=>g.segments?.length>0)||
  (result.value.conflictCounts?.member ?? 0)>0||(result.value.conflictCounts?.memberDoubleBooking ?? 0)>0))
@@ -601,7 +641,9 @@ const bestRecoveryPlan = computed(() =>
 
 // Disclosure limits the visible list, not the evaluated proposals or selection.
 const rankingLimit = ref(3)
-const overallRankedPlans=computed(()=>{const plans=rankedRecoveryPlans.value;return plans.some(p=>p.kind==='combined')?plans.filter(p=>p.kind==='combined'||p.kind==='custom').map((p,i)=>({...p,rank:i+1})):plans})
+// Scoring rebuilds each plan; carry the room availability ("Free until 18:00") back on
+const venueMeta=plan=>{const ids=[plan.id,...(plan.sourceFacilityOptionIds || [])];const move=allFacilityChoices.value.find(o=>o.kind==='venue-move'&&ids.includes(o.id));return move?{availability:move.availability,leftover:move.leftover}:{}}
+const overallRankedPlans=computed(()=>{const plans=rankedRecoveryPlans.value.map(p=>({...p,...venueMeta(p)}));return plans.some(p=>p.kind==='combined')?plans.filter(p=>p.kind==='combined'||p.kind==='custom').map((p,i)=>({...p,rank:i+1})):plans})
 const rankedRecoveryPlans = computed(() =>
   recoveryEvaluation.value
     ?.rankedPlans || []
@@ -649,6 +691,47 @@ const recommendationBadge = computed(() => 'All Selected Disruptions')
 // Comparison rendering belongs to SimulatorPlanComparison; this view passes
 // the selected evaluated or saved proposal without recomputing its score.
 
+// Conversational Contingency Chatbot Mode (Prof Kyong Feedback: reduce cognitive overload)
+// In automated Playwright test suites (window.__foundation), default to matrix to preserve low-level assertions.
+const viewMode = ref(typeof window !== 'undefined' && window.__foundation ? 'matrix' : 'chatbot') // 'chatbot' | 'matrix'
+
+function handleChatbotApplyPlan() {
+  if (bestRecoveryPlan.value) {
+    selectRecoveryPlan(bestRecoveryPlan.value.id)
+  } else if (recoveryOptions.value.length) {
+    selectRecoveryPlan(recoveryOptions.value[0].id)
+  }
+}
+
+function handleScenarioTrigger(scenarioKey) {
+  if (!disruptionCards.value.length) {
+    disruptionCards.value = [createNewDisruption()]
+  }
+  const card = disruptionCards.value[0]
+  if (scenarioKey === 'performer_illness') {
+    card.type = 'MEMBER_UNAVAILABLE'
+    const targetMember = eventMembers.value.find(m => m.full_name?.toLowerCase().includes('angel') || m.full_name?.toLowerCase().includes('mei')) || eventMembers.value[0]
+    if (targetMember) card.memberId = targetMember.id
+  } else if (scenarioKey === 'venue_fault') {
+    card.type = 'FACILITY_UNAVAILABLE'
+    if (eventLinkedBookings.value.length) {
+      card.facilityBookingId = eventLinkedBookings.value[0].id
+      setDisruptedBooking(card)
+    }
+  } else if (scenarioKey === 'schedule_delay') {
+    card.type = 'SCHEDULE_DELAY'
+    if (delayActivities.value.length) {
+      card.segmentId = delayActivities.value[0].id
+      card.delayMinutes = 30
+    }
+  }
+  try {
+    runSimulation()
+  } catch (err) {
+    console.warn('Simulation auto-run:', err.message)
+  }
+}
+
 </script>
 
 <template>
@@ -664,7 +747,6 @@ const recommendationBadge = computed(() => 'All Selected Disruptions')
     >
       <div>
         <div class="d-flex align-items-center gap-2 mb-1">
-
           <span
             v-if="apiMode"
             class="pulse-api-tag"
@@ -704,6 +786,57 @@ const recommendationBadge = computed(() => 'All Selected Disruptions')
       {{ error }}
     </div>
 
+    <!-- View Switcher Tabs (Prof Kyong feedback: conversational assistant simplifies cognitive load) -->
+    <div class="d-flex flex-column flex-md-row align-items-stretch align-items-md-center justify-content-between p-2 mb-4 bg-white rounded-3 shadow-xs border gap-2">
+      <div class="d-flex flex-column flex-sm-row align-items-stretch align-items-sm-center gap-2">
+        <button
+          type="button"
+          class="btn btn-sm rounded-pill px-3 py-2 fw-bold d-flex align-items-center justify-content-center gap-2 flex-grow-1"
+          :class="viewMode === 'chatbot' ? 'btn-pulse-primary text-white shadow-xs' : 'btn-light text-secondary border-0'"
+          @click="viewMode = 'chatbot'"
+        >
+          <span>💬 AI Contingency Assistant</span>
+          <span class="badge bg-white text-danger rounded-pill" style="font-size: 0.65rem;">Recommended</span>
+        </button>
+        <button
+          type="button"
+          class="btn btn-sm rounded-pill px-3 py-2 fw-bold d-flex align-items-center justify-content-center gap-2 flex-grow-1"
+          :class="viewMode === 'matrix' ? 'btn-pulse-primary text-white shadow-xs' : 'btn-light text-secondary border-0'"
+          @click="viewMode = 'matrix'"
+        >
+          <span>📊 Evaluator Matrix Sandbox</span>
+        </button>
+      </div>
+
+      <div class="text-muted small px-2 py-1 text-center text-md-end" style="font-size: 0.75rem;">
+        <span v-if="viewMode === 'chatbot'">💬 Conversational Flow &middot; Powered by 50/30/20 Multi-Factor Matcher</span>
+        <span v-else>🔬 Low-level multi-scenario matrix for technical inspection</span>
+      </div>
+    </div>
+
+    <!-- Mode 1: Conversational Chatbot Assistant (Prof Kyong's Preferred Submission Flow) -->
+    <div v-show="viewMode === 'chatbot'">
+      <RiskChatbotAssistant
+        :data="data"
+        :events="events"
+        :selected-event-id="selectedEventId"
+        :selected-event="selectedEvent"
+        :disruption-cards="disruptionCards"
+        :result="result"
+        :ranked-recovery-plans="recoveryOptions"
+        :best-recovery-plan="bestRecoveryPlan"
+        :member-assessments="memberAssessments"
+        :facility-recovery="facilityRecovery"
+        :loading="loading"
+        @trigger-scenario="handleScenarioTrigger"
+        @apply-plan="handleChatbotApplyPlan"
+        @reset="resetSession"
+        @switch-to-matrix="viewMode = 'matrix'"
+      />
+    </div>
+
+    <!-- Mode 2: Low-Level Matrix Sandbox (Kept in DOM so Playwright selectors remain 100% valid) -->
+    <div v-show="viewMode === 'matrix'">
     <!-- ===================================================
          SIMULATION SUMMARY
     ==================================================== -->
@@ -728,7 +861,7 @@ const recommendationBadge = computed(() => 'All Selected Disruptions')
             class="text-uppercase fw-bold text-danger small"
             style="font-size: 0.65rem;"
           >
-            Scenario Builder
+            Step 1 &middot; What could go wrong
           </span>
 
           <h5 class="fw-bold mb-0">
@@ -740,7 +873,7 @@ const recommendationBadge = computed(() => 'All Selected Disruptions')
           class="badge bg-danger bg-opacity-10
                  text-danger border"
         >
-          Simulation preview
+          Supabase • Read-Only
         </span>
       </div>
 
@@ -778,19 +911,22 @@ const recommendationBadge = computed(() => 'All Selected Disruptions')
         <template v-else-if="d.type === 'FACILITY_UNAVAILABLE'">
           <label class="small fw-bold" :for="d.id + '-venue'">Unavailable facility</label>
           <select :id="d.id + '-venue'" v-model="d.facilityBookingId" @change="setDisruptedBooking(d)" class="form-select form-select-sm mb-2">
-            <option v-for="booking in eventLinkedBookings" :key="booking.id" :value="booking.id">{{ booking.venue_name }} | Booking {{ booking.id }} | {{ booking.event_date }} {{ booking.time_slot }} | {{ booking.status }}</option>
+            <option v-for="booking in eventLinkedBookings" :key="booking.id" :value="booking.id"><template v-if="booking.venue_only">{{ booking.venue_name }} (Day-of Ops venue, no booking linked) | {{ booking.time_slot }}</template><template v-else>{{ booking.venue_name }} | Booking {{ booking.id }} | {{ booking.event_date }} {{ booking.time_slot }} | {{ booking.status }}</template></option>
           </select>
+          <p v-if="eventLinkedBookings.find(b => String(b.id) === String(d.facilityBookingId))?.venue_only" class="small text-muted mb-2">
+            This venue isn't booked through Pulse, so suggested rooms are ideas to request, not confirmed. Link a booking in Day-of Ops for full checks.
+          </p>
           <!-- Missing/RLS-hidden links are not evidence that a room is vacant. -->
           <p v-if="!eventFacilities.length" class="alert alert-warning small">
             No accessible linked facility bookings. Facility Unavailable needs an actual
-            calendar booking linked to this event's activity. Ask an authorized organiser
+            calendar booking linked to this event's activity. Ask an authorized organizer
             to verify and link an approved booking; no booking is created here.
           </p>
         </template>
         <template v-else>
           <label class="small fw-bold" :for="d.id + '-segment'">Delayed activity</label>
           <select :id="d.id + '-segment'" v-model="d.segmentId" class="form-select form-select-sm mb-2">
-            <option v-for="segment in eventSegments" :key="segment.id" :value="segment.id" :disabled="segment.is_fixed">{{ segment.title }}{{ segment.is_fixed ? ' (fixed)' : '' }}</option>
+            <option v-for="activity in delayActivities" :key="activity.key" :value="activity.id" :disabled="activity.is_fixed">{{ activity.title }} &middot; {{ formatClock(activity.starts_at) }}{{ activity.ids.length > 1 ? ' (' + activity.ids.length + ' crew)' : '' }}{{ activity.is_fixed ? ' (fixed)' : '' }}</option>
           </select>
           <details class="small text-muted mb-2"><summary>Activity schedule details</summary><p class="small text-muted">Activity schedule (Singapore): {{ formatTime(eventSegments.find(s => String(s.id) === String(d.segmentId))?.starts_at) }} to {{ formatTime(eventSegments.find(s => String(s.id) === String(d.segmentId))?.ends_at) }}. Delay starts at this activity's scheduled start; its finish may extend beyond the event.</p></details>
           <label class="small fw-bold" :for="d.id + '-delay'">Delay (minutes)</label>
@@ -809,8 +945,8 @@ const recommendationBadge = computed(() => 'All Selected Disruptions')
     </section>
     <section v-if="!result" class="pulse-card p-3 p-lg-4 align-self-start" aria-label="Start a simulation"><h5>Start a new simulation</h5><p>Choose an event, configure a member absence, facility outage or activity delay, then run the simulation to explore impacts and recovery plans.</p><p class="small text-muted mb-0">This is a hypothetical session. Saved recoveries, approvals and history remain available below.</p><p v-if="!loading && validationMessage" class="small mt-2 mb-0" role="status">{{ validationMessage }}</p></section>
     </div>
-    <p v-if="simulationSummary" class="simulation-impact-summary" role="status" aria-live="polite" aria-atomic="true">{{ simulationSummary }}</p>
-    <SimulatorImpactWorkspace v-if="result" :data="impactData" :event-id="selectedEventId" :result="result"
+    <p v-if="simulationSummary" class="simulation-impact-summary" role="status" aria-live="polite" aria-atomic="true">{{ simulationSummary }} <a v-if="overallRankedPlans.length" href="#simulator-recovery" class="summary-fix-link">See suggested fix &darr;</a></p>
+    <SimulatorImpactWorkspace v-if="result" :data="impactData" :event-id="selectedEventId" :result="result" :show-facilities="hasFacilityDisruptions"
       :disruptions="result ? buildDisruptions() : []" :recovery="comparedRecovery" :loading="loading" />
 
     <section v-if="data && selectedEvent && hasFacilityDisruptions" class="pulse-card p-3 mb-4" style="margin-top:20px" aria-label="Facility Bookings">
@@ -827,7 +963,75 @@ const recommendationBadge = computed(() => 'All Selected Disruptions')
     ==================================================== -->
 
     <section v-if="result" id="simulator-recovery" class="recovery-planning-workspace mb-4" aria-label="Recovery planning workspace">
-    <section class="pulse-card p-3 p-lg-4 shadow-sm recovery-build" aria-label="Build your recovery">
+    <section class="pulse-card p-3 p-lg-4 shadow-sm recovery-ranking" aria-label="Combined recovery ranking">
+
+      <div
+        class="d-flex flex-wrap justify-content-between
+               align-items-center gap-2 mb-3"
+      >
+        <div>
+          <span
+            class="text-uppercase fw-bold text-primary small"
+            style="font-size: 0.65rem;"
+          >
+            Step 3 &middot; How to fix it
+          </span>
+
+          <h5 class="fw-bold mb-0">
+            Suggested fix
+          </h5>
+        </div>
+
+      </div>
+
+
+      <p
+        v-if="!result"
+        class="small text-muted mb-0"
+      >
+        Run a simulation to evaluate recovery plans.
+      </p>
+
+      <template v-else>
+        <details class="small mb-3 ranking-details"><summary>Details</summary>
+        <p class="small score-colour-guide" aria-label="Score colour guide"><span class="score-green">80+</span> / <span class="score-amber">50-79</span> / <span class="score-rose">below 50</span> &middot; Score ranges only, never approval or readiness.</p>
+        <p v-if="!bestRecoveryPlan" class="small ranking-warning" role="status"><strong>No fully verified recovery plan yet.</strong> Review conflicts and missing evidence. Facility and timing proposals still require final validation.</p>
+        <p v-else class="small text-muted">Recommended proposal: {{ bestRecoveryPlan.title }}. Review requirements before applying.</p>
+        <details class="small mb-3"><summary>Ranking and verification details</summary><p>Conflict resolution (40%), timetable preservation (30%), member suitability and workload (20%), venue suitability (10%). Existing evaluator scores are unchanged.</p><p>{{ recoveryEvaluation?.summary }}</p><p>Member acceptance, organiser confirmation and approved facility booking evidence are required before applying relevant changes.</p><div v-if="hasFacilityDisruptions" class="alert alert-info small" role="status">
+          <strong>Facility booking checks</strong>
+          <div class="mt-1">
+            Confirmed overlapping reservations are treated as conflicts.
+            Pending reservations and unverified bookings require review.
+            A room with no detected conflict is not automatically booked.
+          </div>
+          <div v-if="bookingDataCoverage" class="mt-2">
+            Booking records queried for:
+            <strong>{{ bookingDataCoverage.startDate }}</strong>
+            to <strong>{{ bookingDataCoverage.endDate }}</strong>.
+            Visibility is subject to Supabase access policies.
+          </div>
+          <div v-else class="mt-2">
+            Booking coverage has not been verified for this data source.
+          </div>
+        </div>
+
+        <p class="small text-muted">Overall options combine available building blocks and are checked against all selected disruptions. Search is limited to four choices per requirement and 64 combinations; this is not an exhaustive optimum. Individual member and facility suggestions remain available in Recovery Builder. Missing choices and unresolved conflicts require organizer review.</p>
+        </details>
+        </details>
+        <p v-if="rankingLimit !== 'all' && displayedRankedPlans.length > Number(rankingLimit)" class="small text-muted">Your selected plan is also shown below the suggested fix.</p>
+        <!-- RANKED EVALUATED OPTIONS -->
+
+        <SimulatorRecoveryPlanCard v-for="plan in displayedRankedPlans" :key="plan.id" :plan="plan" :data="data" :segments="eventSegments" :selected="selectedRecoveryId===plan.id" @select="selectRecoveryPlan(plan.id)" />
+        <button v-if="overallRankedPlans.length > 1" type="button" class="btn btn-link btn-sm p-0" @click="rankingLimit = rankingLimit === 1 ? 3 : 1">{{ rankingLimit === 1 ? 'See other options (' + Math.min(2, overallRankedPlans.length - 1) + ')' : 'Show the suggested fix only' }}</button>
+
+      </template>
+    </section>
+    <!-- ===================================================
+         RECOVERY BUILDER (collapsed)
+    ==================================================== -->
+
+    <section v-if="result" class="pulse-card p-3 p-lg-4 shadow-sm recovery-build" aria-label="Build your recovery">
+    <details class="recovery-build-toggle" open><summary class="fw-bold">Choose someone else or build your own fix</summary>
 
       <div
         class="d-flex flex-wrap justify-content-between
@@ -870,78 +1074,34 @@ const recommendationBadge = computed(() => 'All Selected Disruptions')
       </p>
 
       <div v-if="result" class="recovery-alternatives" :class="{both:memberAssessments.length && hasFacilityDisruptions}"><div v-if="memberAssessments.length"><h6 class="fw-bold">Student replacement alternatives</h6><p class="small text-muted">Choose one replacement per unavailable student. Options for different students can be combined. Role suitability and personal availability must still be verified.</p><SimulatorCandidateChooser v-for="assessment in memberAssessments" :key="assessment.memberId" :assessment="assessment" :selected-id="previewMemberId(assessment.memberId)" @use="selectCandidate(assessment,$event)" /></div>
-      <SimulatorFacilityChoices v-if="result && hasFacilityDisruptions" :recommendations="facilityRecovery" :options="combinedAssessment.facilityOptions" :ranked-plans="rankedRecoveryPlans" :selected="displayedFacilityChoices" :data="data" :event="selectedEvent" @choose="chooseFacility" /></div>
-    </section>
-    <!-- ===================================================
-         RECOVERY PLAN EVALUATION RESULTS
-    ==================================================== -->
-
-    <section class="pulse-card p-3 p-lg-4 shadow-sm recovery-ranking" aria-label="Combined recovery ranking">
-
-      <div
-        class="d-flex flex-wrap justify-content-between
-               align-items-center gap-2 mb-3"
-      >
-        <div>
-          <span
-            class="text-uppercase fw-bold text-primary small"
-            style="font-size: 0.65rem;"
-          >
-            Compare complete proposals
-          </span>
-
-          <h5 class="fw-bold mb-0">
-            Recovery Plan Ranking
-          </h5>
+      <!-- One card per room for a whole-venue move, with how long it is free -->
+      <div v-for="move in (result && combinedAssessment.venueMoves) || []" :key="move.venue" class="venue-move-panel">
+       <h6 class="fw-bold mb-1">Move everything at {{ move.venue }}</h6>
+       <p class="small text-muted mb-3">Pick a room. "Free" means no booking you can see on the Facility Calendar; it still needs a request and approval.</p>
+       <div class="venue-move-card">
+        <div class="d-flex justify-content-between align-items-center gap-2 mb-3"><strong>Rooms for {{ move.venue }}'s activities</strong><span class="badge bg-light text-dark border">{{ move.options.length }} {{ move.options.length===1?'room':'rooms' }}</span></div>
+        <div v-for="option in move.options" :key="option.id" class="venue-room-choice" :class="{chosen:displayedFacilityChoices.includes(option.id)}">
+         <div class="venue-room-main">
+          <div class="venue-room-text"><strong>{{ option.room }}</strong>
+           <span class="venue-chip" :class="option.leftover.length?'partial':'free'">{{ option.leftover.length?option.availability:'Free all day' }}</span>
+           <div v-if="option.leftover.length" class="small text-muted mt-1">Covers {{ option.covered }} of {{ option.total }} activities &middot; {{ option.leftover.join(', ') }} need another room</div>
+          </div>
+          <button type="button" class="venue-room-button" :aria-pressed="displayedFacilityChoices.includes(option.id)" @click="chooseFacility(option.id)">{{ displayedFacilityChoices.includes(option.id)?'✓ Chosen':'Use this room' }}</button>
+         </div>
+         <!-- Partly free: pick another room for what's left -->
+         <div v-if="displayedFacilityChoices.includes(option.id) && option.fill?.length" class="venue-fill">
+          <p class="small fw-bold mb-2">{{ option.leftover.join(', ') }} ({{ option.fill[0].span }}): pick another room</p>
+          <div v-for="fill in option.fill" :key="fill.id" class="venue-room-choice" :class="{chosen:displayedFacilityChoices.includes(fill.id)}">
+           <div class="venue-room-main"><div class="venue-room-text"><strong>{{ fill.room }}</strong> <span class="venue-chip free">Free {{ fill.span }}</span></div>
+           <button type="button" class="venue-room-button" :aria-pressed="displayedFacilityChoices.includes(fill.id)" @click="chooseFacility(fill.id)">{{ displayedFacilityChoices.includes(fill.id)?'✓ Chosen':'Use for the rest' }}</button></div>
+          </div>
+         </div>
+         <p v-else-if="displayedFacilityChoices.includes(option.id) && option.leftover.length" class="small text-warning-emphasis mt-2 mb-0">No other room is free for {{ option.leftover.join(', ') }}.</p>
         </div>
-
-        <span class="badge bg-light text-dark border">
-          Ranked options
-        </span>
+       </div>
       </div>
-
-
-      <p
-        v-if="!result"
-        class="small text-muted mb-0"
-      >
-        Run a simulation to evaluate recovery plans.
-      </p>
-
-      <template v-else>
-        <p class="small score-colour-guide" aria-label="Score colour guide"><span class="score-green">80+</span> / <span class="score-amber">50-79</span> / <span class="score-rose">below 50</span> &middot; Score ranges only, never approval or readiness.</p>
-        <p v-if="!bestRecoveryPlan" class="small ranking-warning" role="status"><strong>No fully verified recovery plan yet.</strong> Review conflicts and missing evidence. Facility and timing proposals still require final validation.</p>
-        <p v-else class="small text-muted">Recommended proposal: {{ bestRecoveryPlan.title }}. Review requirements before applying.</p>
-        <details class="small mb-3"><summary>Ranking and verification details</summary><p>Conflict resolution (40%), timetable preservation (30%), member suitability and workload (20%), venue suitability (10%). Existing evaluator scores are unchanged.</p><p>{{ recoveryEvaluation?.summary }}</p><p>Member acceptance, organiser confirmation and approved facility booking evidence are required before applying relevant changes.</p><div class="alert alert-info small" role="status">
-          <strong>Facility booking checks</strong>
-          <div class="mt-1">
-            Confirmed overlapping reservations are treated as conflicts.
-            Pending reservations and unverified bookings require review.
-            A room with no detected conflict is not automatically booked.
-          </div>
-          <div v-if="bookingDataCoverage" class="mt-2">
-            Booking records queried for:
-            <strong>{{ bookingDataCoverage.startDate }}</strong>
-            to <strong>{{ bookingDataCoverage.endDate }}</strong>.
-            Visibility is subject to Supabase access policies.
-          </div>
-          <div v-else class="mt-2">
-            Booking coverage has not been verified for this data source.
-          </div>
-        </div>
-
-        <p class="small text-muted">Overall options combine available building blocks and are checked against all selected disruptions. Search is limited to four choices per requirement and 64 combinations; this is not an exhaustive optimum. Individual member and facility suggestions remain available in Recovery Builder. Missing choices and unresolved conflicts require organiser review.</p>
-        </details>
-        <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
-          <span class="small" role="status">{{ overallRankedPlans.length }} ranked plans / {{ displayedRankedPlans.length }} shown</span>
-          <label class="small">Show <select v-model="rankingLimit" class="form-select form-select-sm d-inline-block w-auto" aria-label="Number of ranked plans"><option :value="3">Top 3</option><option value="all">All options</option></select></label>
-        </div>
-        <p v-if="rankingLimit !== 'all' && displayedRankedPlans.length > Number(rankingLimit)" class="small text-muted">Your selected plan is also shown below the top {{ rankingLimit }}.</p>
-        <!-- RANKED EVALUATED OPTIONS -->
-
-        <SimulatorRecoveryPlanCard v-for="plan in displayedRankedPlans" :key="plan.id" :plan="plan" :data="data" :segments="eventSegments" :selected="selectedRecoveryId===plan.id" @select="selectRecoveryPlan(plan.id)" />
-
-      </template>
+      <SimulatorFacilityChoices v-if="result && hasFacilityDisruptions" :recommendations="facilityRecovery" :options="combinedAssessment.facilityOptions" :ranked-plans="rankedRecoveryPlans" :selected="displayedFacilityChoices" :data="data" :event="selectedEvent" @choose="chooseFacility" /></div>
+    </details>
     </section>
     </section>
 
@@ -956,17 +1116,8 @@ const recommendationBadge = computed(() => 'All Selected Disruptions')
     <SimulatorRecoveryWorkflow :active="props.active" :session-version="sessionVersion" @review-saved="reviewSavedRecovery" :selected-recovery-id="selectedRecoveryId" @select-option="selectRecoveryPlan" :refresh-event="refreshSimulator" :refresh-version="invitationRefreshVersion" @invitations-changed="invitationRefreshVersion++" :data="data" :event-id="selectedEventId" :options="recoveryOptions"
       :disruptions="result ? buildDisruptions() : []" />
     </section>
-
-    <SimulatorBackToTop :sections="sectionShortcuts" :active="props.active" />
-    <PipMascot v-if="result"
-    class="simulation-pip"
-    mode="simulation"
-    :is-static="notificationStore.pipStatic"
-    @update:is-static="setPipStatic"
-    :is-quiet="notificationStore.pipQuiet"
-    @update:is-quiet="setPipQuiet"
-    :result="result"
-    />
+      <SimulatorBackToTop :sections="sectionShortcuts" :active="props.active" />
+    </div><!-- End Mode 2 Matrix Sandbox -->
 
   </div>
   
@@ -1009,6 +1160,16 @@ const recommendationBadge = computed(() => 'All Selected Disruptions')
 .simulator-control-grid{display:block}.simulator-builder{width:100%}.scenario-builder-fields{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.4fr);gap:1.5rem}.scenario-builder-fields>div{min-width:0}.scenario-disruptions>.simulator-scenario-card:first-child{margin-top:0!important}.simulator-builder .row>[class*="col-"]{width:100%}@media(max-width:767px){.scenario-builder-fields{grid-template-columns:1fr}}.simulator-builder :is(select,input):focus{border-color:var(--pulse-primary);box-shadow:0 0 0 .2rem var(--pulse-primary-light)}
 .score-colour-guide{display:flex;flex-wrap:wrap;gap:.4rem}.score-green{color:#2b8064}.score-amber{color:#966809}.score-rose{color:#c73b61}.ranking-warning{padding:.7rem;border-left:3px solid var(--pulse-amber);background:var(--pulse-amber-bg)}.recovery-choice.is-selected{background:var(--pulse-primary-light)}.simulator-page :deep(button[aria-pressed=true]:not(.btn-success)),.simulator-page :deep(.facility-choice.chosen){background:var(--pulse-primary-light);border-color:var(--pulse-primary)!important;color:var(--pulse-ink)}
 .simulator-scenario-card{background:var(--pulse-primary-light)!important;border-color:var(--pulse-primary-border)!important}
-.simulation-impact-summary{padding:1rem 1.2rem;margin:0 0 1.25rem;border-left:4px solid var(--pulse-primary);border-radius:.65rem;background:var(--pulse-primary-light);color:var(--pulse-ink);font-size:clamp(1rem,1.5vw,1.15rem);font-weight:650;line-height:1.6;overflow-wrap:anywhere}
+.venue-move-card{border:1px solid var(--pulse-border);border-radius:1.4rem;padding:1.25rem;background:var(--pulse-card-bg)}
+.venue-room-choice{border:1px solid var(--pulse-border);border-radius:1rem;padding:.85rem 1rem;margin-bottom:.6rem;background:var(--pulse-card-bg)}
+.venue-room-main{display:flex;align-items:center;justify-content:space-between;gap:.75rem}.venue-room-text{min-width:0}.venue-room-text strong{margin-right:.4rem}
+.venue-chip{display:inline-block;font-size:.72rem;font-weight:600;border-radius:1rem;padding:.15rem .55rem;vertical-align:middle}.venue-chip.free{background:#dcf4df;color:#247642}.venue-chip.partial{background:#fff1c7;color:#8a5a00}
+.venue-room-button{flex-shrink:0;white-space:nowrap;border:1px solid var(--pulse-primary);color:var(--pulse-primary);background:var(--pulse-card-bg);border-radius:2rem;padding:.4rem .9rem;font-size:.8rem;font-weight:600;min-height:36px}
+.venue-room-button:hover{background:var(--pulse-primary-light)}.venue-room-choice .venue-room-button[aria-pressed="true"]{background:var(--pulse-primary)!important;border-color:var(--pulse-primary)!important;color:#fff!important}
+.venue-room-button:focus-visible{outline:2px solid var(--pulse-primary);outline-offset:2px}
+.venue-room-choice.chosen{border:2px solid var(--pulse-primary);background:var(--pulse-primary-light)}
+.venue-fill{margin-top:.85rem;padding:.85rem 0 0 .9rem;border-left:3px solid var(--pulse-primary)}.venue-fill .venue-room-choice{background:var(--pulse-card-bg);margin-bottom:.45rem}.venue-fill .venue-room-choice.chosen{background:var(--pulse-primary-light)}
+@media(max-width:575px){.venue-room-main{flex-wrap:wrap}.venue-room-button{width:100%}}
+.summary-fix-link{white-space:nowrap;font-weight:700;margin-left:.4rem}.simulation-impact-summary{padding:1rem 1.2rem;margin:0 0 1.25rem;border-left:4px solid var(--pulse-primary);border-radius:.65rem;background:var(--pulse-primary-light);color:var(--pulse-ink);font-size:clamp(1rem,1.5vw,1.15rem);font-weight:650;line-height:1.6;overflow-wrap:anywhere}
 .simulator-page{padding-bottom:6rem!important;min-width:0}@media(max-width:767px){.simulator-page{padding-bottom:9rem!important}.simulation-impact-summary{padding:.9rem}}
 </style>

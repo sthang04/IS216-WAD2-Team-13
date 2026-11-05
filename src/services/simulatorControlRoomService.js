@@ -1,4 +1,5 @@
 // Purpose: Build the shared map, activity, timeline and heatmap presentation model from original and simulated records.
+import {activityKey} from './simulatorActivityGroups.js'
 import {simulatorBookingPeriod} from './simulatorFacilityEvidence.js'
 const same=(a,b)=>a!=null&&b!=null&&String(a)===String(b)
 const key=value=>String(value || '').trim().toLowerCase()
@@ -76,8 +77,11 @@ export function buildControlRoomModel(data={},eventId,result=null,disruptions=[]
  // preventing distant event dates from compressing every bar into a sliver.
  const position=(a,b)=>valid(start,end)&&valid(a,b)&&overlap(a,b,start,end)?{left:Math.max(0,(a-start)/span*100),width:(Math.min(b,end)-Math.max(a,start))/span*100}:null
  const timeline=activities.map(a=>({...a,originalBar:position(a.originalStart,a.originalEnd),simulatedBar:position(a.simulatedStart,a.simulatedEnd)})).filter(a=>a.originalBar || a.simulatedBar)
- const bookings=data.facility_bookings || data.facility_slots || []
- const links=(data.segment_facility_bookings || data.segment_facility_slots || []).filter(l=>ids.has(String(l.segment_id)))
+ // Real bookings, plus Day-of Ops "venue only" stand-ins (venues without a linked booking).
+ const venueOnly=(data.facility_slots || []).filter(s=>s.venue_only)
+ const venueOnlyIds=new Set(venueOnly.map(s=>String(s.id)))
+ const bookings=[...(data.facility_bookings || (venueOnly.length?[]:data.facility_slots) || []),...venueOnly]
+ const links=[...(data.segment_facility_bookings || (venueOnly.length?[]:data.segment_facility_slots) || []),...(data.segment_facility_slots || []).filter(l=>venueOnlyIds.has(String(l.facility_slot_id)))].filter(l=>ids.has(String(l.segment_id)))
  const bookingById=new Map(bookings.map(b=>[String(b.id),b]))
  const linkedIds=new Set(links.map(l=>String(l.booking_id ?? l.facility_slot_id)))
  const groups=new Map()
@@ -99,7 +103,10 @@ export function buildControlRoomModel(data={},eventId,result=null,disruptions=[]
   return {...group,cells:cells.map(cell=>{
    const inUse=activities.filter(a=>linkedSegments.has(String(a.id))&&(!result?.proposedVenues?.[String(a.id)] || key(result.proposedVenues[String(a.id)])===key(group.name))&&overlap(a.simulatedStart,a.simulatedEnd,cell.start,cell.end))
    const outage=hasSimulation&&(disruptions || []).some(d=>d.type==='FACILITY_UNAVAILABLE'&&key(d.venueName)===key(group.name)&&overlap(time(d.start),time(d.end),cell.start,cell.end))
-   const simultaneous=inUse.some((a,i)=>inUse.slice(i+1).some(b=>valid(Math.max(a.simulatedStart,b.simulatedStart),Math.min(a.simulatedEnd,b.simulatedEnd))&&overlap(Math.max(a.simulatedStart,b.simulatedStart),Math.min(a.simulatedEnd,b.simulatedEnd),cell.start,cell.end)))
+   // Crew members' copies of one Day Ops activity are one use of the room, not a clash.
+   // A Day-of Ops venue (no booking) can hold several activities at once, e.g. a hall.
+   const distinctUse=group.bookings.every(b=>b.venue_only)?[]:[...new Map(inUse.map(a=>[activityKey(a),a])).values()]
+   const simultaneous=distinctUse.some((a,i)=>distinctUse.slice(i+1).some(b=>valid(Math.max(a.simulatedStart,b.simulatedStart),Math.min(a.simulatedEnd,b.simulatedEnd))&&overlap(Math.max(a.simulatedStart,b.simulatedStart),Math.min(a.simulatedEnd,b.simulatedEnd),cell.start,cell.end)))
    const competingPairs=[]
    calendar.forEach((a,i)=>calendar.slice(i+1).forEach(b=>{
     const [as,ae]=simulatorBookingPeriod(a),[bs,be]=simulatorBookingPeriod(b)

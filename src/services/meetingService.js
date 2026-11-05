@@ -42,6 +42,10 @@ export function setAvailability(meetingId, slotDate, hour, available) {
   })
 }
 
+export function clearMeetingResponse(meetingId) {
+  return call('rpc_clear_meeting_response', { p_meeting_id: meetingId })
+}
+
 export function submitNoAvailability(meetingId) {
   return call('rpc_submit_no_availability', { p_meeting_id: meetingId })
 }

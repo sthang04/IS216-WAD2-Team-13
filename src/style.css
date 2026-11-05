@@ -46,12 +46,18 @@
   --pulse-shadow-brand: 0 10px 25px -5px rgba(225, 29, 72, 0.25);
 }
 
-html, body, #app {
+html, body {
   margin: 0;
   width: 100%;
   max-width: 100%;
-  overflow-x: hidden;
+  overflow-x: clip;
   box-sizing: border-box;
+}
+
+#app {
+  width: 100%;
+  max-width: 100%;
+  min-height: 100vh;
 }
 
 body {
@@ -1009,6 +1015,7 @@ body {
   background-color: #10b981;
   display: inline-block;
   flex-shrink: 0;
+  margin-right: 5px;
 }
 
 .pulse-mobile-pill:active {
