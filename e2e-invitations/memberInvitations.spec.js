@@ -2,6 +2,7 @@
 // Setup opens the real Vue UI; actions use its controls; assertions check visible results/state.
 // Uses isolated fixture responses; passing UI checks do not prove deployed database or delivery integration.
 import {test,expect} from '../e2e/helpers/browserUi.js'
+import {openPage} from '../e2e/helpers/navigation.js'
 import {readFileSync} from 'node:fs'
 const client=readFileSync(new URL('./memberClient.js',import.meta.url),'utf8')
 const service=readFileSync(new URL('../src/services/simulatorWorkflowService.js',import.meta.url),'utf8')
@@ -24,17 +25,9 @@ async function respond(page,id,verb){
 }
 test('ordinary member uses actual PULSE navigation and sees complete invitation terms without organiser permission',async({page})=>{
  await boot(page)
- const mobile=page.getByLabel('Navigate PULSE',{exact:true})
- if(await mobile.isVisible()){
-  await mobile.selectOption('heatmap');await mobile.selectOption('schedule')
- }else if(await page.getByRole('navigation',{name:'Mobile PULSE navigation',exact:true}).isVisible()){
-  const nav=page.getByRole('navigation',{name:'Mobile PULSE navigation',exact:true})
-  await nav.getByRole('button',{name:/Heatmap/}).click()
-  await nav.getByRole('button',{name:/My Schedule/}).click()
- }else{
-  await page.getByRole('button',{name:/^(Availability )?Heatmap$/}).click()
-  await page.getByRole('button',{name:/^(Personal )?Schedule$/}).click()
- }
+ // Use the visible navigation for this screen size (header pills or the ☰ drawer).
+ await openPage(page,'heatmap')
+ await openPage(page,'schedule')
  await expect(page).toHaveURL(/personal-schedule/)
  const item=card(page,'accept-me')
  for(const text of ['Dance Showcase','Opening rehearsal','Stage crew','Gym Studio','Fixture Dance Club','SGT','Expires','Pending'])await expect(item).toContainText(text)

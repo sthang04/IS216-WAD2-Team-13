@@ -1,7 +1,8 @@
 // BROWSER TEST PURPOSE: navigation user workflows and regression coverage.
 // Setup opens the real Vue UI; actions use its controls; assertions check visible results/state.
 // Uses isolated fixture responses; passing UI checks do not prove deployed database or delivery integration.
-﻿import {test,expect} from './fixtures/app.js'
+import {test,expect} from './fixtures/app.js'
+import {openPage} from '../e2e/helpers/navigation.js'
 
 test('anonymous direct route returns to the requested page after login',async({page,app})=>{
  await app.open('/personal-schedule')
@@ -33,7 +34,8 @@ test('club navigation supports history, refresh and account-menu Escape',async({
 test('OSL role opens review and cannot navigate directly to student operations',async({page,app})=>{
  await app.open('/facilities',{authenticated:true,role:'admin'})
  await expect(page.getByRole('button',{name:'Personal Schedule',exact:true})).toHaveCount(0)
- await page.getByRole('button',{name:'OSL Review',exact:true}).click()
+ // Header pill on desktop, ☰ drawer on phones.
+ await openPage(page,'review')
  await expect(page).toHaveURL(/\/facilities\/admin$/)
  await expect(page.getByRole('heading',{name:'Awaiting OSL approval (0)',exact:true})).toBeVisible()
  await page.goto('/operations')

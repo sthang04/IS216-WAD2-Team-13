@@ -1,7 +1,7 @@
 // BROWSER TEST PURPOSE: notifications user workflows and regression coverage.
 // Setup opens the real Vue UI; actions use its controls; assertions check visible results/state.
 // Uses isolated fixture responses; passing UI checks do not prove deployed database or delivery integration.
-﻿import {test,expect} from './fixtures/app.js'
+import {test,expect} from './fixtures/app.js'
 const bell=page=>page.getByRole('button',{name:/^Notifications, \d+ unread$/})
 const notice=page=>page.getByRole('button',{name:/Fixture schedule update Review your synthetic assignment/})
 
@@ -78,7 +78,11 @@ test('notification panel closes with Escape and outside pointer interaction',asy
  await page.keyboard.press('Escape')
  await expect(bell(page)).toHaveAttribute('aria-expanded','false')
  await bell(page).click()
- await page.getByRole('heading',{name:'Pulse - Master Facility Calendar',exact:true}).click()
+ // Click the page outside the panel. On phones the panel covers the page heading, so pick a
+ // point below the panel (or the bottom-left corner if the panel reaches the bottom).
+ const panel=await page.getByRole('region',{name:'Notifications',exact:true}).boundingBox()
+ const {height}=page.viewportSize()
+ await page.mouse.click(6,Math.min(height-6,panel.y+panel.height+12))
  await expect(bell(page)).toHaveAttribute('aria-expanded','false')
 })
 

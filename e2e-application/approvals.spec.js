@@ -1,7 +1,7 @@
 // BROWSER TEST PURPOSE: approvals user workflows and regression coverage.
 // Setup opens the real Vue UI; actions use its controls; assertions check visible results/state.
 // Uses isolated fixture responses; passing UI checks do not prove deployed database or delivery integration.
-﻿import {test,expect} from './fixtures/app.js'
+import {test,expect} from './fixtures/app.js'
 
 test('recent decisions list the latest action first and a late transfer reads as rejected',async({page,app})=>{
  const decision=(transfer_id,state,decided_at,booking_date,fbs_reference,rejection_reason=null)=>({transfer_id,state,decided_at,booking_date,fbs_reference,rejection_reason,
@@ -68,7 +68,8 @@ test('failed approval retains pending request and displays refusal',async({page,
 test('transfer deep link opens request and closes without losing review route',async({page,app})=>{
  await app.open('/facilities/admin?transfer=801',{authenticated:true,role:'admin',facilities:true,transfers:true})
  const dialog=page.getByRole('dialog',{name:'Transfer request',exact:true})
- await expect(dialog).toContainText('FIXTURE-AUDIT-801')
+ // The review dialog identifies the request by its FBS booking reference.
+ await expect(dialog).toContainText('FIXTURE-FBS-502')
  await dialog.getByRole('button',{name:'Close',exact:true}).click()
  await expect(dialog).toHaveCount(0)
  await expect(page).toHaveURL(/\/facilities\/admin$/)

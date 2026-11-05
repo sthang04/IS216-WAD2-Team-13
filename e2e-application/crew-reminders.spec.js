@@ -1,4 +1,7 @@
-﻿import { test, expect } from './fixtures/app.js'
+// BROWSER TEST PURPOSE: Day-of Operations crew reminder workflow and regression coverage.
+// Setup opens the real Vue UI; actions use its controls; assertions check visible results/state.
+// Uses isolated fixture responses; passing UI checks do not prove deployed database or delivery integration.
+import { test, expect } from './fixtures/app.js'
 
 // setup, actions, assertions; real UI and automatic waiting.
 // Browser coverage only. Server scheduling and Telegram delivery require the
@@ -21,5 +24,5 @@ test('crew can create an event and see the automatic reminder policy', async ({ 
   // Assertions
   await expect(dialog).toHaveCount(0)
   await expect(page.getByRole('combobox', { name: 'Event', exact: true })).toContainText('Crew reminder rehearsal')
-  await expect(page.getByText('Saved events and tasks automatically remind assigned crew on Telegram 15 minutes before they start. Sample plans do not send reminders.', { exact: true })).toBeVisible()
+  await expect(page.getByText('Saved events and tasks automatically remind assigned crew on Telegram 15 minutes before they start.', { exact: true })).toBeVisible()
 })

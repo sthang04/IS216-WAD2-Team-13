@@ -183,9 +183,9 @@ test('schedule editor fields and footer fit while creating a long academic entry
  await assertBoxOnScreen(page,modal.locator('.modal-content'),'Schedule form')
  await modal.locator('select').nth(0).selectOption('Academic')
  await modal.locator('select').nth(1).selectOption({index:1})
- await modal.getByPlaceholder('e.g. SR 2.1, Studio L7.2, B1 Stage').fill('Seminar Room 2.1')
+ await modal.getByPlaceholder('e.g. SR 2.1, Studio L7.2').fill('Seminar Room 2.1')
  await modal.getByPlaceholder('e.g. Lead Dancer, Student').fill('Student coordinator')
- await modal.getByPlaceholder('e.g. Bring dance sneakers, project slide deck ready.').fill('Bring notes and review the long academic agenda. '.repeat(5))
+ await modal.getByPlaceholder('e.g. Bring dance sneakers.').fill('Bring notes and review the long academic agenda. '.repeat(5))
  await assertControlUsable(page,modal.getByRole('button',{name:'Add to Schedule',exact:true}),'Schedule save')
  await modal.getByRole('button',{name:'Add to Schedule',exact:true}).click()
  // Assert: the new visible card preserves all user-entered information.
@@ -212,7 +212,7 @@ test('schedule day navigation and full status cycle survive a refresh',async({pa
  // The date picker must select the same days as the previous/next controls.
  await page.getByLabel('Schedule date',{exact:true}).fill('2026-11-20')
  await expect(page.getByRole('heading',{name:'Nothing scheduled yet',exact:true})).toBeVisible()
- await page.getByLabel('Schedule date',{exact:true}).fill('2026-10-23')
+ await page.getByLabel('Schedule date',{exact:true}).fill('2026-11-03')
  await expect(card).toBeVisible();await page.reload()
  // Assert: saved content and its current status survive re-entry.
  await expect(scheduleCard(page,'UI status cycle').getByRole('button',{name:'Not Started',exact:true})).toBeVisible()
@@ -245,7 +245,7 @@ test('meeting timetable import persists after refresh and can be removed',async(
  // Actions: import via file chooser and revisit the saved baseline.
  await uploadTimetable(page,timetable)
  await expect(page.getByRole('alert')).toContainText('Imported 1 events')
- await expect(page.getByText('Timetable: ui-timetable.ics',{exact:true})).toBeVisible()
+ await expect(page.getByText('Timetable imported',{exact:true})).toBeVisible()
  await page.reload()
  await expect(page.getByRole('button',{name:'Replace Timetable (.ics)',exact:true})).toBeVisible()
  await page.getByRole('button',{name:'Remove',exact:true}).click()
@@ -263,7 +263,7 @@ for(const scenario of ['empty','refused']){
   // Assert: errors stay visible and the unsaved file is not presented as imported.
   await expect(page.getByRole('alert')).toContainText(scenario==='empty'?'No timed events found':'Could not import')
   await expect(page.getByRole('button',{name:'Import Timetable (.ics)',exact:true})).toBeVisible()
-  await expect(page.getByText('Timetable: ui-timetable.ics',{exact:true})).toHaveCount(0)
+  await expect(page.getByText('Timetable imported',{exact:true})).toHaveCount(0)
  })
 }
 
@@ -274,7 +274,8 @@ test('meeting reminders update visible cooldown without sending a real Telegram 
  await page.getByRole('button',{name:'Nudge via Telegram',exact:true}).click()
  // Assert: visible confirmation and disabled cooldown actions come from the saved fixture response.
  await expect(page.getByRole('alert')).toContainText('Telegram reminder sent')
- await expect(page.getByText(/Nudged just now/)).toBeVisible()
+ // Each nudged member row shows its own cooldown label.
+ await expect(page.getByText(/Nudged just now/).first()).toBeVisible()
  await expect(page.getByRole('button',{name:/All pending participants nudged/})).toBeDisabled()
 })
 
@@ -452,11 +453,13 @@ test('Dev club selector and persona menu remain usable for every available club'
  const menu=page.locator('header .card').filter({has:page.getByRole('button',{name:'Sign out',exact:true})})
  await assertBoxOnScreen(page,menu,'Dev account menu')
  await assertControlUsable(page,page.getByRole('button',{name:'Sign out',exact:true}),'Dev sign out')
- await page.getByRole('button',{name:/Marcus Lim/}).click()
- await page.getByRole('button',{name:'Account menu for Marcus Lim',exact:true}).click()
- await page.getByRole('button',{name:/Dev Administrator/}).click()
- // Assert: changing the viewing persona can return to Dev without fabricating a new session.
- await expect(page.getByRole('button',{name:'Account menu for Dev Administrator',exact:true})).toBeVisible()
+ await page.getByRole('button',{name:/Darren Koh/}).click()
+ await page.getByRole('button',{name:'Account menu for Darren Koh',exact:true}).click()
+ // The demo switcher lists the club personas (Rachel Tan, Darren Koh); switch again to prove
+ // the viewing persona can keep changing without fabricating a new session.
+ await page.getByRole('button',{name:/Rachel Tan/}).click()
+ // Assert: the header now shows the newly chosen persona.
+ await expect(page.getByRole('button',{name:'Account menu for Rachel Tan',exact:true})).toBeVisible()
 })
 
 test('Operations running-late choices can be cancelled, recorded and cleared',async({page,app})=>{

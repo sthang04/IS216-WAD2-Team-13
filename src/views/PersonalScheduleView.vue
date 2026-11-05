@@ -56,7 +56,11 @@ const editingId = ref(null);
 const formError = ref('');
 
 // ---- Day being viewed ----
-const selectedDate = ref('2026-10-23');
+// Opens on today (the header says "for today"). The offline/guest sample events are all
+// dated SAMPLE_DATE, so sample mode opens on that day instead (see loadPersonalEvents).
+const SAMPLE_DATE = '2026-10-23';
+const TODAY = toISO(new Date());
+const selectedDate = ref(TODAY);
 
 function parseISO(s) {
   const [y, m, d] = s.split('-').map(Number);
@@ -233,12 +237,20 @@ const opsTasks = ref([]);       // your Day-of Ops tasks (edited on the Operatio
 const scheduleEvents = computed(() => [...personalEvents.value, ...opsTasks.value]);
 
 let personalSeq = 0;
+let jumpedToSample = false; // true while the view shows SAMPLE_DATE only because samples were loaded
 async function loadPersonalEvents() {
   const seq = ++personalSeq;
   if (!usesDatabase.value) {
     personalEvents.value = sampleEvents();
+    if (selectedDate.value === TODAY) {
+      selectedDate.value = SAMPLE_DATE;
+      jumpedToSample = true;
+    }
     return;
   }
+  // Signed in after briefly showing the samples (the session restores a moment after load): back to today
+  if (jumpedToSample && selectedDate.value === SAMPLE_DATE) selectedDate.value = TODAY;
+  jumpedToSample = false;
   try {
     const rows = await fetchMyPersonalEvents();
     if (seq === personalSeq) personalEvents.value = rows;
@@ -287,7 +299,8 @@ async function syncOpsTasks(forceToast = false) {
 
   if (tasksCount > 0) {
     opsSyncInfo.value = { eventName, eventDate, eventCount: tasksCount, otherEvents: eventsCount - 1 };
-    if (selectedDate.value === '2026-10-23' && eventDate) {
+    // Still on the starting day: jump to the Day-of Ops event so its tasks are in view
+    if ((selectedDate.value === TODAY || selectedDate.value === SAMPLE_DATE) && eventDate) {
       selectedDate.value = eventDate;
     }
     if (forceToast) {
@@ -414,7 +427,11 @@ async function loadWalkTimes() {
 const routeKey = computed(() =>
   sortedEvents.value.map(e => `${e.id}|${e.date}|${e.startTime}|${e.endTime}|${e.building || e.venue}`).join(';')
 );
-watch(routeKey, loadWalkTimes, { immediate: true });
+// This view stays mounted behind other pages, so only look up walk times while it
+// is on screen. Otherwise every page would send venue names to OneMap for nothing.
+watch([routeKey, () => props.active], ([, active]) => {
+  if (active) loadWalkTimes();
+}, { immediate: true });
 
 function transitText(event) {
   const i = walkInfo.value[event.id];

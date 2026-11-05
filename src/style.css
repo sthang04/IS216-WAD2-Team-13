@@ -2,6 +2,13 @@
 
 /* The Dev persona list is longer than a small phone: keep the menu bounded and scrollable. */
 .pulse-account-menu { max-height: calc(100dvh - 72px); max-width: calc(100vw - 24px); overflow-y: auto; overscroll-behavior: contain; }
+/* Below lg the ☰ button (38px) plus an 8px gap and 16px header padding sit to the right of the
+   avatar, so a 260px menu anchored to the avatar's right edge hangs off small phones. Shift it
+   50px right (12px from the screen edge) and cap its width to the screen. */
+@media (max-width: 991.98px) {
+  /* Doubled class outranks Bootstrap's .end-0 { right: 0 !important }, which loads after this file */
+  .pulse-account-menu.pulse-account-menu { left: auto !important; right: -50px !important; width: min(260px, calc(100vw - 24px)) !important; min-width: 0 !important; max-width: calc(100vw - 24px) !important; }
+}
 /* Nested modal forms must shrink so Bootstrap can scroll the body and retain the footer. */
 .pulse-scrollable-modal-form { display: flex; flex-direction: column; min-height: 0; overflow: hidden; }
 

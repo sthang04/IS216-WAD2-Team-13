@@ -1,6 +1,7 @@
 // Shared real-app browser steps. Use the visible login/navigation controls and
 // auto-wait for page state; never fabricate a session or use fixed sleep delays.
 import {expect} from '@playwright/test'
+import {openPage} from './navigation.js'
 export async function signIn(page,name='Rachel Tan'){
  await page.goto('/')
  await page.evaluate(()=>{
@@ -15,14 +16,10 @@ export async function signIn(page,name='Rachel Tan'){
  await expect(page).toHaveURL(/\/facilities$/,{timeout:45000})
  await expect(page.getByRole('heading',{name:'Pulse - Master Facility Calendar',exact:true})).toBeVisible({timeout:45000})
 }
-export async function navigate(page,desktop,mobile){
- const bar=page.getByRole('navigation',{name:'Mobile PULSE navigation',exact:true})
- if(page.viewportSize().width<1024)await bar.getByRole('button',{name:mobile}).click()
- else {
-  // The compact desktop header omits prefixes while retaining the same route action.
-  const names={'Day-of Operations':/^(Day-of )?Operations$/,'Personal Schedule':/^(Personal )?Schedule$/,'Master Facility Calendar':/^(Master )?Facility Calendar$/,'Availability Heatmap':/^(Availability )?Heatmap$/,'Event Risk Planning':/^(Event )?Risk Planning$/}
-  await page.getByRole('button',{name:names[desktop]||desktop,exact:true}).click()
- }
+// desktop: the full feature name (e.g. 'Day-of Operations'). The mobile argument is kept
+// for existing callers; phones now navigate through the ☰ drawer using the same full name.
+export async function navigate(page,desktop,_mobile){
+ await openPage(page,desktop)
 }
 export async function fits(page,label){
  await expect.poll(()=>page.evaluate(()=>Math.max(document.documentElement.scrollWidth,

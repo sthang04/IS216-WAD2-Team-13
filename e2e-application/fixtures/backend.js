@@ -1,7 +1,7 @@
 // SUPPORT FILE PURPOSE: backend.js supplies shared setup or controlled data for the browser workflows.
 // Keep this support code: the Playwright tests depend on consistent setup and isolated state.
 import {createMeetingBackend} from '/e2e-application/fixtures/meetingBackend.js'
-﻿// Test-only database boundary. Browser tests still use production services/loader.
+// Test-only database boundary. Browser tests still use production services/loader.
 import {campusConnectMultiEventFixture} from '/e2e-simulator/fixtures/campusConnect.js'
 
 export function createBackend(config,calls){
@@ -43,6 +43,21 @@ export function createBackend(config,calls){
     link_path:'/personal-schedule',created_at:'2026-11-03T01:55:00Z'},
    {id:402,title:'Fixture facility update',message:'Read the fixture calendar',is_read:false,
     link_path:'/facilities',created_at:'2026-11-03T01:50:00Z'}]:[]}
+ // Saved Personal Schedule rows (personal_events) for the signed-in member on Tue 3 Nov 2026 (the fixture's
+ // 'today'; the clock is fixed at 10:00, so these afternoon/evening entries are still upcoming):
+ // one academic class plus CCA/ad-hoc entries, so schedule tests have realistic content.
+ // config.emptySchedule starts with no saved events, to exercise the "Nothing scheduled yet" state.
+ if(!sessionStorage.getItem(key)){
+  const entry=(id,title,category,start,end,room,status)=>({id,title,category,event_date:'2026-11-03',
+   start_time:start+':00',end_time:end+':00',building:category==='Academic'?'SMU SCHOOL OF COMPUTING AND INFORMATION SYSTEMS 1':'LI KA SHING LIBRARY',
+   room,venue:room,role:'Fixture Arts Club Member',notes:null,status})
+  state.personalEvents=config().emptySchedule?[]:[
+   entry('fixture-pe-1','IS216 Web Application Development II (G1)','Academic','15:30','17:00','Seminar Room 2.1, SCIS1','Completed'),
+   entry('fixture-pe-2','Act 2 Floor Positioning & Soundcheck','CCA','18:30','19:15','Main Hall Stage B1','In Progress'),
+   entry('fixture-pe-3','Act 2 Audio & Lighting Programming','Adhoc','19:30','20:10','Audio & Lighting Booth B1','Not Started'),
+   entry('fixture-pe-4','Opening Night Live Production (Curtain Call)','CCA','20:15','21:45','Main Hall Stage B1','Not Started'),
+   entry('fixture-pe-5','Fixture Arts Club ExCo Debrief & Safety Check','Adhoc','22:00','22:30','Studio 7.1, SOE Level 7','Not Started')]
+ }
  // Only the UI stress scenario expands the list; all existing notification fixtures stay unchanged.
  if(config().notificationCount && !sessionStorage.getItem(key)){
   state.notifications=Array.from({length:config().notificationCount},(_,i)=>({
@@ -135,6 +150,26 @@ export function createBackend(config,calls){
   if(name==='rpc_my_notifications')return ok(state.notifications)
   if(name==='rpc_mark_notifications_read'){for(const n of state.notifications)if(args.p_notification_id==null||n.id===args.p_notification_id)n.is_read=true;persist();return ok({})}
   if(name==='rpc_delete_notifications'){state.notifications=state.notifications.filter(n=>args.p_notification_id!=null&&n.id!==args.p_notification_id);persist();return ok({})}
+  // Personal Schedule events (src/services/scheduleService.js). Signed-in users now save
+  // their own entries in the personal_events table instead of localStorage. Kept in the
+  // session-scoped fixture state so create/edit/delete survive a reload like the real table.
+  if(name==='rpc_my_personal_events')return ok(state.personalEvents||[])
+  if(name==='rpc_save_personal_event'){
+   const row={...args.p_event}
+   state.personalEvents=(state.personalEvents||[]).filter(e=>e.id!==row.id).concat(row)
+   persist();return ok(row)
+  }
+  if(name==='rpc_delete_personal_event'){
+   state.personalEvents=(state.personalEvents||[]).filter(e=>e.id!==args.p_id)
+   persist();return ok({})
+  }
+  // Meeting scheduler commitments: the signed-in member's own personal events, shown as busy
+  // time with their title (the database hides titles for other members, which have none here).
+  if(name==='rpc_club_commitments'){
+   const minute=t=>Number(t.slice(0,2))*60+Number(t.slice(3,5))
+   return ok((state.personalEvents||[]).filter(e=>e.event_date>=args.p_from&&e.event_date<=args.p_to)
+    .map(e=>({member_id:7001,slot_date:e.event_date,start_minute:minute(e.start_time),end_minute:minute(e.end_time),kind:'busy',title:e.title})))
+  }
   if(name==='rpc_create_telegram_link_code')return ok('fixture-link-code')
   if(name==='rpc_osl_pending_transfers')return ok(state.transfers)
   if(name==='rpc_recent_transfer_decisions')return ok(state.decisions)

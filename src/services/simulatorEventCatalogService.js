@@ -1,5 +1,5 @@
 // Purpose: Combine both real event sources using verified stable mappings, retaining independent events and archived-source exclusions.
-﻿/** Unified, read-only event data. Both tables can contain real events. Exact
+/** Unified, read-only event data. Both tables can contain real events. Exact
  * server mappings identify Ops projections; names and dates never merge rows. */
 import { readSimulatorRows } from './simulatorPaginationService.js'
 import { readOpsSimulationData } from './simulatorOpsDataService.js'

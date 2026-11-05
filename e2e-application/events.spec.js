@@ -1,8 +1,8 @@
 // BROWSER TEST PURPOSE: events user workflows and regression coverage.
 // Setup opens the real Vue UI; actions use its controls; assertions check visible results/state.
 // Uses isolated fixture responses; passing UI checks do not prove deployed database or delivery integration.
-﻿import {test,expect} from './fixtures/app.js'
-import {eventSelect,runDelay} from './fixtures/journeys.js'
+import {test,expect} from './fixtures/app.js'
+import {eventSelect,runDelay,chooseDisruptionTime} from './fixtures/journeys.js'
 
 test('real app navigation loads authorized events and selected event activities',async({page,app})=>{
  await app.open('/facilities',{authenticated:true,simulation:true})
@@ -19,7 +19,8 @@ test('real app navigation loads authorized events and selected event activities'
 
 test('pending event query disables simulation and resolves to actual options',async({page,app})=>{
  await app.open('/events',{authenticated:true,simulation:true,holdTable:'events'})
- await expect(page.getByText(/Loading Supabase event data/)).toBeVisible()
+ // The loading message shows in both the event picker and the page body; either proves the pending state.
+ await expect(page.getByText('Loading your events…',{exact:true}).first()).toBeVisible()
  await expect(eventSelect(page)).toBeDisabled()
  await expect(page.getByRole('button',{name:'Refresh event data',exact:true})).toBeDisabled()
  await page.evaluate(()=>{window.__foundation.configure({holdTable:null});window.__foundation.release()})
@@ -124,8 +125,8 @@ test('one failed roster is disclosed without borrowing another event roster',asy
  await app.open('/events',{authenticated:true,simulation:true,rosterError:990003})
  await expect(eventSelect(page).locator('option')).toHaveCount(2)
  await eventSelect(page).selectOption('990003')
- await page.getByLabel('Unavailable from (Singapore)',{exact:true}).selectOption('2026-11-03T10:00')
- await page.getByLabel('Unavailable until (Singapore)',{exact:true}).selectOption('2026-11-03T10:30')
+ await chooseDisruptionTime(page,'Unavailable from (Singapore)','2026-11-03T10:00')
+ await chooseDisruptionTime(page,'Unavailable until (Singapore)','2026-11-03T10:30')
  await page.getByRole('button',{name:'Run simulation (1)',exact:true}).click()
  await page.getByText('Availability evidence and limitations',{exact:true}).click()
  await expect(page.getByText('The selected event roster is not verified. Check the coverage warning.',{exact:true})).toBeVisible()

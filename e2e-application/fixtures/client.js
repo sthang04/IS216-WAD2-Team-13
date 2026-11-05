@@ -1,6 +1,6 @@
 // SUPPORT FILE PURPOSE: client.js supplies shared setup or controlled data for the browser workflows.
 // Keep this support code: the Playwright tests depend on consistent setup and isolated state.
-﻿import {createBackend} from '/e2e-application/fixtures/backend.js'
+import {createBackend} from '/e2e-application/fixtures/backend.js'
 // Browser-only synthetic Supabase boundary. No network client is constructed.
 // Real authService, sessionState, router and all Vue components remain intact.
 const KEY='pulse-foundation-session'

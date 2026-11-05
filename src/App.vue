@@ -2,8 +2,7 @@
 import { ref, onMounted, onUnmounted, computed, watch } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 import { VIEW_PATHS } from './router';
-import { fetchCalendar, resetDemoData, singaporeToday, formatDate, formatTime, CALENDAR_END } from './services/facilityService';
-import { approveTransfer, rejectTransfer } from './services/transferService';
+import { resetDemoData } from './services/facilityService';
 import { DEMO_PERSONAS, ALL_CLUBS, GUEST_PERSONA } from './services/authProfiles';
 import {
   restoreSession, signOut,
@@ -23,10 +22,9 @@ import OperationsView from './views/OperationsView.vue';
 import EventRiskView from './views/EventRiskView.vue';
 
 import PersonalScheduleView from './views/PersonalScheduleView.vue';
-import OslAdminView from './views/OslAdminView.vue';
  
 // App Views state
-const currentView = ref('landing') // 'landing', 'admin', 'facilities', 'schedule', 'heatmap', 'operations', 'risk'
+const currentView = ref('landing') // 'landing', 'facilities', 'schedule', 'heatmap', 'operations', 'risk'
 // OSL's header has two tabs inside the facility module: the calendar and OSL Review
 const isOslReviewRoute = computed(() => route.path.startsWith('/facilities/admin'))
 
@@ -60,9 +58,7 @@ watch(() => route.path, (newPath) => {
   }
 })
 const apiMode = ref(false) // Toggle API badge tags on/off across all views
-const slots = ref([])
 const loading = ref(true)
-const processingId = ref(null)
 const toast = ref('')
 const toastType = ref('info')
  
@@ -148,72 +144,10 @@ function switchPersona(personaKey) {
   toastType.value = 'info'
 }
  
-function toSlot(booking) {
-  let status = booking.status
-  if (status === 'Officially Confirmed Booking') {
-    status = 'Officially Confirmed'
-  }
-  return {
-    id: booking.booking_id,
-    transfer_id: booking.transfer_id,
-    venue_name: booking.facility_name,
-    venue_type: booking.facility_type,
-    building_location: booking.location || '',
-    owner_club: booking.owner_club_name,
-    claiming_club: booking.claiming_club_name,
-    status: status,
-    event_date: formatDate(booking.booking_date),
-    time_slot: formatTime(booking.start_time) + ' - ' + formatTime(booking.end_time),
-    fbs_ref: booking.fbs_reference
-  }
-}
- 
-async function loadSlots() {
-  const bookings = await fetchCalendar({ from: singaporeToday(), to: CALENDAR_END })
-  const result = []
-  bookings.forEach((booking) => {
-    result.push(toSlot(booking))
-  })
-  slots.value = result
-}
- 
-async function handleAction(slot, action, message) {
-  if (processingId.value !== null) return
-  processingId.value = slot.id
-  try {
-    await action()
-    await loadSlots()
-    toastType.value = 'success'
-    toast.value = message
-  } catch (error) {
-    console.log(error.message)
-    toastType.value = 'danger'
-    toast.value = 'Error: ' + error.message
-  }
-  processingId.value = null
-}
- 
-async function handleConfirm(slot) {
-  await handleAction(
-    slot,
-    () => approveTransfer(slot.transfer_id),
-    slot.venue_name + ' transfer verified and officially confirmed by OSL Admin!'
-  )
-}
- 
-async function handleReject(slot) {
-  await handleAction(
-    slot,
-    () => rejectTransfer(slot.transfer_id, 'Rejected from the OSL console'),
-    slot.venue_name + ' claim rejected; slot remains available on marketplace.'
-  )
-}
- 
 async function handleResetDemo() {
   try {
     await resetDemoData()
     reloadAll()
-    await loadSlots()
     toast.value = 'Database reset to initial seeds!'
     toastType.value = 'info'
   } catch (error) {
@@ -365,10 +299,9 @@ onMounted(async () => {
     } finally {
       authReady.value = true
     }
-    await loadSlots()
   } catch (error) {
     toastType.value = 'danger'
-    toast.value = `Error loading facilities: ${error.message}`
+    toast.value = `Pulse could not start: ${error.message}`
   } finally {
     loading.value = false
   }
@@ -401,7 +334,8 @@ onMounted(async () => {
       <header class="pulse-header px-3 px-lg-4 py-2">
         <div class="container-fluid d-flex flex-nowrap align-items-center justify-content-between gap-1 gap-sm-2 gap-lg-3">
           
-          <div class="d-flex align-items-center gap-2 gap-sm-3 flex-shrink-0">
+          <!-- Left group may shrink (min-width: 0) so the bell, avatar and ☰ menu always fit on 320px phones -->
+          <div class="d-flex align-items-center gap-2 gap-sm-3 flex-shrink-1" style="min-width: 0;">
             <a href="#" class="pulse-brand-logo text-decoration-none flex-shrink-0" @click.prevent="router.push('/facilities')">
               <div class="pulse-logo-badge">
                 <span>P</span>
@@ -433,10 +367,11 @@ onMounted(async () => {
               </div>
             </div>
 
-            <div v-else class="d-flex align-items-center flex-shrink-0">
-              <div v-if="allowedClubs.length <= 1" class="d-flex align-items-center px-2 py-1 bg-white border shadow-2xs rounded-pill" style="gap: 0.45rem; padding-inline: 0.7rem !important;">
-                <span class="pulse-cca-dot" aria-hidden="true"></span>
-                <span class="fw-bold text-dark text-nowrap" style="font-size: 0.78rem;">{{ selectedClub }}</span>
+            <div v-else class="d-flex align-items-center flex-shrink-1" style="min-width: 0;">
+              <div v-if="allowedClubs.length <= 1" class="d-flex align-items-center px-2 py-1 bg-white border shadow-2xs rounded-pill" style="gap: 0.45rem; padding-inline: 0.7rem !important; min-width: 0;" :title="selectedClub">
+                <span class="pulse-cca-dot flex-shrink-0" aria-hidden="true"></span>
+                <!-- Long club names truncate with an ellipsis on narrow phones; the full name is in the tooltip -->
+                <span class="fw-bold text-dark text-nowrap text-truncate" style="font-size: 0.78rem;">{{ selectedClub }}</span>
               </div>
               <div v-else class="input-group input-group-sm">
                 <select 
@@ -570,6 +505,8 @@ onMounted(async () => {
               class="btn btn-light border rounded-3 p-2 d-lg-none d-flex align-items-center justify-content-center"
               style="width: 38px; height: 38px;"
               aria-label="Toggle Navigation Menu"
+              aria-controls="pulse-mobile-drawer"
+              :aria-expanded="mobileMenuOpen ? 'true' : 'false'"
               @click="mobileMenuOpen = !mobileMenuOpen"
             >
               <span style="font-size: 1.25rem; line-height: 1;">{{ mobileMenuOpen ? '✕' : '☰' }}</span>
@@ -587,12 +524,20 @@ onMounted(async () => {
         @click="mobileMenuOpen = false"
       ></div>
 
-      <aside class="pulse-mobile-drawer" :class="{ open: mobileMenuOpen }">
+      <!-- inert + aria-hidden keep the closed drawer out of keyboard focus and screen readers -->
+      <aside
+        id="pulse-mobile-drawer"
+        class="pulse-mobile-drawer"
+        :class="{ open: mobileMenuOpen }"
+        aria-label="Navigation menu"
+        :aria-hidden="mobileMenuOpen ? 'false' : 'true'"
+        :inert="!mobileMenuOpen"
+      >
         <div class="d-flex align-items-center justify-content-between p-3 border-bottom bg-light">
           <div class="fw-bold text-dark d-flex align-items-center gap-2" style="font-size: 0.95rem;">
             <span style="color: var(--pulse-primary, #e11d48);">●</span> Navigation Menu
           </div>
-          <button type="button" class="btn-close" aria-label="Close" @click="mobileMenuOpen = false"></button>
+          <button type="button" class="btn-close" aria-label="Close navigation menu" @click="mobileMenuOpen = false"></button>
         </div>
 
         <div class="p-3 d-flex flex-column gap-2">
@@ -676,9 +621,6 @@ onMounted(async () => {
           <button type="button" class="btn-close flex-shrink-0" aria-label="Close notice" style="position: static; padding: 0.35rem; font-size: 0.725rem;" @click="toast = ''"></button>
         </div>
 
-        <div v-show="currentView === 'admin'">
-          <OslAdminView :slots="slots" :api-mode="apiMode" @endorse-transfer="handleConfirm" @reject-transfer="handleReject" />
-        </div>
  
         <div v-show="currentView === 'facilities'">
           <RouterView />
@@ -755,13 +697,17 @@ onMounted(async () => {
   background: #ffffff;
   box-shadow: -4px 0 20px rgba(0, 0, 0, 0.15);
   z-index: 1050;
-  transition: right 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  /* Closed: hidden after the slide-out finishes, so its links can't be tabbed to or read out off-screen */
+  visibility: hidden;
+  transition: right 0.25s cubic-bezier(0.16, 1, 0.3, 1), visibility 0s linear 0.25s;
   display: flex;
   flex-direction: column;
 }
 
 .pulse-mobile-drawer.open {
   right: 0;
+  visibility: visible;
+  transition: right 0.25s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 /* Mobile Navigation Drawer Links */

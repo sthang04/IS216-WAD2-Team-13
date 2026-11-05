@@ -67,8 +67,8 @@ test('create a meeting request, confirm its time and download its agenda',async(
  await expect(page.getByText('Fixture ExCo meeting',{exact:true}).first()).toBeVisible()
  await page.getByRole('button',{name:'Choose Meeting Day & Confirm',exact:true}).click()
  await page.getByLabel('Day',{exact:true}).selectOption('2026-11-04')
- await page.getByLabel('From',{exact:true}).selectOption('10')
- await page.getByLabel('To',{exact:true}).selectOption('11')
+ await page.getByLabel('From',{exact:true}).selectOption({label:'10:00'})
+ await page.getByLabel('To',{exact:true}).selectOption({label:'11:00'})
  await page.getByRole('button',{name:'Confirm & Notify Participants',exact:true}).click()
  const {text}=await downloadText(page,()=>page.getByRole('button',{name:'Add to Calendar (.ics)',exact:true}).click())
  expect(text).toContain('Fixture ExCo meeting')
@@ -86,14 +86,6 @@ test('closing an unsent meeting form discards its title and selected participant
  await expect(page.getByText('Fixture discarded meeting',{exact:true})).toHaveCount(0)
 })
 
-test('a none-work response updates visible scheduling feedback and survives reload',async({page,app})=>{
- await open(page,app)
- await page.getByRole('button',{name:'None of these days work',exact:true}).click()
- await expect(page.getByRole('alert')).toContainText('Response saved: none of these days work for you.')
- await page.reload()
- await expect(page.getByText('None of these days work',{exact:true})).toBeVisible()
-})
-
 // Guest entry was removed; verify the supported signed-out boundary instead.
 test('signed-out access to /availability requests login without exposing protected controls',async({page,app})=>{
  await app.open('/availability')
@@ -105,21 +97,26 @@ test('signed-out access to /availability requests login without exposing protect
  await expect(page.getByRole('button',{name:'Submit claim',exact:true})).toHaveCount(0)
 })
 
-test('undo an unavailable response, reload, and choose an available time',async({page,app})=>{
+test('a saved vote survives reload and Undo clears the whole response',async({page,app})=>{
+ // Setup: an open meeting where the signed-in member has not responded yet.
  await open(page,app)
- await page.getByRole('button',{name:'None of these days work',exact:true}).click()
- const undo=page.getByRole('button',{name:'Undo',exact:true})
- await expect(undo).toBeEnabled()
- await page.reload()
- await expect(undo).toBeEnabled()
- await undo.click()
- await expect(page.getByText('Not yet',{exact:true})).toBeVisible()
- await page.reload()
- await expect(page.getByText('Not yet',{exact:true})).toBeVisible()
  const cell=page.locator('.scheduler-grid [role=button]').first()
+ const response=page.locator('strong').filter({hasText:/free$|No response yet/})
+ await expect(response).toHaveText('No response yet')
+ // Action: vote for one time block. Assert: it is saved and counted as free time.
  await cell.click()
  await expect(cell).toHaveAttribute('aria-pressed','true')
- await expect(page.getByText('1 hour free',{exact:true})).toBeVisible()
+ await expect(response).toHaveText(/free$/)
+ // The vote is read back from the backend after a full reload.
+ await page.reload()
+ await expect(cell).toHaveAttribute('aria-pressed','true')
+ // Action: Undo. Assert: the response and its selected block are both cleared, and stay cleared.
+ await page.getByRole('button',{name:'Undo',exact:true}).click()
+ await expect(response).toHaveText('No response yet')
+ await expect(cell).toHaveAttribute('aria-pressed','false')
+ await page.reload()
+ await expect(response).toHaveText('No response yet')
+ await expect(page.getByRole('button',{name:'Undo',exact:true})).toHaveCount(0)
 })
 test('confirmation waits for outstanding responses before the deadline',async({page,app})=>{
  await open(page,app,{waitingResponses:true})

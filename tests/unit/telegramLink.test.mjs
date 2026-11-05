@@ -1,3 +1,8 @@
+// WHY THIS IS NOT A PLAYWRIGHT TEST: handleMismatchNote is a pure string helper used by the
+// telegram-webhook Edge Function (Deno, server-side). No browser page ever renders it, so a
+// Playwright journey cannot reach it; node:test checks its handle-normalisation edge cases directly.
+// SCOPE: Node unit tests (node:test); run with `pnpm test:unit`. Excluded from browser E2E commands.
+// A pass here does not prove Telegram delivery or the deployed webhook.
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { handleMismatchNote } from '../../supabase/functions/_shared/telegramLink.js'

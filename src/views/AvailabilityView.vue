@@ -5,7 +5,7 @@ import { session, activeClubName, setActiveClub } from '../services/sessionState
 import { parseIcs, icsEventsOn, takingSlot } from '../services/icsBaseline';
 import { fetchClubCommitments } from '../services/scheduleService';
 import {
-  fetchMeetingSnapshot, fetchClubRoster, createMeeting, setAvailability, submitNoAvailability, clearMeetingResponse,
+  fetchMeetingSnapshot, fetchClubRoster, createMeeting, setAvailability, clearMeetingResponse,
   nudgeParticipants, confirmMeeting, cancelMeeting, updateParticipants, updateAgenda,
   fetchMyBaseline, fetchClubBaselines, saveMyBaseline, clearMyBaseline, listenForMeetings
 } from '../services/meetingService';
@@ -714,22 +714,6 @@ const isOrganiser = computed(() => !!meeting.value?.is_organiser)
 
 const responseSaving = ref(false)
 
-async function answerNoneWork() {
-  if (blockedForGuest()) return
-  try {
-    if (responseSaving.value || !canVote.value) return
-    responseSaving.value = true
-    await voteQueue
-    await submitNoAvailability(meeting.value.id)
-    await loadMeeting()
-    showToast('Response saved: none of these days work for you.')
-  } catch (err) {
-    showToast(err.message, 'danger')
-  } finally {
-    responseSaving.value = false
-  }
-}
-
 async function undoResponse() {
   if (blockedForGuest() || responseSaving.value || !canVote.value) return
   responseSaving.value = true
@@ -1224,7 +1208,7 @@ function exportConfirmed() {
             </div>
 
             <template v-if="amParticipant">
-              <p v-if="canVote" class="small text-muted mb-3">Click to mark all days as unavailable. Use Undo to clear this response and choose available times.</p>
+              <p v-if="canVote" class="small text-muted mb-3">Click the time blocks when you are free. Use Undo to clear your response and start again.</p>
               <div class="d-flex justify-content-between align-items-center gap-3 small">
                 <span class="text-muted">Your response</span>
                 <strong :class="myResponse?.responded_at ? 'text-success' : 'text-muted'">

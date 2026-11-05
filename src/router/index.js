@@ -22,7 +22,6 @@ const AppPane = { render: () => null }
 // currentView name <-> URL
 export const VIEW_PATHS = {
   landing: '/',
-  admin: '/admin',
   facilities: '/facilities',
   schedule: '/personal-schedule',
   heatmap: '/availability',
@@ -33,7 +32,8 @@ export const VIEW_PATHS = {
 const routes = [
   { path: '/', name: 'landing', component: AppPane, meta: { view: 'landing', public: true } },
   { path: '/signup', name: 'signup', component: AppPane, meta: { view: 'landing', public: true, signup: true } },
-  { path: '/admin', name: 'admin', component: AppPane, meta: { view: 'admin' } },
+  // The old inline OSL console was removed; keep old /admin links working by sending them to the calendar.
+  { path: '/admin', redirect: '/facilities' },
   {
     path: '/facilities',
     component: FacilityCalendarLayout,

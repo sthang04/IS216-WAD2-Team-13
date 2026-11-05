@@ -1,7 +1,7 @@
 // BROWSER TEST PURPOSE: facilities user workflows and regression coverage.
 // Setup opens the real Vue UI; actions use its controls; assertions check visible results/state.
 // Uses isolated fixture responses; passing UI checks do not prove deployed database or delivery integration.
-﻿import {test,expect} from './fixtures/app.js'
+import {test,expect} from './fixtures/app.js'
 import {room} from './fixtures/journeys.js'
 
 test('facility type, equipment, capacity and search filters constrain actual cards',async({page,app})=>{

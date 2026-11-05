@@ -1,3 +1,7 @@
+// WHY THIS IS NOT A PLAYWRIGHT TEST: recipient routing runs inside Supabase Edge Functions
+// (send-telegram-notifications / send-transfer-emails), never in the browser. node:test exercises
+// the routing rules (club scoping, OSL copies, de-duplication) without sending any message.
+// SCOPE: Node unit tests (node:test); run with `pnpm test:unit`. Excluded from browser E2E commands.
 // Who receives each routed notification. Uses the example assignments with made-up addresses; nothing is sent.
 import test from 'node:test'
 import assert from 'node:assert/strict'

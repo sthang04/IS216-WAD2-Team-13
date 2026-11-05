@@ -1,7 +1,7 @@
 // BROWSER TEST PURPOSE: authentication user workflows and regression coverage.
 // Setup opens the real Vue UI; actions use its controls; assertions check visible results/state.
 // Uses isolated fixture responses; passing UI checks do not prove deployed database or delivery integration.
-﻿import {test,expect} from './fixtures/app.js'
+import {test,expect} from './fixtures/app.js'
 
 test('valid login reaches the calendar; logout revokes protected navigation',async({page,app})=>{
  await app.open();await app.login()
@@ -76,8 +76,10 @@ test('eligible signup validates matching passwords then creates a synthetic acco
  await expect(page.getByText('@fixture_handle',{exact:true})).toBeVisible()
  await page.getByRole('button',{name:'Skip for now',exact:true}).click()
  await expect(page).toHaveURL(/\/facilities$/)
+ // The new account is signed in: its account menu opens and offers Sign out.
+ // (The menu no longer prints the email address, so check the account controls instead.)
  await app.account()
- await expect(page.getByText('fixture.exco@smu.edu.sg',{exact:true})).toBeVisible()
+ await expect(page.getByRole('button',{name:'Sign out',exact:true})).toBeVisible()
 })
 
 async function createAccount(page,email='fixture.exco@smu.edu.sg',role='LOGISTICS'){

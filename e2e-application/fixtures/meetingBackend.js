@@ -40,14 +40,10 @@ export function createMeetingBackend(config) {
    state.participants=roster.filter(m=>args.p_member_ids.includes(m.member_id)).map(m=>({...m,responded_at:null}))
    state.availability=[];persist();return ok(602)
   }
+  // Votes are 30-minute slots: p_slot_minute is minutes after midnight (480 = 08:00, 510 = 08:30).
   if(name==='rpc_set_meeting_availability'){
-   state.availability=state.availability.filter(a=>!(a.member_id===7001&&a.slot_date===args.p_slot_date&&a.hour===args.p_hour))
-   if(args.p_available)state.availability.push({member_id:7001,slot_date:args.p_slot_date,hour:args.p_hour})
-   state.participants.find(p=>p.member_id===7001).responded_at='2026-11-03T02:00:00Z'
-   persist();return ok({})
-  }
-  if(name==='rpc_submit_no_availability'){
-   state.availability=state.availability.filter(a=>a.member_id!==7001)
+   state.availability=state.availability.filter(a=>!(a.member_id===7001&&a.slot_date===args.p_slot_date&&a.slot_minute===args.p_slot_minute))
+   if(args.p_available)state.availability.push({member_id:7001,slot_date:args.p_slot_date,slot_minute:args.p_slot_minute})
    state.participants.find(p=>p.member_id===7001).responded_at='2026-11-03T02:00:00Z'
    persist();return ok({})
   }
@@ -58,7 +54,8 @@ export function createMeetingBackend(config) {
   }
   if(name==='rpc_confirm_meeting'){
    Object.assign(state.meeting,{status:'CONFIRMED',confirmed_date:args.p_date,
-    confirmed_start_hour:args.p_start_hour,confirmed_end_hour:args.p_end_hour,venue:args.p_venue})
+    // Confirmed times are minutes after midnight on the half hour (e.g. 600 = 10:00).
+    confirmed_start_minute:args.p_start_minute,confirmed_end_minute:args.p_end_minute,venue:args.p_venue})
    persist();return ok({})
   }
   if(name==='rpc_nudge_meeting'){

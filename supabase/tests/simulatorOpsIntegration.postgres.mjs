@@ -1,4 +1,9 @@
-﻿import { createRequire } from 'node:module'
+// WHY THIS IS NOT A PLAYWRIGHT TEST: it verifies SQL functions/constraints against an embedded,
+// in-memory PostgreSQL (PGlite). Database rules have no UI of their own; the browser journeys in
+// e2e-backend/ cover the user-facing side against the staging backend.
+// SCOPE: optional Node test. Requires PULSE_PGLITE_PATH pointing at a separately installed
+// @electric-sql/pglite package; run with `node --test supabase/tests/*.postgres.mjs`.
+import { createRequire } from 'node:module'
 import { readFileSync } from 'node:fs'
 import test from 'node:test'
 import assert from 'node:assert/strict'

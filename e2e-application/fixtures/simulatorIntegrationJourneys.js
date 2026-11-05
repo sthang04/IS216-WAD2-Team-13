@@ -1,16 +1,16 @@
 // SUPPORT FILE PURPOSE: simulatorIntegrationJourneys.js supplies shared setup or controlled data for the browser workflows.
 // Keep this support code: the Playwright tests depend on consistent setup and isolated state.
 // Shared browser journeys registered by the desktop and mobile entry files.
-﻿import {test,expect} from './app.js'
-import {eventSelect,runDelay} from './journeys.js'
+import {test,expect} from './app.js'
+import {eventSelect,runDelay,chooseDisruptionTime} from './journeys.js'
 
 async function boot(page,app,options={}){
  await app.open('/events',{authenticated:true,simulation:true,...options})
  await expect(eventSelect(page).locator('option')).toHaveCount(2)
 }
 async function absence(page){
- await page.getByLabel('Unavailable from (Singapore)',{exact:true}).selectOption('2026-11-02T10:00')
- await page.getByLabel('Unavailable until (Singapore)',{exact:true}).selectOption('2026-11-02T10:30')
+ await chooseDisruptionTime(page,'Unavailable from (Singapore)','2026-11-02T10:00')
+ await chooseDisruptionTime(page,'Unavailable until (Singapore)','2026-11-02T10:30')
  await page.getByRole('button',{name:'Run simulation (1)',exact:true}).click()
  await expect(page.getByText('Simulation complete',{exact:true})).toBeVisible()
 }
@@ -23,8 +23,9 @@ test('member and facility disruptions drive the actual graph and heatmap',async(
  await page.getByLabel('Disruption type',{exact:true}).nth(1).selectOption('FACILITY_UNAVAILABLE')
  for(const field of ['Unavailable from (Singapore)','Unavailable until (Singapore)']){
   const value=field.startsWith('Unavailable from')?'2026-11-02T10:00':'2026-11-02T10:30'
-  await page.getByLabel(field,{exact:true}).nth(0).selectOption(value)
-  await page.getByLabel(field,{exact:true}).nth(1).selectOption(value)
+  // Both disruption rows (member absence and facility closure) get the same interval.
+  await chooseDisruptionTime(page,field,value,0)
+  await chooseDisruptionTime(page,field,value,1)
  }
  await page.getByRole('button',{name:'Run simulation (2)',exact:true}).click()
  const graph=page.getByRole('region',{name:'Scrollable Event Village',exact:true})

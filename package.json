@@ -13,6 +13,7 @@
     "test:e2e:application": "playwright test --config playwright.application.config.js",
     "test:e2e:report": "playwright show-report playwright-report/all-browser",
     "test:contracts": "playwright test --config playwright.contracts.config.js",
+    "test:unit": "node --test tests/unit/*.test.mjs",
     "e2e": "playwright test",
     "test:e2e:backend": "playwright test --config playwright.backend.config.js"
   },

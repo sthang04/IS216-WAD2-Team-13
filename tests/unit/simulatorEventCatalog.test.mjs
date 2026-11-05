@@ -3,7 +3,7 @@
 // SCOPE: Node unit tests using node:test; excluded from browser E2E commands.
 // A passing result here does not prove a complete user journey or deployed backend enforcement.
 // Purpose: isolated behaviour checks for the simulator data/presentation contract; no browser or live database is used.
-﻿import test from 'node:test'
+import test from 'node:test'
 import assert from 'node:assert/strict'
 import {
   readUnifiedSimulationData,

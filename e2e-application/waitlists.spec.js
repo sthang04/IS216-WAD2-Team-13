@@ -1,7 +1,7 @@
 // BROWSER TEST PURPOSE: waitlists user workflows and regression coverage.
 // Setup opens the real Vue UI; actions use its controls; assertions check visible results/state.
 // Uses isolated fixture responses; passing UI checks do not prove deployed database or delivery integration.
-﻿import {test,expect} from './fixtures/app.js'
+import {test,expect} from './fixtures/app.js'
 import {room} from './fixtures/journeys.js'
 
 test('join queue, inspect position and leave through the actual waitlist page',async({page,app})=>{
@@ -14,7 +14,7 @@ test('join queue, inspect position and leave through the actual waitlist page',a
  await expect(page.locator('ol.pulse-queue')).toContainText('Fixture Arts Club')
  await page.getByRole('button',{name:'Hide queue',exact:true}).click()
  await expect(page.locator('ol.pulse-queue')).toHaveCount(0)
- await page.getByRole('button',{name:'Leave',exact:true}).click()
+ await page.getByRole('button',{name:'Leave queue',exact:true}).click()
  await expect(page.getByText('Fixture Arts Club is not queuing for any slot.',{exact:true})).toBeVisible()
 })
 

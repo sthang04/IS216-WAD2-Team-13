@@ -1,7 +1,7 @@
 // BROWSER TEST PURPOSE: application.mobile user workflows and regression coverage.
 // Setup opens the real Vue UI; actions use its controls; assertions check visible results/state.
 // Uses isolated fixture responses; passing UI checks do not prove deployed database or delivery integration.
-﻿import {test,expect} from './fixtures/app.js'
+import {test,expect} from './fixtures/app.js'
 import {room,eventSelect,runDelay,openScheduleForm,fit} from './fixtures/journeys.js'
 
 test('mobile navigation opens actual events and touch simulation selects an activity',async({page,app})=>{
@@ -64,11 +64,16 @@ test('the whole week and the page tabs fit on a phone without clipping',async({p
  const days=page.locator('.pulse-cal-day')
  await expect(days).toHaveCount(7)
  for(let i=0;i<7;i++){const b=await days.nth(i).boundingBox();expect(b.x).toBeGreaterThanOrEqual(0);expect(b.x+b.width).toBeLessThanOrEqual(size.width)}
- const pills=page.locator('.pulse-mobile-pill')
- for(let i=0;i<await pills.count();i++){
-  const clipped=await pills.nth(i).evaluate(el=>el.scrollWidth>el.clientWidth+1)
-  expect(clipped).toBe(false)
+ // Facility page tabs (the old bottom-bar pills were replaced by the ☰ drawer):
+ // each tab's label is complete and the tab sits fully on screen.
+ const tabs=page.getByRole('link',{name:/^(All Facilities|My Club|Waitlist)/})
+ await expect(tabs).toHaveCount(3)
+ for(const tab of await tabs.all()){
+  expect(await tab.evaluate(el=>el.scrollWidth>el.clientWidth+1)).toBe(false)
+  const box=await tab.boundingBox()
+  expect(box.x).toBeGreaterThanOrEqual(0);expect(box.x+box.width).toBeLessThanOrEqual(size.width)
  }
- const last=await pills.last().boundingBox()
- expect(last.x+last.width).toBeLessThanOrEqual(size.width)
+ // The ☰ menu button must stay reachable at every phone width (it was pushed off-screen at 320px).
+ const menu=await page.getByRole('button',{name:'Toggle Navigation Menu',exact:true}).boundingBox()
+ expect(menu.x+menu.width).toBeLessThanOrEqual(size.width)
 })

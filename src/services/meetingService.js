@@ -47,10 +47,6 @@ export function clearMeetingResponse(meetingId) {
   return call('rpc_clear_meeting_response', { p_meeting_id: meetingId })
 }
 
-export function submitNoAvailability(meetingId) {
-  return call('rpc_submit_no_availability', { p_meeting_id: meetingId })
-}
-
 // memberId null = everyone who hasn't answered. Returns how many were nudged.
 export function nudgeParticipants(meetingId, memberId = null) {
   return call('rpc_nudge_meeting', { p_meeting_id: meetingId, p_member_id: memberId })
