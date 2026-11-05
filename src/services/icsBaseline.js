@@ -111,6 +111,20 @@ function occursOn(ev, day) {
   return true
 }
 
+// Everything on this day, in time order: [{ title, startTime: '15:30', endTime: '17:00' }]
+// (used by Personal Schedule to list your classes)
+export function icsEventsOn(events, day) {
+  const hhmm = (min) => `${pad(Math.floor(min / 60) % 24)}:${pad(min % 60)}`
+  return events
+    .filter((ev) => !ev.allDay && occursOn(ev, day))
+    .map((ev) => {
+      const s = new Date(ev.start)
+      const startMin = s.getHours() * 60 + s.getMinutes()
+      return { title: ev.title, startMin, startTime: hhmm(startMin), endTime: hhmm(startMin + Math.round((ev.end - ev.start) / 60000)) }
+    })
+    .sort((a, b) => a.startMin - b.startMin)
+}
+
 // Title of the first event that overlaps hour..hour+1 on this day, or ''
 export function icsEventAt(events, day, hour) {
   for (const ev of events) {

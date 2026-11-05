@@ -6,6 +6,8 @@ import SimulatorInvitationInbox from '../components/SimulatorInvitationInbox.vue
 import { getWalkTime } from '../services/onemap';
 import { supabase } from '../supabase';
 import { demoMemberId, session } from '../services/sessionState';
+import { fetchMyBaseline } from '../services/meetingService';
+import { icsEventsOn } from '../services/icsBaseline';
 
 const props = defineProps({
   active: { type: Boolean, default: true },
@@ -143,21 +145,6 @@ const defaultEvents = [
     isOpsTask: true
   },
   {
-    id: 4,
-    title: 'IS216 Web Application Development II (G1)',
-    category: 'Academic',
-    date: '2026-10-23',
-    startTime: '15:30',
-    endTime: '17:00',
-    building: 'SMU SCHOOL OF COMPUTING AND INFORMATION SYSTEMS 1',
-    room: 'Seminar Room 2.1',
-    venue: 'Seminar Room 2.1, SCIS1',
-    role: 'Undergraduate Student',
-    status: 'Completed',
-    notes: 'Sprint presentation dry-run and Vue component architecture lab.',
-    isCustom: false
-  },
-  {
     id: 5,
     title: 'Act 2 Floor Positioning & Soundcheck',
     category: 'CCA',
@@ -221,10 +208,13 @@ const defaultEvents = [
 
 const storageKey = computed(() => `pulse-schedule-${props.activePersona.email || props.activePersona.name}`);
 
+// The old sample class may still be saved in this browser; real classes now come from your timetable
+const isOldSampleClass = (e) => e.id === 4 && !e.isCustom && e.category === 'Academic';
+
 function loadSavedEvents() {
   try {
     const saved = JSON.parse(localStorage.getItem(storageKey.value));
-    if (Array.isArray(saved)) return saved;
+    if (Array.isArray(saved)) return saved.filter(e => !isOldSampleClass(e));
   } catch (e) { }
   return null;
 }
@@ -303,6 +293,44 @@ watch(() => [session.value.ready, session.value.authUserId, session.value.active
   syncOpsTasks(false);
 });
 
+/* Classes from the timetable imported in Availability (read-only here) */
+const myTimetable = ref({ fileName: '', events: [] });
+
+async function loadTimetable() {
+  if (props.readOnly || !supabase || !session.value.authUserId) {
+    myTimetable.value = { fileName: '', events: [] };
+    return;
+  }
+  try {
+    myTimetable.value = await fetchMyBaseline();
+  } catch (error) {
+    console.log('Timetable not loaded:', error.message);
+  }
+}
+
+onMounted(loadTimetable);
+watch(() => [session.value.authUserId, props.readOnly], loadTimetable);
+// Re-read after an import or replace in Availability
+watch(() => props.active, (active) => { if (active) loadTimetable(); });
+
+const classEvents = computed(() =>
+  icsEventsOn(myTimetable.value.events, parseISO(selectedDate.value)).map((c, i) => ({
+    id: `class-${selectedDate.value}-${i}`,
+    title: c.title,
+    category: 'Academic',
+    date: selectedDate.value,
+    startTime: c.startTime,
+    endTime: c.endTime,
+    venue: 'From your timetable',
+    role: 'Class',
+    notes: '',
+    isClass: true
+  }))
+);
+
+// Your saved events plus today's classes
+const allEvents = computed(() => [...scheduleEvents.value, ...classEvents.value]);
+
 /* Overdue & Missed Task Status Evaluator */
 function getEffectiveStatus(event) {
   if (event.status === 'Completed' || event.status === 'In Progress') {
@@ -319,7 +347,7 @@ function getEffectiveStatus(event) {
 }
 
 const sortedEvents = computed(() =>
-  [...scheduleEvents.value].sort((a, b) =>
+  [...allEvents.value].sort((a, b) =>
     (a.date + a.startTime).localeCompare(b.date + b.startTime))
 );
 
@@ -344,6 +372,8 @@ async function loadWalkTimes() {
   const entries = await Promise.all(list.slice(1).map(async (cur, i) => {
     const prev = list[i];
     if (prev.date !== cur.date) return null;
+    // Imported classes have no room saved, so there's no walk to work out
+    if (prev.isClass || cur.isClass) return null;
     const gapMinutes = minutesBetween(prev.endTime, cur.startTime);
 
     const isWalkingTask = cur.title.toLowerCase().includes('walk') || prev.title.toLowerCase().includes('walk');
@@ -406,8 +436,8 @@ const filteredEvents = computed(() => {
 
 const conflictingEventIds = computed(() => {
   const conflicts = new Set();
-  const academics = scheduleEvents.value.filter(e => e.category === 'Academic');
-  const ccas = scheduleEvents.value.filter(e => e.category === 'CCA' || e.category === 'Day-of Ops');
+  const academics = allEvents.value.filter(e => e.category === 'Academic');
+  const ccas = allEvents.value.filter(e => e.category === 'CCA' || e.category === 'Day-of Ops');
 
   for (const acad of academics) {
     for (const cca of ccas) {
@@ -430,11 +460,14 @@ const dayHasConflict = computed(() =>
   dayEvents.value.some(e => conflictingEventIds.value.has(e.id))
 );
 
+// Classes aren't tasks, so they never become the current assignment or count towards "Done"
+const dayTasks = computed(() => dayEvents.value.filter(e => !e.isClass));
+
 const activeAssignment = computed(() => {
-  return dayEvents.value.find(e => getEffectiveStatus(e) === 'In Progress')
-    || dayEvents.value.find(e => getEffectiveStatus(e) === 'Overdue/Missed')
-    || dayEvents.value.find(e => getEffectiveStatus(e) === 'Not Started')
-    || dayEvents.value[0];
+  return dayTasks.value.find(e => getEffectiveStatus(e) === 'In Progress')
+    || dayTasks.value.find(e => getEffectiveStatus(e) === 'Overdue/Missed')
+    || dayTasks.value.find(e => getEffectiveStatus(e) === 'Not Started')
+    || dayTasks.value[0];
 });
 
 function toggleEventStatus(event) {
@@ -635,10 +668,7 @@ function exportCalendarICS() {
     <!-- Top Header & Actions -->
     <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-4">
       <div>
-        <div class="d-flex align-items-center gap-2 mb-1">
-          <span class="badge bg-danger rounded-pill px-2 py-1" style="font-size: 0.65rem; font-weight: 800;">
-            PERSONAL SCHEDULE
-          </span>
+        <div v-if="apiMode" class="d-flex align-items-center gap-2 mb-1">
           <span v-if="apiMode" class="pulse-api-tag">OneMap Transit Guide</span>
           <span v-if="apiMode" class="pulse-api-tag">iCal OASIS Sync</span>
         </div>
@@ -877,7 +907,7 @@ function exportCalendarICS() {
             </div>
 
             <span class="text-muted small px-2">
-              {{ dayEvents.filter(e => getEffectiveStatus(e) === 'Completed').length }}/{{ dayEvents.length }} Done
+              {{ dayTasks.filter(e => getEffectiveStatus(e) === 'Completed').length }}/{{ dayTasks.length }} Done
             </span>
           </div>
         </div>
@@ -918,9 +948,6 @@ function exportCalendarICS() {
                   }" style="font-size: 0.65rem;">
                     {{ categoryLabel(event.category) }}
                   </span>
-                  <span v-if="event.isOpsTask" class="badge text-white px-2 py-0.5 rounded-pill" style="background-color: var(--pulse-purple-transit); font-size: 0.65rem;">
-                    ⚡ Production Duty
-                  </span>
                   <span v-if="conflictingEventIds.has(event.id)" class="badge bg-warning text-dark border border-warning" style="font-size: 0.65rem;">
                     Clash Detected
                   </span>
@@ -936,7 +963,8 @@ function exportCalendarICS() {
               </div>
 
               <!-- Interactive Status & Overdue Prompts -->
-              <div class="d-flex flex-column align-items-end gap-1">
+              <span v-if="event.isClass" class="badge bg-primary-subtle text-primary border border-primary-subtle rounded-pill" style="font-size: 0.7rem;">📚 Class</span>
+              <div v-else class="d-flex flex-column align-items-end gap-1">
                 <button
                   type="button"
                   class="schedule-entry-status btn btn-sm py-1 px-2 rounded-pill fw-bold border"
@@ -977,8 +1005,12 @@ function exportCalendarICS() {
               </div>
             </div>
 
+            <!-- Classes are edited by re-importing the timetable in Availability -->
+            <div v-if="event.isClass" class="border-top pt-2 text-muted text-end" style="font-size: 0.7rem;">
+              To change classes, import your timetable again in Availability.
+            </div>
             <!-- Actions -->
-            <div class="d-flex justify-content-end gap-2 border-top pt-2">
+            <div v-else class="d-flex justify-content-end gap-2 border-top pt-2">
               <button
                 type="button"
                 class="btn btn-sm btn-outline-secondary py-0 px-2"
