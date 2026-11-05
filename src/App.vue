@@ -288,10 +288,20 @@ function applySession(persona, { stayOnLanding = false } = {}) {
 }
  
 // Handle Login from LandingLoginView (the password was already checked by authService)
+let toastTimer = null
+
 function handleUserLogin(persona) {
   applySession(persona)
   toast.value = `Signed in as ${persona.name} (${persona.roleLabel})`
   toastType.value = 'success'
+
+  // Clear any existing timer to prevent premature hiding
+  clearTimeout(toastTimer)
+
+  // Hide toast after 30 seconds (30,000 ms)
+  toastTimer = setTimeout(() => {
+    toast.value = ''
+  }, 10000)
 }
  
 
