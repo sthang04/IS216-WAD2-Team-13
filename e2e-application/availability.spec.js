@@ -4,7 +4,7 @@
 // Meeting scheduler browser regressions: use real forms and controls with isolated API data.
 // Every case follows setup -> actions -> visible assertions; no service is called directly.
 import {test,expect} from './fixtures/app.js'
-import {downloadText,guest} from './fixtures/journeys.js'
+import {downloadText} from './fixtures/journeys.js'
 const open=async(page,app,options={})=>{
  await app.open('/availability',{authenticated:true,meetings:true,...options})
  await expect(page.getByRole('heading',{name:'Weekly Meeting Scheduler',exact:true})).toBeVisible()
@@ -87,9 +87,13 @@ test('a none-work response updates visible scheduling feedback and survives relo
  await expect(page.getByText('None work',{exact:true})).toBeVisible()
 })
 
-test('guest cannot vote or schedule a meeting',async({page,app})=>{
- await guest(page,app,'/availability')
- await expect(page.getByText('Sign in as a CCA ExCo to schedule meetings.',{exact:true})).toBeVisible()
- await expect(page.locator('.scheduler-grid [role=button]')).toHaveCount(0)
- await expect(page.getByRole('button',{name:'Send Meeting Request',exact:true})).toHaveCount(0)
+// Guest entry was removed; verify the supported signed-out boundary instead.
+test('signed-out access to /availability requests login without exposing protected controls',async({page,app})=>{
+ await app.open('/availability')
+ await expect(page).toHaveURL(/redirect=/)
+ await expect(page.locator('input[name="smu_user_password"]')).toBeVisible()
+ await expect(page.getByRole('button',{name:/explore live facility calendar as guest/i})).toHaveCount(0)
+ await page.reload()
+ await expect(page.locator('input[name="smu_user_password"]')).toBeVisible()
+ await expect(page.getByRole('button',{name:'Submit claim',exact:true})).toHaveCount(0)
 })

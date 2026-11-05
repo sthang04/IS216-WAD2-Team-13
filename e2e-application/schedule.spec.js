@@ -2,7 +2,7 @@
 // Setup opens the real Vue UI; actions use its controls; assertions check visible results/state.
 // Uses isolated fixture responses; passing UI checks do not prove deployed database or delivery integration.
 ﻿import {test,expect} from './fixtures/app.js'
-import {openScheduleForm,scheduleCard,downloadText,guest} from './fixtures/journeys.js'
+import {openScheduleForm,scheduleCard,downloadText} from './fixtures/journeys.js'
 
 test('create, edit, toggle and delete a custom personal schedule entry',async({page,app})=>{
  await app.open('/personal-schedule',{authenticated:true})
@@ -66,19 +66,15 @@ test('overlapping academic and custom events display a clash warning',async({pag
  await expect(page.getByText('Academic Timetable Conflict Detected',{exact:true})).toBeVisible()
 })
 
-test('guest cannot create, edit, delete or toggle personal schedule state',async({page,app})=>{
- await guest(page,app,'/personal-schedule')
- await page.getByRole('button',{name:'Add Event / Class',exact:true}).click()
- await expect(page.getByText(/Guest view is read-only/).first()).toBeVisible()
- await expect(page.locator('.modal.show')).toHaveCount(0)
- const title='IS216 Web Application Development II (G1)'
- const card=scheduleCard(page,title)
- await card.getByRole('button',{name:'Delete',exact:true}).click()
- await expect(page.getByRole('heading',{name:title,exact:true})).toBeVisible()
- await card.getByRole('button',{name:'Edit',exact:true}).click()
- await expect(page.locator('.modal.show')).toHaveCount(0)
- await card.getByRole('button',{name:'Completed',exact:true}).click()
- await expect(card.getByRole('button',{name:'Completed',exact:true})).toBeVisible()
+// Guest entry was removed; verify the supported signed-out boundary instead.
+test('signed-out access to /personal-schedule requests login without exposing protected controls',async({page,app})=>{
+ await app.open('/personal-schedule')
+ await expect(page).toHaveURL(/redirect=/)
+ await expect(page.locator('input[name="smu_user_password"]')).toBeVisible()
+ await expect(page.getByRole('button',{name:/explore live facility calendar as guest/i})).toHaveCount(0)
+ await page.reload()
+ await expect(page.locator('input[name="smu_user_password"]')).toBeVisible()
+ await expect(page.getByRole('button',{name:'Submit claim',exact:true})).toHaveCount(0)
 })
 
 test('end time preceding start time is rejected by the schedule form',async({page,app})=>{

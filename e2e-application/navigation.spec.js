@@ -49,16 +49,15 @@ test('club member is redirected away from OSL review',async({page,app})=>{
  await expect(page.getByRole('button',{name:'Reset Demo',exact:true})).toHaveCount(0)
 })
 
-test('guest remains view-only across refresh and restricted navigation',async({page,app})=>{
- await app.open()
- await page.getByRole('button',{name:/explore live facility calendar as guest/i}).click()
- await expect(page).toHaveURL(/\/facilities$/)
- await expect(page.getByText('Browsing as a public viewer.',{exact:true})).toBeVisible()
+// Guest entry was removed; verify the supported signed-out boundary instead.
+test('signed-out access to /facilities/admin requests login without exposing protected controls',async({page,app})=>{
+ await app.open('/facilities/admin')
+ await expect(page).toHaveURL(/redirect=/)
+ await expect(page.locator('input[name="smu_user_password"]')).toBeVisible()
+ await expect(page.getByRole('button',{name:/explore live facility calendar as guest/i})).toHaveCount(0)
  await page.reload()
- await expect(page.getByText('Browsing as a public viewer.',{exact:true})).toBeVisible()
- await page.goto('/facilities/admin')
- await expect(page).toHaveURL(/\/facilities$/)
- await expect(page.getByRole('button',{name:'Reset Demo',exact:true})).toHaveCount(0)
+ await expect(page.locator('input[name="smu_user_password"]')).toBeVisible()
+ await expect(page.getByRole('button',{name:'Submit claim',exact:true})).toHaveCount(0)
 })
 
 test('unknown route falls back to public landing without exposing a protected page',async({page,app})=>{

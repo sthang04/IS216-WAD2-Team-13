@@ -5,7 +5,7 @@
 // was replaced by per-person tasks, an event editor and crew check-in controls.
 // These cases exercise the supported sample-plan fallback, stored only in this browser.
 import {test,expect} from './fixtures/app.js'
-import {guest,fit} from './fixtures/journeys.js'
+import {fit} from './fixtures/journeys.js'
 async function open(page,app){
  await page.clock.setFixedTime(new Date('2026-11-03T15:15:00+08:00'))
  await app.open('/operations',{authenticated:true,opsSample:true})
@@ -82,13 +82,13 @@ test('notify crew shows sample feedback without an external delivery request',as
  // This page currently reports local feedback; the fixture guard proves no real message is sent.
 })
 
-test('guest cannot delay the sample plan or check in crew',async({page,app})=>{
- await page.clock.setFixedTime(new Date('2026-11-03T15:15:00+08:00'))
- await guest(page,app,'/operations')
- await page.getByRole('button',{name:/Delay current tasks/}).click()
- await page.getByRole('button',{name:'+15 min',exact:true}).click()
- await expect(page.getByRole('alert')).toContainText('Guest view is read-only')
- await page.getByRole('button',{name:'Check in',exact:true}).first().click()
- await expect(page.getByRole('alert')).toContainText('Guest view is read-only')
- await expect(page.getByRole('button',{name:'+ Add task',exact:true})).toHaveCount(0)
+// Guest entry was removed; verify the supported signed-out boundary instead.
+test('signed-out access to /operations requests login without exposing protected controls',async({page,app})=>{
+ await app.open('/operations')
+ await expect(page).toHaveURL(/redirect=/)
+ await expect(page.locator('input[name="smu_user_password"]')).toBeVisible()
+ await expect(page.getByRole('button',{name:/explore live facility calendar as guest/i})).toHaveCount(0)
+ await page.reload()
+ await expect(page.locator('input[name="smu_user_password"]')).toBeVisible()
+ await expect(page.getByRole('button',{name:'Submit claim',exact:true})).toHaveCount(0)
 })

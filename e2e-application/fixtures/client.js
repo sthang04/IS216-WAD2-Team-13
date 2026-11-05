@@ -51,7 +51,7 @@ export const supabase={
   let single=false
   const response=()=>config().membershipError&&table==='v_user_club_memberships'
    ?{data:null,error:{message:'Fixture memberships unavailable'}}
-   :result(table==='v_user_club_memberships'&&user()&&!config().noMembership?(config().multipleClubs?[row(),{...row(),club_id:72,club_name:'Fixture Other Club',role_name:'Member',can_claim_booking:false,can_release_booking:false,can_manage_waitlist:false}]:[row()]):single?null:[])
+   :result(table==='v_user_club_memberships'&&user()&&!config().noMembership?(config().aliasClubs?[{...row(),club_id:1,club_name:'Eurhythmix'},{...row(),club_id:1,club_name:'SMU Eurhythmix'}]:config().multipleClubs?[row(),{...row(),club_id:72,club_name:'Fixture Other Club',role_name:'Member',can_claim_booking:false,can_release_booking:false,can_manage_waitlist:false}]:[row()]):single?null:[])
   const query={then(resolve,reject){return Promise.resolve(response()).then(resolve,reject)}}
   for(const method of ['select','eq','in','gte','lte','order','limit','range','is','neq'])query[method]=()=>query
   query.maybeSingle=query.single=()=>{single=true;return query}

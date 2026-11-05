@@ -59,7 +59,11 @@ export const test=base.extend({
      const bar=page.getByRole('navigation',{name:'Mobile PULSE navigation',exact:true})
      const mobileLabel={facilities:/Facilities/,schedule:/My Schedule/,heatmap:/Heatmap/,operations:/Day-of Ops/,risk:/Risk Sandbox/}[view]
      if(mobileLabel && await bar.isVisible())await bar.getByRole('button',{name:mobileLabel}).click()
-     else await page.getByRole('button',{name:label,exact:true}).click()
+     else {
+      // Desktop labels shorten below 1400px; use the visible accessible name in either layout.
+      const names={facilities:/^(Master )?Facility Calendar$/,schedule:/^(Personal )?Schedule$/,heatmap:/^(Availability )?Heatmap$/,operations:/^(Day-of )?Operations$/,risk:/^(Event )?Risk Planning$/}
+      await page.getByRole('button',{name:names[view]||label,exact:true}).click()
+     }
     }
    },
   }

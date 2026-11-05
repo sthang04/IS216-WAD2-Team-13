@@ -13,8 +13,9 @@ async function boot(page,canManage=true){
   body:"import {campusConnectFixture} from '/e2e-simulator/fixtures/campusConnect.js'; export async function loadSimulationData(){return campusConnectFixture()}"}))
  // Synthetic session and query client ONLY in this isolated browser harness.
  // The real calendar, bookingActions and confirmation flow still run.
+ // Club 3 has no overlapping original booking, so this case can legitimately claim.
  await page.route('**/src/services/sessionState.js*',route=>route.fulfill({contentType:'application/javascript',body:
-  "import {ref,computed} from '/node_modules/.vite/deps/vue.js'; export const session=ref({activeClubId:1,memberId:1,authUserId:'fixture',memberships:[{club_id:1}],isOslAdmin:false});export const activeMembership=ref({club_name:'Fixture Club',can_claim_booking:"+canManage+"});export const activeClubName=ref('Fixture Club');export const canManageActiveClub=ref("+canManage+");export const toast=ref({});export const showToast=()=>{};export const demoMemberId=()=>null;"}))
+  "import {ref,computed} from '/node_modules/.vite/deps/vue.js'; export const session=ref({activeClubId:3,memberId:1,authUserId:'fixture',memberships:[{club_id:3}],isOslAdmin:false});export const activeMembership=ref({club_name:'Fixture Club',can_claim_booking:"+canManage+"});export const activeClubName=ref('Fixture Club');export const canManageActiveClub=ref("+canManage+");export const toast=ref({});export const showToast=()=>{};export const demoMemberId=()=>null;export const resolveClubId=()=>3;export const resolveClubName=()=>'Fixture Club';"}))
  await page.route('**/src/supabase.js*',route=>route.fulfill({contentType:'application/javascript',body:`
   import {campusConnectFixture} from '/e2e-simulator/fixtures/campusConnect.js';
   const d=campusConnectFixture();window.__calendarWrites=[];
@@ -25,9 +26,13 @@ async function boot(page,canManage=true){
   rows.push({...rows[1],booking_id:33,facility_id:3,facility_name:'Other fixture room'});
   export const isSupabaseConfigured=()=>true;
   export const supabase={
-    from(table){const result={data:table==='facilities'?facilities:table==='v_master_facility_calendar'?rows:[],error:null};
-      const q={then(resolve,reject){return Promise.resolve(result).then(resolve,reject)}};
-      for(const key of ['select','eq','in','gte','lte','order'])q[key]=()=>q;return q},
+    // Match raw booking reads as well as calendar views; claim validation remains real.
+    from(table){const data=table==='facilities'?facilities:['v_master_facility_calendar','facility_bookings'].includes(table)?rows:[];
+      const filters=[];let single=false;
+      const q={then(resolve,reject){const found=data.filter(r=>filters.every(f=>f(r)));return Promise.resolve({data:single?found[0]||null:found,error:null}).then(resolve,reject)},
+       eq(k,v){filters.push(r=>r[k]===v);return q},neq(k,v){filters.push(r=>r[k]!==v);return q},
+       in(k,v){filters.push(r=>v.includes(r[k]));return q},single(){single=true;return q}};
+      for(const key of ['select','gte','lte','order'])q[key]=()=>q;return q},
     async rpc(name,args){if(name==='rpc_simulator_workflow_capabilities')return {data:{contract_version:4,application_enabled:false,invitations_enabled:false}};if(name==='rpc_simulator_plan_history')return {data:{plans:[],invitations:[],audit:[]},error:null};if(name==='rpc_simulator_my_invitations')return {data:{invitations:[]},error:null};if(name==='cfg_text')return {data:'2026-12-31',error:null};window.__calendarWrites.push({name,args});return {data:{},error:null}},
     channel(){const q={on(){return q},subscribe(){return q}};return q},removeChannel(){}
   };`}))
@@ -56,8 +61,8 @@ test('recommendation opens the real calendar at facility/time; claim still requi
  await page.getByRole('button',{name:'Submit claim',exact:true}).click()
  await expect.poll(()=>page.evaluate(()=>window.__calendarWrites.filter(c=>c.name==='rpc_claim_booking').length)).toBe(1)
  const call=await page.evaluate(()=>window.__calendarWrites.find(c=>c.name==='rpc_claim_booking'))
- expect(call.args.p_booking_id).toBe(2);expect(call.args.p_club_id).toBe(1)
- await expect.poll(()=>page.evaluate(()=>window.__claimReceipts)).toEqual([{token:'fixture-exact-context',bookingId:2,clubId:1}])
+ expect(call.args.p_booking_id).toBe(2);expect(call.args.p_club_id).toBe(3)
+ await expect.poll(()=>page.evaluate(()=>window.__claimReceipts)).toEqual([{token:'fixture-exact-context',bookingId:2,clubId:3}])
 })
 test('focused calendar cannot grant claim permission and clearing focus restores other rooms',async({page})=>{
  await boot(page,false)

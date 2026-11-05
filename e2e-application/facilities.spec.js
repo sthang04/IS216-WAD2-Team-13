@@ -2,7 +2,7 @@
 // Setup opens the real Vue UI; actions use its controls; assertions check visible results/state.
 // Uses isolated fixture responses; passing UI checks do not prove deployed database or delivery integration.
 ﻿import {test,expect} from './fixtures/app.js'
-import {room,guest} from './fixtures/journeys.js'
+import {room} from './fixtures/journeys.js'
 
 test('facility type, equipment, capacity and search filters constrain actual cards',async({page,app})=>{
  await app.open('/facilities',{authenticated:true,facilities:true})
@@ -82,11 +82,13 @@ test('calendar read failure is visible rather than inventing bookings',async({pa
  await expect(page.getByRole('button',{name:'Claim',exact:true})).toHaveCount(0)
 })
 
-test('guest receives no release, claim or waitlist mutation controls',async({page,app})=>{
- await app.open('/',{facilities:true})
- await page.getByRole('button',{name:/explore live facility calendar as guest/i}).click()
- await expect(room(page,'Fixture Music Room')).toBeVisible()
- for(const name of ['Claim','Release','Join waitlist'])await expect(page.getByRole('button',{name,exact:true})).toHaveCount(0)
- await page.getByRole('link',{name:'My Club',exact:true}).click()
- await expect(page.getByRole('heading',{name:'My Club is for CCA members',exact:true})).toBeVisible()
+// Guest entry was removed; verify the supported signed-out boundary instead.
+test('signed-out access to /facilities requests login without exposing protected controls',async({page,app})=>{
+ await app.open('/facilities')
+ await expect(page).toHaveURL(/redirect=/)
+ await expect(page.locator('input[name="smu_user_password"]')).toBeVisible()
+ await expect(page.getByRole('button',{name:/explore live facility calendar as guest/i})).toHaveCount(0)
+ await page.reload()
+ await expect(page.locator('input[name="smu_user_password"]')).toBeVisible()
+ await expect(page.getByRole('button',{name:'Submit claim',exact:true})).toHaveCount(0)
 })

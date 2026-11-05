@@ -32,8 +32,8 @@ test('ordinary member uses actual PULSE navigation and sees complete invitation 
   await nav.getByRole('button',{name:/Heatmap/}).click()
   await nav.getByRole('button',{name:/My Schedule/}).click()
  }else{
-  await page.getByRole('button',{name:'Availability Heatmap',exact:true}).click()
-  await page.getByRole('button',{name:'Personal Schedule',exact:true}).click()
+  await page.getByRole('button',{name:/^(Availability )?Heatmap$/,exact:true}).click()
+  await page.getByRole('button',{name:/^(Personal )?Schedule$/,exact:true}).click()
  }
  await expect(page).toHaveURL(/personal-schedule/)
  const item=card(page,'accept-me')

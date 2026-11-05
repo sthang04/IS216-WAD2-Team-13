@@ -23,6 +23,11 @@ export function createBackend(config,calls){
   is_transfer_window_open:true,waitlist_count:0,fbs_reference:'FIXTURE-FBS-'+id})
  const calendar=[booking(501,facilities[0],71,'Booked'),booking(502,facilities[1],72,'Proposed Peer Transfer'),
   booking(503,facilities[2],72,'Booked')]
+ // Ordinary success cases are conflict-free; overlap cases explicitly opt in.
+ if(!config().bookingConflict){calendar[0].start_time='08:00:00';calendar[0].end_time='09:00:00'}
+ if(config().adjacentBooking){calendar[0].start_time='09:00:00';calendar[0].end_time='10:00:00'}
+ if(config().confirmedConflict)calendar[0].status='Officially Confirmed Booking'
+ if(config().pendingConflict){calendar[0].status='Pending Admin Sign-off';calendar[0].claiming_club_id=71}
  const transfer={...calendar[1],transfer_id:801,booking_id:502,booking_status:'Pending Admin Sign-off',
   releasing_club_id:72,releasing_club_name:'Fixture Other Club',claiming_club_id:71,claiming_club_name:'Fixture Arts Club',
   released_by_name:'Fixture Owner',claimed_by_name:'Fixture Exco',audit_voucher_id:'FIXTURE-AUDIT-801',
@@ -40,7 +45,7 @@ export function createBackend(config,calls){
     link_path:'/facilities',created_at:'2026-11-03T01:50:00Z'}]:[]}
  const persist=()=>sessionStorage.setItem(key,JSON.stringify(state))
  const allowedTables=new Set([
-  'v_master_facility_calendar','v_waitlist_queue','ops_events',
+  'v_master_facility_calendar','v_waitlist_queue','ops_events','facility_bookings',
   ...Object.keys(simulation).filter(name=>Array.isArray(simulation[name])),
  ])
  const pendingReads=new Set()
@@ -60,6 +65,8 @@ export function createBackend(config,calls){
    if(config().simulation&&!config().facilities)return simulation.facility_bookings.map(b=>({...b,booking_id:b.id,facility_name:simulation.facilities.find(f=>f.id===b.facility_id)?.name,is_transfer_window_open:false,owner_club_name:'Fixture Club'}))
    return state.calendar
   }
+  // Raw reads support the production claim safeguard, including related facility names.
+  if(table==='facility_bookings'&&!(config().simulation&&!config().facilities))return state.calendar.map(b=>({...b,facilities:{name:b.facility_name}}))
   if(table==='v_waitlist_queue')return state.waitlist
   if(config().simulation){
    if(table==='events')return config().emptyEvents?[]:simulation.events

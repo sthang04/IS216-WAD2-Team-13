@@ -303,7 +303,8 @@ const actionsByBooking = computed(() => {
   const result = {}
   const activeId = session.value.activeClubId
   const myCurrentBookings = bookings.value.filter((b) =>
-    (b.owner_club_id === activeId && b.status === STATUSES.BOOKED) ||
+    // Approved ownership still occupies the time; pending claims also reserve it.
+    (b.owner_club_id === activeId && [STATUSES.BOOKED, STATUSES.CONFIRMED].includes(b.status)) ||
     (b.claiming_club_id === activeId && b.status === STATUSES.PENDING)
   )
   bookings.value.forEach((booking) => {

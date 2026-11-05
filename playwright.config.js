@@ -17,6 +17,8 @@ export default defineConfig({
  webServer:suites.map(([,suite])=>suite.webServer).filter(Boolean),
  projects:suites.flatMap(([name,suite])=>suite.projects.map(project=>({
   ...project,name:name+'-'+project.name,testDir:suite.testDir,
+  // Preserve suite-local project ordering after names are prefixed in this combined run.
+  ...(project.dependencies?{dependencies:project.dependencies.map(dependency=>name+'-'+dependency)}:{}),
   testMatch:project.testMatch||suite.testMatch,
   testIgnore:[...(Array.isArray(project.testIgnore)?project.testIgnore:project.testIgnore?[project.testIgnore]:[]),'**/contracts/**'],
   timeout:suite.timeout||45000,expect:suite.expect||{timeout:10000},
