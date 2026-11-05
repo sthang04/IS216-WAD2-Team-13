@@ -93,7 +93,9 @@ const clockOffset = ref(0)                     // server time minus browser time
 
 const nameOf = computed(() => Object.fromEntries(roster.value.map((m) => [m.member_id, m.full_name])))
 
+let clubSeq = 0
 async function loadClubData() {
+  const seq = ++clubSeq
   if (!canUse.value) {
     roster.value = []
     myBaseline.value = { fileName: '', events: [] }
@@ -104,6 +106,7 @@ async function loadClubData() {
     const [r, mine, others] = await Promise.all([
       fetchClubRoster(clubId.value), fetchMyBaseline(), fetchClubBaselines(clubId.value)
     ])
+    if (seq !== clubSeq) return // switched CCA or persona meanwhile
     roster.value = r
     myBaseline.value = mine
     clubBaselines.value = others
@@ -126,8 +129,8 @@ async function loadMeeting(meetingId = selectedMeetingId.value) {
   try {
     const data = await fetchMeetingSnapshot({ clubId: clubId.value, weekStart: weekKey.value, meetingId })
     if (seq !== loadSeq) return // a newer load started meanwhile
-    // A picked meeting from another week (e.g. a stale id) falls back to this week's
-    if (data.meeting && data.meeting.week_start !== weekKey.value) {
+    // A picked meeting from another week or since cancelled (e.g. a stale id) falls back to this week's
+    if (data.meeting && (data.meeting.week_start !== weekKey.value || data.meeting.status === 'CANCELLED')) {
       selectedMeetingId.value = null
       return loadMeeting(null)
     }
@@ -154,9 +157,11 @@ const isConfirmed = computed(() => meeting.value?.status === 'CONFIRMED')
 const weekMeetings = computed(() => snapshot.value.weekMeetings || [])
 const hasConfirmedThisWeek = computed(() => weekMeetings.value.some((w) => w.status === 'CONFIRMED'))
 
-function statusBadge(status) {
-  if (status === 'CONFIRMED') return { cls: 'pulse-badge-confirmed', label: 'Confirmed' }
-  if (status === 'EXPIRED') return { cls: 'pulse-badge-rejected', label: 'Expired' }
+function statusBadge(w) {
+  if (w.status === 'CONFIRMED') return { cls: 'pulse-badge-confirmed', label: 'Confirmed' }
+  if (w.status === 'EXPIRED') return { cls: 'pulse-badge-rejected', label: 'Expired' }
+  // Everyone answered, so the server keeps it COLLECTING after the deadline
+  if (new Date(w.vote_deadline).getTime() <= now.value + clockOffset.value) return { cls: 'pulse-badge-rejected', label: 'Voting closed' }
   return { cls: 'pulse-badge-pending', label: 'Collecting' }
 }
 
@@ -176,7 +181,8 @@ let refreshTimer = null
 function scheduleRefresh() {
   // Several rows change at once (e.g. a vote + "responded"), so wait a moment and reload once
   clearTimeout(refreshTimer)
-  refreshTimer = setTimeout(() => loadMeeting(), 300)
+  // While votes are saving, a reload would hide the newest clicks; the last vote reloads instead
+  refreshTimer = setTimeout(() => { if (!votesSaving) loadMeeting() }, 300)
 }
 
 function listen() {
@@ -187,9 +193,16 @@ function listen() {
   }
 }
 
+// A meeting picked in the old CCA or persona must not carry over (keep this before the loading watcher)
+watch([clubId, myId], () => {
+  selectedMeetingId.value = null
+  showCreateForm.value = false
+  showConfirmForm.value = false
+})
 watch([clubId, myId, () => session.value.ready], () => { loadClubData(); loadMeeting() }, { immediate: true })
 watch(weekKey, () => {
   selectedMeetingId.value = null
+  showConfirmForm.value = false
   loadMeeting()
 })
 watch([clubId, () => meeting.value?.id], listen, { immediate: true })
@@ -246,7 +259,6 @@ onMounted(() => {
   window.addEventListener('scroll', closeMenu, true)
   window.addEventListener('resize', closeMenu)
   window.addEventListener('keydown', closeMenuOnEscape)
-  window.addEventListener('pointerup', onGlobalPointerUp)
 })
 
 onBeforeUnmount(() => {
@@ -258,7 +270,6 @@ onBeforeUnmount(() => {
   window.removeEventListener('scroll', closeMenu, true)
   window.removeEventListener('resize', closeMenu)
   window.removeEventListener('keydown', closeMenuOnEscape)
-  window.removeEventListener('pointerup', onGlobalPointerUp)
 })
 
 /* ================================================================== */
@@ -393,13 +404,17 @@ function confirmedAt(iso, hour) {
     hour >= w.confirmed_start_hour && hour < w.confirmed_end_hour) || null
 }
 
+// Start of the current hour, so the grid below updates hourly and not with every countdown tick
+const HOUR_MS = 60 * 60 * 1000
+const currentHourStart = computed(() => Math.floor((now.value + clockOffset.value) / HOUR_MS) * HOUR_MS)
+
 // Everything one cell needs, worked out once per change
 const grid = computed(() => HOURS.map((hour) => weekDates.value.map((day) => {
   const iso = toISO(day)
   const free = freeBySlot.value[`${iso}|${hour}`] || []
   const othersInClass = baselineMemberIds.value.filter((id) => icsEventAt(clubBaselines.value[id] || [], day, hour))
-  const slotTimestamp = new Date(`${iso}T${String(hour).padStart(2, '0')}:00:00+08:00`).getTime()
-  const isPast = slotTimestamp < (now.value + clockOffset.value)
+  const slotTimestamp = new Date(`${iso}T${pad(hour)}:00:00+08:00`).getTime()
+  const isPast = slotTimestamp <= currentHourStart.value
   return {
     key: `${iso}|${hour}`,
     iso,
@@ -437,52 +452,32 @@ function cellTitle(cell) {
   return parts.join('\n')
 }
 
-const isDraggingAvailability = ref(false)
-const dragTargetFree = ref(true)
+// Votes are saved in click order, so two quick clicks on one block can't finish the wrong way round
+let voteQueue = Promise.resolve()
+let votesSaving = 0
 
-function onGlobalPointerUp() {
-  isDraggingAvailability.value = false
-}
-
-async function applyCellAvailability(cell, targetFree) {
-  if (!canVote.value || cell.isPast || cell.myClass) return
-  if (cell.mine === targetFree) return
-
-  const before = snapshot.value.availability
-  snapshot.value.availability = targetFree
-    ? [...before, { member_id: myId.value, slot_date: cell.iso, hour: cell.hour }]
-    : before.filter((a) => !(a.member_id === myId.value && a.slot_date === cell.iso && a.hour === cell.hour))
-  try {
-    await setAvailability(meeting.value.id, cell.iso, cell.hour, targetFree)
-  } catch (err) {
-    snapshot.value.availability = before
-    showToast(err.message, 'danger')
-    loadMeeting()
-  }
-}
-
-async function toggleCell(cell) {
+function toggleCell(cell) {
   if (!canVote.value) return
   if (cell.isPast) {
     showToast('Cannot vote on past time slots.', 'warning')
     return
   }
-  await applyCellAvailability(cell, !cell.mine)
-}
-
-function onSlotPointerDown(cell, e) {
-  if (!canVote.value || cell.isPast || cell.myClass) return
-  isDraggingAvailability.value = true
-  dragTargetFree.value = !cell.mine
-  applyCellAvailability(cell, dragTargetFree.value)
-}
-
-function onSlotPointerEnter(cell, e) {
-  if (!isDraggingAvailability.value) return
-  if (!canVote.value || cell.isPast || cell.myClass) return
-  if (cell.mine !== dragTargetFree.value) {
-    applyCellAvailability(cell, dragTargetFree.value)
-  }
+  const meetingId = meeting.value.id
+  const nowFree = !cell.mine
+  // Show the change straight away; the reload after the last vote confirms it
+  const before = snapshot.value.availability
+  snapshot.value.availability = nowFree
+    ? [...before, { member_id: myId.value, slot_date: cell.iso, hour: cell.hour }]
+    : before.filter((a) => !(a.member_id === myId.value && a.slot_date === cell.iso && a.hour === cell.hour))
+  loadSeq++ // a load already running started before this click, so ignore its result
+  votesSaving++
+  voteQueue = voteQueue
+    .then(() => setAvailability(meetingId, cell.iso, cell.hour, nowFree))
+    .catch((err) => showToast(err.message, 'danger'))
+    .finally(() => {
+      votesSaving--
+      if (!votesSaving) scheduleRefresh() // also puts back a block whose vote failed
+    })
 }
 
 /* ================================================================== */
@@ -691,17 +686,20 @@ const pick = ref({ date: '', start: 16, end: 18, venue: '' })
 // Longest runs of hours where the most participants are free
 const bestTimes = computed(() => {
   if (!isOpenRequest.value) return []
+  // The server refuses times already passed or taken by another confirmed meeting
+  const bookable = (c) => !c.isPast && !c.confirmed
   let best = 0
-  grid.value.forEach((row) => row.forEach((c) => { best = Math.max(best, c.free.length) }))
+  grid.value.forEach((row) => row.forEach((c) => { if (bookable(c)) best = Math.max(best, c.free.length) }))
   if (best === 0) return []
 
+  const isBest = (c) => bookable(c) && c.free.length === best
   const windows = []
   weekDates.value.forEach((day, d) => {
     let h = 0
     while (h < HOURS.length) {
-      if (grid.value[h][d].free.length === best) {
+      if (isBest(grid.value[h][d])) {
         const start = h
-        while (h < HOURS.length && grid.value[h][d].free.length === best) h++
+        while (h < HOURS.length && isBest(grid.value[h][d])) h++
         windows.push({ date: toISO(day), label: longLabel(day), start: HOURS[start], end: HOURS[h - 1] + 1, free: best })
       } else {
         h++
@@ -720,9 +718,11 @@ const confirmBlockedReason = computed(() => {
 function openConfirmForm() {
   if (blockedForGuest()) return
   const top = bestTimes.value[0]
+  // Nobody free anywhere: start from the first day that isn't over
+  const firstDay = weekDates.value.findIndex((_, d) => !grid.value[HOURS.length - 1][d].isPast)
   pick.value = top
     ? { date: top.date, start: top.start, end: top.end, venue: '' }
-    : { date: toISO(weekDates.value[0]), start: 16, end: 18, venue: '' }
+    : { date: toISO(weekDates.value[Math.max(firstDay, 0)]), start: 16, end: 18, venue: '' }
   showConfirmForm.value = true
 }
 
@@ -784,6 +784,11 @@ function toUtcStamp(iso, hour) {
   return new Date(Date.UTC(y, m - 1, d, hour - 8)).toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '')
 }
 
+// Calendar files treat \ , ; and line breaks as special, so a title like "Budget, costumes" must be escaped
+function icsText(text) {
+  return text.replace(/\\/g, '\\\\').replace(/[,;]/g, '\\$&').replace(/\r?\n/g, '\\n')
+}
+
 function exportConfirmed() {
   const m = meeting.value
   if (!m || m.status !== 'CONFIRMED') return
@@ -796,9 +801,9 @@ function exportConfirmed() {
     `DTSTAMP:${new Date().toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '')}`,
     `DTSTART:${toUtcStamp(m.confirmed_date, m.confirmed_start_hour)}`,
     `DTEND:${toUtcStamp(m.confirmed_date, m.confirmed_end_hour)}`,
-    `SUMMARY:${m.title}`,
-    m.agenda ? `DESCRIPTION:${m.agenda.replace(/\r?\n/g, '\\n')}` : '',
-    m.venue ? `LOCATION:${m.venue}` : '',
+    `SUMMARY:${icsText(m.title)}`,
+    m.agenda ? `DESCRIPTION:${icsText(m.agenda)}` : '',
+    m.venue ? `LOCATION:${icsText(m.venue)}` : '',
     'END:VEVENT',
     'END:VCALENDAR'
   ].filter(Boolean).join('\r\n')
@@ -872,7 +877,7 @@ function exportConfirmed() {
                 <span><span class="legend-swatch avail-red"></span>Below 50% free</span>
                 <span><span class="legend-swatch avail-amber"></span>50–75%</span>
                 <span><span class="legend-swatch avail-green"></span>Above 75%</span>
-                <span><span class="legend-swatch swatch-mine"></span>You</span>
+                <span><span class="legend-swatch avail-all"></span>Everyone free</span>
               </template>
               <span v-if="hasConfirmedThisWeek"><span class="legend-swatch swatch-meeting"></span>Meeting</span>
             </div>
@@ -927,9 +932,10 @@ function exportConfirmed() {
                       :role="canVote && !cell.isPast ? 'button' : null"
                       :aria-pressed="canVote && !cell.isPast ? cell.mine : null"
                       :aria-disabled="cell.isPast ? 'true' : null"
+                      :tabindex="canVote && !cell.isPast ? 0 : null"
                       @click="toggleCell(cell)"
-                      @pointerdown="onSlotPointerDown(cell, $event)"
-                      @pointerenter="onSlotPointerEnter(cell, $event)"
+                      @keydown.enter.prevent="toggleCell(cell)"
+                      @keydown.space.prevent="toggleCell(cell)"
                     >
                       <span v-if="heatClass(cell)" class="slot-count">{{ cell.free.length }}/{{ totalParticipants }}</span>
                       <span v-else-if="cell.othersInClass.length" class="slot-baseline-text">
@@ -978,7 +984,7 @@ function exportConfirmed() {
                 </span>
                 <span v-else class="text-muted member-meta">Organised by {{ w.organiser_name }}</span>
               </span>
-              <span class="pulse-badge" :class="statusBadge(w.status).cls">{{ statusBadge(w.status).label }}</span>
+              <span class="pulse-badge" :class="statusBadge(w).cls">{{ statusBadge(w).label }}</span>
             </button>
           </div>
           <button
@@ -1419,11 +1425,6 @@ function exportConfirmed() {
 .avail-green { background: #d9efe0; color: #3d7a52; border-color: #bfe3cb; }
 .avail-all   { background: #16a34a; color: #fff; border-color: #16a34a; }
 
-/* Brighter once you've marked yourself free there */
-.slot-mine.avail-red   { background: #ef4444; color: #fff; }
-.slot-mine.avail-amber { background: #facc15; color: #3b2a00; }
-.slot-mine.avail-green { background: #22c55e; color: #fff; }
-
 .slot-baseline { background: #f1f5f9; border-color: #cbd5e1; }
 .slot-baseline-text { font-size: 0.68rem; font-weight: 800; color: #475569; }
 
@@ -1441,9 +1442,7 @@ function exportConfirmed() {
   color: var(--pulse-primary, #e11d48);
 }
 .slot-you { color: #334155; }
-.avail-all .slot-you,
-.slot-mine.avail-red .slot-you,
-.slot-mine.avail-green .slot-you { color: #fff; }
+.avail-all .slot-you { color: #fff; }
 
 .slot-meeting {
   background: var(--pulse-primary, #e11d48);
@@ -1474,7 +1473,6 @@ function exportConfirmed() {
 .swatch-own-class { background: repeating-linear-gradient(135deg, #e2e8f0 0 3px, #cbd5e1 3px 6px); border-color: #94a3b8; }
 .swatch-class { background: #f1f5f9; border-color: #cbd5e1; }
 .swatch-empty { background: #fff; }
-.swatch-mine { background: #fff; outline: 2px solid #334155; outline-offset: -2px; }
 .swatch-meeting { background: var(--pulse-primary, #e11d48); border-color: var(--pulse-primary, #e11d48); }
 
 .member-list { max-height: 220px; overflow-y: auto; }
@@ -1551,5 +1549,5 @@ function exportConfirmed() {
 .meeting-menu-item:disabled { color: #94a3b8; cursor: not-allowed; }
 .meeting-menu-why { display: block; font-size: 0.65rem; font-weight: 600; }
 .edit-backdrop { background: rgba(15, 23, 42, 0.55); z-index: 1055; }
-.slot-past { cursor: not-allowed !important; background-color: #f8fafc; }
+.slot-past { cursor: not-allowed !important; }
 </style>

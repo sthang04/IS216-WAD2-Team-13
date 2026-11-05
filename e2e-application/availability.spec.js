@@ -21,6 +21,27 @@ test('heatmap toggles availability and restores the unselected state',async({pag
  await expect(cell).toHaveAttribute('aria-pressed','false')
 })
 
+test('heatmap selects blocks one by one, without dragging, in the legend colours',async({page,app})=>{
+ await open(page,app)
+ const cells=page.locator('.scheduler-grid [role=button]')
+ const [first,second,third]=[cells.nth(0),cells.nth(1),cells.nth(2)]
+ await first.click()
+ await second.click()
+ await expect(first).toHaveAttribute('aria-pressed','true')
+ await expect(second).toHaveAttribute('aria-pressed','true')
+ await expect(third).toHaveAttribute('aria-pressed','false')
+ // 1 of 2 fixture participants is amber; check the selected block has no brighter colour of its own
+ const legendColour=await page.locator('.legend .avail-amber').evaluate(el=>getComputedStyle(el).backgroundColor)
+ await expect(first).toHaveCSS('background-color',legendColour)
+ await expect(page.locator('.legend')).not.toContainText(/\bYou\b/)
+ // Holding the button across blocks must not paint them
+ const box=await third.boundingBox()
+ await first.hover();await page.mouse.down()
+ await page.mouse.move(box.x+box.width/2,box.y+box.height/2,{steps:5});await page.mouse.up()
+ await expect(third).toHaveAttribute('aria-pressed','false')
+ await expect(first).toHaveAttribute('aria-pressed','true')
+})
+
 test('week navigation changes the visible week and returns to this week',async({page,app})=>{
  await open(page,app)
  await page.getByRole('button',{name:'Next week',exact:true}).click()
