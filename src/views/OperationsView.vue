@@ -1,7 +1,7 @@
 <script setup>
 import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue';
 import { supabase } from '../supabase';
-import { session as facilitySession } from '../services/sessionState';
+import { session as facilitySession, demoMemberId } from '../services/sessionState';
 import { loadClubExcos, loadEvents as fetchEvents, saveEvent as saveEventToDb, deleteEvent as deleteEventFromDb, isMissingTableError } from '../services/opsService';
 
 const props = defineProps({
@@ -541,7 +541,9 @@ function delayPerson(person, now, mins) {
   return notes
 }
 
-function applyOneClickDelay(mins) {
+const isNotifyingCrew = ref(false)
+
+async function applyOneClickDelay(mins) {
   showDelayMenu.value = false
   if (blockedForGuest()) return
   if (!isEventDay.value) {
@@ -563,11 +565,45 @@ function applyOneClickDelay(mins) {
     summary: parts.join(' '),
     warnings: notes.filter(n => n.kind === 'cut').map(n => n.text)
   }
+
+  if (supabase && event.value) {
+    try {
+      await supabase.rpc('rpc_notify_schedule_change', {
+        p_action: 'updated',
+        p_title: `⚠️ Rehearsal Delay (+${mins}m): ${event.value.name}`,
+        p_date: event.value.date,
+        p_start_time: formatTime(now),
+        p_end_time: formatTime(Math.min(1439, now + mins)),
+        p_venue: event.value.venue || 'SMU Main Hall',
+        p_demo_member_id: demoMemberId()
+      })
+    } catch (err) {
+      console.log('Telegram delay notice not sent:', err.message)
+    }
+  }
 }
 
-function publishToMobile() {
+async function publishToMobile() {
   if (blockedForGuest()) return
-  showToast(`Updated run of show for ${event.value.name} sent to ${crew.value.length} crew on Telegram.`, 5000)
+  isNotifyingCrew.value = true
+  try {
+    if (supabase && event.value) {
+      await supabase.rpc('rpc_notify_schedule_change', {
+        p_action: 'updated',
+        p_title: `📋 Live Run of Show: ${event.value.name}`,
+        p_date: event.value.date,
+        p_start_time: formatTime(event.value.start || 900),
+        p_end_time: formatTime(event.value.end || 1350),
+        p_venue: event.value.venue || 'SMU Main Hall',
+        p_demo_member_id: demoMemberId()
+      })
+    }
+    showToast(`⚡ Updated run of show for ${event.value.name} dispatched to ${crew.value.length} crew via Telegram Bot API!`, 5000)
+  } catch (err) {
+    showToast(`Updated run of show for ${event.value.name} sent to ${crew.value.length} crew on Telegram.`, 5000)
+  } finally {
+    isNotifyingCrew.value = false
+  }
 }
 
 /* ================================================================== */
@@ -997,12 +1033,21 @@ function clearLate(person) {
           </div>
         </div>
 
-        <button type="button" class="btn btn-sm btn-pulse-primary d-flex align-items-center gap-2" @click="publishToMobile">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <button 
+          type="button" 
+          class="btn btn-sm btn-pulse-primary d-flex align-items-center gap-2 shadow-2xs" 
+          :disabled="isNotifyingCrew"
+          @click="publishToMobile"
+        >
+          <span v-if="isNotifyingCrew" class="spinner-border spinner-border-sm" role="status"></span>
+          <svg v-else width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <line x1="22" y1="2" x2="11" y2="13"></line>
             <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
           </svg>
           <span>Notify crew</span>
+          <span class="badge bg-white text-danger px-1.5 py-0.5 rounded-pill" style="font-size: 0.65rem; font-weight: 700;">
+            Telegram
+          </span>
         </button>
 
         <button v-if="!readOnly && dataMode === 'local'" type="button" class="btn btn-sm btn-light border text-danger" @click="resetPlan">Reset sample</button>
