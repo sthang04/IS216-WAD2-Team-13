@@ -130,3 +130,18 @@ export async function swipeLeft(page,locator,touch){
   await page.mouse.move(end,y,{steps:8});await page.mouse.up()
  }
 }
+
+// Readability is distinct from clipping: text may fit its box yet split words.
+// Use rendered text-line positions so a wrapped status cannot pass on visibility alone.
+export async function assertSingleLineText(locator,label){
+ await expect(locator).toBeVisible()
+ await expect.poll(()=>locator.evaluate(element=>{
+  const walker=document.createTreeWalker(element,NodeFilter.SHOW_TEXT),tops=[];let node
+  while(node=walker.nextNode()){
+   if(!node.textContent.trim())continue
+   const range=document.createRange();range.selectNodeContents(node)
+   for(const box of range.getClientRects())if(box.width>0&&box.height>0&&!tops.some(top=>Math.abs(top-box.top)<1))tops.push(box.top)
+  }
+  return tops.length
+ }),{message:label+' stays on one readable line'}).toBe(1)
+}

@@ -1,4 +1,4 @@
-// App-wide UI journeys, in the lecture's Setup -> Actions -> Assert style.
+// App-wide UI journeys, Setup -> Actions -> Assert style.
 // Real Vue pages and controls run with synthetic API responses. No real messages or bookings are written.
 import {test,expect} from './fixtures/app.js'
 import {room,openScheduleForm,scheduleCard,downloadText} from './fixtures/journeys.js'

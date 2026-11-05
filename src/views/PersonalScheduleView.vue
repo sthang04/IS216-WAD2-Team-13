@@ -774,9 +774,10 @@ function exportCalendarICS() {
                   : '4px solid #10b981 !important'
             }"
           >
-            <div class="d-flex justify-content-between align-items-start gap-2 mb-2">
-              <div>
-                <div class="d-flex align-items-center gap-2 mb-1">
+            <!-- Keep complete status words readable; let the header stack when space runs out. -->
+            <div class="schedule-entry-header d-flex flex-wrap justify-content-between align-items-start gap-2 mb-2">
+              <div class="schedule-entry-details">
+                <div class="schedule-entry-title d-flex flex-wrap align-items-center gap-2 mb-1">
                   <h6 class="fw-bold mb-0" :class="{ 'text-decoration-line-through text-muted': event.status === 'Completed' }">
                     {{ event.title }}
                   </h6>
@@ -804,7 +805,7 @@ function exportCalendarICS() {
               <!-- Status Badge / Toggle Button -->
               <button
                 type="button"
-                class="btn btn-sm py-1 px-2 rounded-pill fw-bold border"
+                class="schedule-entry-status btn btn-sm py-1 px-2 rounded-pill fw-bold border"
                 :class="{
                   'btn-success text-white': event.status === 'Completed',
                   'btn-warning text-dark': event.status === 'In Progress',
@@ -980,6 +981,11 @@ function exportCalendarICS() {
 </template>
 
 <style scoped>
+/* Long titles may wrap naturally; status/category labels retain whole words. */
+.schedule-entry-details { flex: 1 1 14rem; min-width: 0; }
+.schedule-entry-title h6 { min-width: 0; overflow-wrap: anywhere; }
+.schedule-entry-title .badge, .schedule-entry-status { flex-shrink: 0; white-space: nowrap; word-break: normal; overflow-wrap: normal; }
+.schedule-entry-status { margin-left: auto; }
 .pulse-api-tag {
   font-size: 0.6rem;
   font-weight: 700;

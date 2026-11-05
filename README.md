@@ -120,3 +120,5 @@ The two Node unit-test files and 28 non-browser Playwright contract files are ke
 with comments explaining why they exist. They are excluded from browser E2E runs.
 
 
+
+Genuine write-workflow E2E checks now cover booking transfer/OSL approval, database write refusals and multi-user meeting scheduling on the dedicated staging backend. Configure the ignored `.env.live-e2e.local` using `.env.live-e2e.example`; this workspace is prepared. Run `pnpm test:e2e:backend`, or include them through the normal `pnpm e2e` command. Read the [workflow setup, coverage and evidence notes](e2e-backend/README.md). Schedule readability assertions and reviewed screenshot comparisons are included in the application suite.
