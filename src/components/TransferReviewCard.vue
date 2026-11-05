@@ -12,12 +12,12 @@ const props = defineProps({
 })
 const emit = defineEmits(['approve', 'reject', 'load-history'])
 
-const copied = ref('')
-async function copy(text, key) {
+const copied = ref(false)
+async function copyReference() {
   try {
-    await navigator.clipboard.writeText(text)
-    copied.value = key
-    setTimeout(() => { copied.value = '' }, 1500)
+    await navigator.clipboard.writeText(formatReference(props.transfer.fbs_reference))
+    copied.value = true
+    setTimeout(() => { copied.value = false }, 1500)
   } catch { /* clipboard blocked */ }
 }
 
@@ -59,6 +59,11 @@ function stamp(ts) {
       <dt>Claiming CCA</dt><dd>{{ transfer.claiming_club_name }} <span class="text-muted">· {{ transfer.claimed_by_name }}</span></dd>
       <dt>Booking date</dt><dd>{{ formatDate(transfer.booking_date, true) }}</dd>
       <dt>Time</dt><dd>{{ formatTime(transfer.start_time) }} – {{ formatTime(transfer.end_time) }}</dd>
+      <dt>FBS reference</dt>
+      <dd class="pulse-detail-ref">
+        <span class="font-monospace">{{ formatReference(transfer.fbs_reference) }}</span>
+        <button type="button" class="btn btn-sm btn-outline-secondary" aria-label="Copy FBS reference" @click="copyReference">{{ copied ? 'Copied' : 'Copy' }}</button>
+      </dd>
       <dt>Claimed at</dt><dd>{{ stamp(transfer.claimed_at) }}</dd>
       <template v-if="deadline">
         <dt>48-hour deadline</dt>
@@ -72,41 +77,19 @@ function stamp(ts) {
       </dd>
     </dl>
 
-    <div class="row g-2 mt-1">
-      <div class="col-12 col-md-6">
-        <div class="pulse-ref-box">
-          <div class="pulse-eyebrow">Official FBS reference</div>
-          <div class="d-flex justify-content-between align-items-center gap-2">
-            <span class="font-monospace fw-semibold">{{ formatReference(transfer.fbs_reference) }}</span>
-            <button type="button" class="btn btn-sm btn-outline-secondary" @click="copy(formatReference(transfer.fbs_reference), 'fbs')">{{ copied === 'fbs' ? 'Copied' : 'Copy' }}</button>
-          </div>
-        </div>
-      </div>
-      <div class="col-12 col-md-6">
-        <div class="pulse-ref-box">
-          <div class="pulse-eyebrow">Pulse audit voucher (OSL only)</div>
-          <div class="d-flex justify-content-between align-items-center gap-2">
-            <span class="font-monospace fw-semibold">{{ transfer.audit_voucher_id }}</span>
-            <button type="button" class="btn btn-sm btn-outline-secondary" @click="copy(transfer.audit_voucher_id, 'voucher')">{{ copied === 'voucher' ? 'Copied' : 'Copy' }}</button>
-          </div>
-        </div>
-      </div>
-    </div>
-
     <div class="d-flex flex-wrap gap-2 mt-3">
       <button type="button" class="btn btn-success" :disabled="busy || deadline?.expired" :title="deadline?.expired ? 'The 48-hour sign-off deadline has passed' : ''" @click="emit('approve', transfer)">Approve</button>
       <button type="button" class="btn btn-outline-danger" :disabled="busy" @click="emit('reject', transfer)">Reject</button>
-      <button type="button" class="btn btn-link ms-auto" @click="toggleHistory">{{ showHistory ? 'Hide' : 'Show' }} audit history</button>
+      <button type="button" class="btn btn-outline-secondary ms-auto" :aria-expanded="showHistory" @click="toggleHistory">{{ showHistory ? 'Hide' : 'Show' }} audit history</button>
     </div>
 
     <div v-if="showHistory" class="mt-3 border-top pt-3">
       <div v-if="history === null" class="small text-muted">Loading history…</div>
       <ol v-else class="pulse-timeline small mb-0">
-        <li v-for="event in history" :key="event.audit_event_id">
+        <li v-for="(event, i) in history" :key="event.audit_event_id" :class="`act-${event.action.toLowerCase()}`" :style="{ '--i': i }">
           <strong>{{ AUDIT_ACTION_LABELS[event.action] || event.action }}</strong>
           <span class="text-muted"> · {{ event.actor_name || 'System' }}<template v-if="event.actor_is_osl && event.action === 'RELEASED'"> (OSL, on behalf of {{ event.actor_club_name }})</template><template v-else-if="event.actor_club_name"> ({{ event.actor_club_name }})</template> · {{ stamp(event.created_at) }}</span>
           <div v-if="event.details?.reason" class="text-muted">Reason: {{ event.details.reason }}</div>
-          <div v-if="event.audit_voucher_id" class="text-muted font-monospace">{{ event.audit_voucher_id }}</div>
         </li>
       </ol>
     </div>

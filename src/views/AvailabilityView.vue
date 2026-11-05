@@ -1156,9 +1156,9 @@ function exportConfirmed() {
           <!-- Unconfirmed participants -->
           <div class="pulse-card p-4 shadow-sm mb-4">
             <div class="d-flex justify-content-between align-items-center mb-2">
-              <h6 class="fw-bold mb-0">Unconfirmed</h6>
+              <h6 class="fw-bold mb-0">{{ votingOpen ? 'Unconfirmed' : 'No response' }}</h6>
               <span class="pulse-badge" :class="pending.length ? 'pulse-badge-pending' : 'pulse-badge-confirmed'">
-                {{ pending.length }} of {{ totalParticipants }} pending
+                {{ pending.length }} of {{ totalParticipants }} {{ votingOpen ? 'pending' : 'didn’t respond' }}
               </span>
             </div>
 
@@ -1181,6 +1181,9 @@ function exportConfirmed() {
                     </svg>
                     <span>This member has not verified their Telegram account.</span>
                   </span>
+                  <span v-if="recentlyNudged(p)" class="d-block text-success fw-semibold member-meta">{{ nudgedText(p) }}</span>
+                  <!-- Only matters to the person who can nudge them, and only while voting is open -->
+                  <span v-if="isOrganiser && votingOpen && !p.telegram_linked" class="d-block text-muted member-meta">Telegram not linked</span>
                 </div>
                 <button
                   v-if="isOrganiser && votingOpen && p.member_id !== myId && p.telegram_linked === true"

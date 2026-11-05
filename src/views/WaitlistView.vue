@@ -7,6 +7,7 @@ import { ref, computed, onMounted, onUnmounted } from 'vue'
 import FacilityTabs from '../components/FacilityTabs.vue'
 import PageHero from '../components/PageHero.vue'
 import WaitlistOfferCard from '../components/WaitlistOfferCard.vue'
+import WaitlistQueueLine from '../components/WaitlistQueueLine.vue'
 import ConfirmActionModal from '../components/ConfirmActionModal.vue'
 import { loadOffers } from '../services/notificationStore'
 import { session, activeClubName, canManageActiveClub, showToast } from '../services/sessionState'
@@ -150,7 +151,7 @@ function onExpired() {
   <PageHero
     tag="Waitlist"
     :title="activeClubName ? `${activeClubName} Waitlist` : 'Waitlist'"
-    subtitle="First come, first served. When a slot is released, the first CCA in the queue gets 30 minutes to accept."
+    subtitle="When a slot is released, the first CCA in the queue gets 30 minutes to accept."
     :stats="[
       { label: 'Live offers', value: offers.length, tone: 'green' },
       { label: 'Queues joined', value: waiting.length, tone: 'sky' }
@@ -182,48 +183,42 @@ function onExpired() {
       />
     </section>
 
-    <section class="pulse-panel overflow-hidden mb-4">
-      <header class="p-3 border-bottom">
+    <section class="pulse-panel pulse-block tone-sky overflow-hidden mb-4">
+      <header class="pulse-section-head">
         <h2 class="h6 fw-bold mb-0">In the queue</h2>
-        <p class="text-muted small mb-0">Join a queue from All Facilities by choosing Join waitlist.</p>
       </header>
       <div v-if="!waiting.length" class="p-4 text-center">
         <p class="text-muted small">{{ activeClubName }} is not queuing for any slot.</p>
         <RouterLink to="/facilities" class="btn btn-sm btn-pulse-primary">Browse facilities</RouterLink>
       </div>
-      <template v-for="entry in waiting" :key="entry.entry_id">
-        <div class="pulse-slot">
+      <template v-for="(entry, i) in waiting" :key="entry.entry_id">
+        <div class="pulse-slot" :style="{ '--i': i }">
           <div class="pulse-slot-when">
             <div class="fw-semibold">{{ formatDate(entry.booking_date) }}</div>
             <div class="small text-muted">{{ formatTime(entry.start_time) }} – {{ formatTime(entry.end_time) }}</div>
           </div>
           <div class="pulse-slot-status">
-            <span class="pulse-badge pulse-badge-booked">#{{ entry.queue_position }} in queue</span>
-            <div class="small text-pulse fw-semibold mt-1">{{ inFrontLabel(entry.queue_position - 1) }}</div>
+            <span class="pulse-badge pulse-badge-pending">#{{ entry.queue_position }} in queue</span>
+            <div class="small pulse-queue-ahead mt-1">{{ inFrontLabel(entry.queue_position - 1) }}</div>
           </div>
           <div class="pulse-slot-who small">
             <strong>{{ entry.facility_name }}</strong>
             <div class="text-muted">Holder: {{ entry.owner_club_name }}</div>
           </div>
-          <div class="pulse-slot-ref small"><button type="button" class="btn btn-link btn-sm p-0" @click="toggleQueue(entry)">{{ queues[entry.booking_id] ? 'Hide' : 'View' }} queue</button></div>
+          <div class="pulse-slot-ref small"><button type="button" class="pulse-queue-btn" :class="{ open: queues[entry.booking_id] }" :aria-expanded="!!queues[entry.booking_id]" @click="toggleQueue(entry)">{{ queues[entry.booking_id] ? 'Hide' : 'View' }} queue<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button></div>
           <div class="pulse-slot-actions">
             <button v-if="canManageActiveClub" type="button" class="btn btn-sm btn-outline-secondary" :disabled="busyId === entry.entry_id" @click="leave(entry)">Leave queue</button>
           </div>
         </div>
-        <ol v-if="queues[entry.booking_id]" class="pulse-queue small">
-          <li v-for="q in queues[entry.booking_id]" :key="q.entry_id" :class="{ 'fw-semibold': q.club_id === session.activeClubId }">
-            {{ q.club_name }} <span class="text-muted">· {{ q.status === 'OFFERED' ? 'holding offer' : 'waiting' }}</span>
-          </li>
-        </ol>
+        <WaitlistQueueLine v-if="queues[entry.booking_id]" :queue="queues[entry.booking_id]" :active-club-id="session.activeClubId" />
       </template>
     </section>
 
-    <section v-if="history.length" class="pulse-panel overflow-hidden">
-      <header class="p-3 border-bottom">
+    <section v-if="history.length" class="pulse-panel pulse-block tone-amber overflow-hidden">
+      <header class="pulse-section-head">
         <h2 class="h6 fw-bold mb-0">Past waitlist activity</h2>
-        <p class="text-muted small mb-0">Dates are the booking dates. Times beside each status show when it happened.</p>
       </header>
-      <div v-for="entry in history" :key="entry.entry_id" class="pulse-slot no-ref text-muted">
+      <div v-for="(entry, i) in history" :key="entry.entry_id" class="pulse-slot no-ref text-muted" :style="{ '--i': i }">
         <div class="pulse-slot-when">
           <div class="fw-semibold">{{ formatDate(entry.booking_date) }}</div>
           <div class="small">{{ formatTime(entry.start_time) }} – {{ formatTime(entry.end_time) }}</div>

@@ -20,7 +20,7 @@ const look = computed(() => {
       return { cls: 'pulse-badge-booked', label: props.ours === false ? 'Unavailable' : 'Booked' }
     case 'Officially Confirmed Booking':
       if (props.ours === false) return { cls: 'pulse-badge-booked', label: 'Unavailable' }
-      return { cls: 'pulse-badge-confirmed', label: 'Successfully Transferred' }
+      return { cls: 'pulse-badge-confirmed', label: props.plain ? 'Transferred' : 'Successfully Transferred' }
     default:
       return { cls: 'pulse-badge-booked', label: props.status }
   }

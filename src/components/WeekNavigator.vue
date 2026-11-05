@@ -134,8 +134,9 @@ function pickDay(day) {
     <div :key="weekStart" class="pulse-cal-grid pulse-cal-sheet" :role="selectable ? 'group' : 'list'" aria-label="Weekdays">
       <component
         :is="selectable ? 'button' : 'div'"
-        v-for="day in days"
+        v-for="(day, i) in days"
         :key="day.date"
+        :style="{ '--i': i }"
         :role="selectable ? 'button' : 'listitem'"
         :type="selectable ? 'button' : undefined"
         class="pulse-cal-day"

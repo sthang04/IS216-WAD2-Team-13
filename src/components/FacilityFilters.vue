@@ -1,5 +1,5 @@
 <script setup>
-import { computed, ref, onMounted, onUnmounted, watch } from 'vue'
+import { computed, ref, onUnmounted, watch } from 'vue'
 import { OTHER_CCA_FILTER, MY_CCA_FILTER, UNAVAILABLE_FILTER } from '../services/facilityService'
 
 // Options come from the facilities table, not from hard-coded metadata.
@@ -10,6 +10,13 @@ const props = defineProps({
   hasActiveClub: { type: Boolean, default: false }   // "Other CCA Bookings" needs a CCA to compare against
 })
 const emit = defineEmits(['update:filters'])
+
+const NO_FILTERS = { type: 'All', equipment: 'All', capacity: 'any', availability: 'All', search: '' }
+const hasFilters = computed(() => Object.keys(NO_FILTERS).some((key) => props.filters[key] !== NO_FILTERS[key]))
+
+function clearFilters() {
+  emit('update:filters', { ...NO_FILTERS })
+}
 
 const CAPACITY_OPTIONS = [
   { value: 'any', label: 'Any capacity' },
@@ -38,78 +45,56 @@ function update(key, value) {
   emit('update:filters', { ...props.filters, [key]: value })
 }
 
-// Dynamic Animated Typewriter Placeholder for Search Box
-const searchPlaceholderQueries = [
-  "Search 'Dance Studio'…",
-  "Search 'Studio 7.2'…",
-  "Search 'Samba Masala'…",
-  "Search 'Acoustic Room'…",
-  "Search 'Mirrors'…",
-  "Search 'ACC'…"
-]
+// The search box just says "Search" until someone hovers over it or clicks in,
+// then the hint types out once and stays.
+const RESTING_PLACEHOLDER = 'Search'
+const SEARCH_HINT = 'Search for facilities, CCAs or equipment…'
+const TYPING_MS = 28
 
+const searchPlaceholder = ref(RESTING_PLACEHOLDER)
+const searchHovered = ref(false)
+const searchFocused = ref(false)
+let typingTimer = null
 
-const currentSearchPlaceholder = ref('')
-let searchPlaceholderTimer = null
-let sqIndex = 0
-let scIndex = 0
-let sqDeleting = false
-
-function tickSearchPlaceholder() {
-  if (props.filters?.search && props.filters.search.length > 0) return
-
-  const target = searchPlaceholderQueries[sqIndex]
-  if (!sqDeleting) {
-    scIndex++
-    currentSearchPlaceholder.value = target.substring(0, scIndex)
-    if (scIndex >= target.length) {
-      sqDeleting = true
-      searchPlaceholderTimer = setTimeout(tickSearchPlaceholder, 1800)
-      return
-    }
-    searchPlaceholderTimer = setTimeout(tickSearchPlaceholder, 40)
-  } else {
-    scIndex--
-    currentSearchPlaceholder.value = target.substring(0, scIndex)
-    if (scIndex <= 0) {
-      sqDeleting = false
-      sqIndex = (sqIndex + 1) % searchPlaceholderQueries.length
-      searchPlaceholderTimer = setTimeout(tickSearchPlaceholder, 380)
-      return
-    }
-    searchPlaceholderTimer = setTimeout(tickSearchPlaceholder, 22)
+function typeHint() {
+  clearTimeout(typingTimer)
+  if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) {
+    searchPlaceholder.value = SEARCH_HINT
+    return
   }
+  let length = 0
+  const step = () => {
+    length += 1
+    searchPlaceholder.value = SEARCH_HINT.slice(0, length)
+    if (length < SEARCH_HINT.length) typingTimer = setTimeout(step, TYPING_MS)
+  }
+  step()
 }
 
-watch(() => props.filters?.search, (newVal) => {
-  if (!newVal) {
-    if (searchPlaceholderTimer) clearTimeout(searchPlaceholderTimer)
-    scIndex = 0
-    sqDeleting = false
-    searchPlaceholderTimer = setTimeout(tickSearchPlaceholder, 250)
+watch(() => searchHovered.value || searchFocused.value, (active) => {
+  if (active) {
+    typeHint()
+  } else {
+    clearTimeout(typingTimer)
+    searchPlaceholder.value = RESTING_PLACEHOLDER
   }
 })
 
-onMounted(() => {
-  searchPlaceholderTimer = setTimeout(tickSearchPlaceholder, 400)
-})
-
-onUnmounted(() => {
-  if (searchPlaceholderTimer) clearTimeout(searchPlaceholderTimer)
-})
+onUnmounted(() => clearTimeout(typingTimer))
 </script>
 
 <template>
   <section class="pulse-panel p-3 p-lg-4 mb-4">
-    <div class="mb-3">
-      <div>
-        <h2 class="h6 fw-bold mb-0">Facilities for {{ weekLabel }}</h2>
-      </div>
+    <div class="mb-3 d-flex flex-wrap align-items-center justify-content-between gap-2">
+      <h2 class="h6 fw-bold mb-0">Facilities for {{ weekLabel }}</h2>
+      <button type="button" class="pulse-clear-filters" :disabled="!hasFilters" @click="clearFilters">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg>Clear filters
+      </button>
     </div>
 
     <!-- Dynamic Search Box (Immediate Access on Mobile & Desktop) -->
     <div class="mb-3">
-      <div class="pulse-apple-search-box position-relative">
+      <div class="pulse-apple-search-box position-relative" @mouseenter="searchHovered = true" @mouseleave="searchHovered = false">
         <svg class="pulse-search-icon position-absolute" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
           <circle cx="11" cy="11" r="8"></circle>
           <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
@@ -117,9 +102,11 @@ onUnmounted(() => {
         <input
           type="text"
           class="form-control pulse-search pulse-apple-input"
-          :placeholder="filters.search ? '' : (currentSearchPlaceholder || 'Search facility, CCA or equipment…')"
+          :placeholder="searchPlaceholder"
           aria-label="Search facility, CCA or equipment"
           :value="filters.search"
+          @focus="searchFocused = true"
+          @blur="searchFocused = false"
           @input="update('search', $event.target.value)"
         />
         <button

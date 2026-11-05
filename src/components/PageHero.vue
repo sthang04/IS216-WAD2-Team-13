@@ -31,5 +31,8 @@ defineProps({
         </div>
       </div>
     </div>
+    <div v-if="$slots.footer" class="pulse-hero-footer position-relative">
+      <slot name="footer" />
+    </div>
   </section>
 </template>

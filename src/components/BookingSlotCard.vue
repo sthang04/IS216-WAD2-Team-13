@@ -1,14 +1,13 @@
 <script setup>
 import { computed } from 'vue'
 import BookingStatusBadge from './BookingStatusBadge.vue'
-import { formatDate, formatTime, formatReference } from '../services/facilityService'
+import { formatDate, formatTime } from '../services/facilityService'
 
 const props = defineProps({
   booking: { type: Object, required: true },
   actions: { type: Array, default: () => [] },
   busy: { type: Boolean, default: false },
   showFacility: { type: Boolean, default: false },
-  showReference: { type: Boolean, default: true },    // the All Facilities calendar hides the FBS reference column
   highlightClubId: { type: Number, default: null },   // the CCA the viewer is acting for
   plainOwner: { type: Boolean, default: false },      // My Club: everything is ours, so don't mark the holder
   waitlistEntry: { type: Object, default: null },     // our CCA's place in this booking's queue (Logistics Directors only)
@@ -62,7 +61,7 @@ const queueNote = computed(() => {
 </script>
 
 <template>
-  <div class="pulse-slot" :class="[rowClass, { 'no-ref': !showReference }]" :style="{ '--i': index }">
+  <div class="pulse-slot no-ref" :class="rowClass" :style="{ '--i': index }">
     <div class="pulse-slot-when">
       <div class="fw-semibold">{{ formatDate(booking.booking_date) }}</div>
       <div class="text-muted small">{{ formatTime(booking.start_time) }} – {{ formatTime(booking.end_time) }}</div>
@@ -92,17 +91,13 @@ const queueNote = computed(() => {
       </div>
     </div>
 
-    <div v-if="showReference" class="pulse-slot-ref small">
-      <span class="font-monospace">{{ formatReference(booking.fbs_reference) }}</span>
-    </div>
-
     <div class="pulse-slot-actions">
       <template v-for="action in actions" :key="action.type">
-        <span v-if="action.type === 'locked'" class="pulse-locked" :title="action.hint">
+        <span v-if="action.type === 'locked'" class="pulse-locked" tabindex="0" :data-tip="action.hint" :aria-label="`${action.label}: ${action.hint}`">
           <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>
           {{ action.label }}
         </span>
-        <span v-else-if="action.type === 'blocked_conflict'" class="pulse-existing" :title="action.hint">
+        <span v-else-if="action.type === 'blocked_conflict'" class="pulse-existing" tabindex="0" :data-tip="action.hint" :aria-label="`${action.label}: ${action.hint}`">
           <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="5" width="16" height="16" rx="2"/><path d="M16 3v4M8 3v4M4 11h16"/></svg>
           {{ action.label }}
         </span>
@@ -113,7 +108,7 @@ const queueNote = computed(() => {
           :class="{
             'btn-pulse-primary': action.variant === 'primary',
             'btn-outline-secondary': action.variant === 'outline',
-            'btn-pulse-amber': action.variant === 'warning',
+            'btn-pulse-leave': action.variant === 'leave',
             'btn-pulse-claim': action.variant === 'claim'
           }"
           :disabled="busy || action.disabled"
