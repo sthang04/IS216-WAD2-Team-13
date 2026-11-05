@@ -17,6 +17,16 @@ test('notification opens its actual route and read state survives reload',async(
  await expect(bell(page)).toHaveAccessibleName('Notifications, 1 unread')
 })
 
+test('Connect Telegram opens the bot with the link code in a new tab',async({page,app,context})=>{
+ await context.route('https://t.me/**',route=>route.fulfill({status:200,contentType:'text/html',body:'fixture bot page'}))
+ await app.open('/facilities',{authenticated:true,notifications:true})
+ await bell(page).click()
+ const opened=context.waitForEvent('page')
+ await page.getByRole('button',{name:'Connect Telegram',exact:true}).click()
+ const tab=await opened
+ await expect(tab).toHaveURL(/^https:\/\/t\.me\/[\w]+\?start=fixture-link-code$/)
+})
+
 test('mark all read updates count and persists through reload',async({page,app})=>{
  await app.open('/facilities',{authenticated:true,notifications:true})
  await bell(page).click()

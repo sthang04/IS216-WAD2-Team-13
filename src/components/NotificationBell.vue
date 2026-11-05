@@ -147,11 +147,24 @@ async function connectTelegram() {
     showToast('Set VITE_TELEGRAM_BOT_USERNAME in .env to connect Telegram.', 'danger')
     return
   }
+  if (!session.value.authUserId) {
+    showToast('Sign in with a Pulse account to connect Telegram.', 'danger')
+    return
+  }
+  // Open the tab during the click: browsers, phones especially, block one opened after waiting on the server
+  const tab = window.open('', '_blank')
   try {
     const code = await createTelegramLinkCode()
-    const name = botName.replace('@', '')
-    window.open('https://t.me/' + name + '?start=' + encodeURIComponent(code), '_blank', 'noopener')
+    const name = botName.replace('@', '').trim()
+    const url = 'https://t.me/' + name + '?start=' + encodeURIComponent(code)
+    if (tab) {
+      tab.opener = null
+      tab.location.href = url
+    } else {
+      window.location.href = url
+    }
   } catch (error) {
+    if (tab) tab.close()
     console.log(error.message)
     showToast(error.message, 'danger')
   }

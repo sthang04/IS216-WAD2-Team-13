@@ -1,5 +1,6 @@
 
 import { createClient } from 'jsr:@supabase/supabase-js@2'
+import { demoTelegramTargets } from '../_shared/demoDelivery.js'
 
 const supabase = createClient(
   Deno.env.get('SUPABASE_URL')!,
@@ -11,6 +12,8 @@ const BASE_URL = Deno.env.get('PULSE_BASE_URL') ?? ''
 
 // TEST: All eligible notifications go to YOUR chat.
 // LIVE: Notifications go to their intended member's chat.
+// DEMO: Notifications go to the teammate set for that persona in demo_recipients,
+//       or else to the chat that persona linked with Connect Telegram.
 const DELIVERY_MODE = Deno.env.get('TELEGRAM_DELIVERY_MODE')
 
 // Optional: your personal Telegram chat ID. In test mode alerts also go to
@@ -67,10 +70,11 @@ function buttonLabel(type: string): string {
   if (type === 'WAITLIST_OFFER' || type === 'WAITLIST_REMINDER') return 'Claim the slot in Pulse'
   if (type === 'MEETING_REQUEST' || type === 'MEETING_NUDGE') return 'Mark my availability'
   if (type === 'MEETING_CONFIRMED') return 'View meeting'
-  return 'Open in Pulse'
+  if (type.startsWith('TRANSFER_')) return 'View booking'
+  return 'Open Pulse'
 }
 
-function messageFor(n: Notification, linkAsText: boolean): string {
+function messageFor(n: Notification, linkAsText: boolean, personaLabel: string | null = null): string {
   const link = linkAsText ? `\n\n${linkFor(n)}` : ''
 
   let message: string
@@ -139,6 +143,11 @@ function messageFor(n: Notification, linkAsText: boolean): string {
     return `[PULSE TEST NOTIFICATION]\n\n${message}`
   }
 
+  // One Telegram account can stand in for several personas
+  if (DELIVERY_MODE === 'demo' && personaLabel) {
+    return `For: ${personaLabel}\n\n${message}`
+  }
+
   return message
 }
 
@@ -159,9 +168,16 @@ async function getChatIds(
   }
 
   // LIVE MODE:
-  // Look up the actual recipient's linked Telegram chat.
+  const chatId = await liveChatId(recipientMemberId)
+  return chatId === null ? [] : [chatId]
+}
+
+// Look up the actual recipient's linked Telegram chat.
+async function liveChatId(
+  recipientMemberId: number | null
+): Promise<string | null> {
   if (recipientMemberId === null) {
-    return []
+    return null
   }
 
   const { data, error } = await supabase
@@ -175,8 +191,8 @@ async function getChatIds(
   }
 
   return data?.telegram_chat_id == null
-    ? []
-    : [String(data.telegram_chat_id)]
+    ? null
+    : String(data.telegram_chat_id)
 }
 
 async function updateStatus(
@@ -204,9 +220,9 @@ Deno.serve(async () => {
     )
   }
 
-  if (!['test', 'live'].includes(DELIVERY_MODE ?? '')) {
+  if (!['test', 'live', 'demo'].includes(DELIVERY_MODE ?? '')) {
     return Response.json(
-      { error: 'Set TELEGRAM_DELIVERY_MODE to test or live' },
+      { error: 'Set TELEGRAM_DELIVERY_MODE to test, live or demo' },
       { status: 500 }
     )
   }
@@ -238,6 +254,17 @@ Deno.serve(async () => {
     )
   }
 
+  // Stop before marking anything if the mapping can't be read
+  let demoRoutes: any[] = []
+  if (DELIVERY_MODE === 'demo') {
+    const routes = await supabase.from('demo_recipient_routes').select('*')
+    if (routes.error) {
+      return Response.json({ error: routes.error.message }, { status: 500 })
+    }
+    demoRoutes = routes.data ?? []
+  }
+  const seenEvents = new Set<string>()
+
   let sent = 0
   let failed = 0
   let skipped = 0
@@ -254,9 +281,16 @@ Deno.serve(async () => {
     }
 
     try {
-      const chatIds = await getChatIds(n.recipient_member_id)
+      let targets: { chatId: string, label: string | null }[]
+      if (DELIVERY_MODE === 'demo') {
+        // Uses the LIVE lookup above for the chat linked with Connect Telegram
+        const linked = await liveChatId(n.recipient_member_id)
+        targets = demoTelegramTargets(n, demoRoutes, linked, seenEvents)
+      } else {
+        targets = (await getChatIds(n.recipient_member_id)).map((chatId) => ({ chatId, label: null }))
+      }
 
-      if (!chatIds.length) {
+      if (!targets.length) {
         await updateStatus(n.id, 'NO_CHAT')
         results.push({
           id: n.id,
@@ -267,7 +301,7 @@ Deno.serve(async () => {
 
       const link = linkFor(n)
       const errors: string[] = []
-      for (const chatId of chatIds) {
+      for (const { chatId, label } of targets) {
         const response = await fetch(
           `https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`,
           {
@@ -279,13 +313,13 @@ Deno.serve(async () => {
               isPublicUrl(link)
                 ? {
                     chat_id: chatId,
-                    text: messageFor(n, false),
+                    text: messageFor(n, false, label),
                     // A tappable button under the message.
                     reply_markup: {
                       inline_keyboard: [[{ text: buttonLabel(n.type), url: link }]]
                     }
                   }
-                : { chat_id: chatId, text: messageFor(n, true) }
+                : { chat_id: chatId, text: messageFor(n, true, label) }
             )
           }
         )
@@ -298,7 +332,7 @@ Deno.serve(async () => {
       }
 
       // Sent if at least one chat got it; a tester who blocked the bot shouldn't fail everyone.
-      if (errors.length === chatIds.length) {
+      if (errors.length === targets.length) {
         throw new Error(errors.join('; '))
       }
       if (errors.length) console.warn(`Telegram notification ${n.id} partly failed:`, errors.join('; '))

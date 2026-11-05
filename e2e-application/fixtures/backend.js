@@ -32,7 +32,7 @@ export function createBackend(config,calls){
   status:'OFFERED',booking_status:'Proposed Peer Transfer',offer_expires_at:'2026-11-03T02:30:00Z'}
  const state=JSON.parse(sessionStorage.getItem(key)||'null')||{
   calendar:config().facilities?calendar:[],facilities:config().facilities?facilities:[],
-  waitlist:config().offer?[offered]:[],transfers:config().transfers?[config().emailFailed?{...transfer,direction:'OUTGOING',releasing_club_id:71,releasing_club_name:'Fixture Arts Club',osl_email_status:'FAILED'}:transfer]:[],decisions:[],
+  waitlist:config().offer?[offered]:[],transfers:config().transfers?[config().emailFailed?{...transfer,direction:'OUTGOING',releasing_club_id:71,releasing_club_name:'Fixture Arts Club',osl_email_status:'FAILED'}:transfer]:[],decisions:config().decisions??[],
   notifications:config().notifications?[
    {id:401,title:'Fixture schedule update',message:'Review your synthetic assignment',is_read:false,
     link_path:'/personal-schedule',created_at:'2026-11-03T01:55:00Z'},
