@@ -1,4 +1,5 @@
 import { createClient } from 'jsr:@supabase/supabase-js@2'
+import { START_HELP, handleMismatchNote } from '../_shared/telegramLink.js'
 
 // ============================================================
 // PULSE TELEGRAM WEBHOOK
@@ -176,7 +177,8 @@ async function disconnectChat(chatId: number) {
 
 async function linkPulseAccount(
   chatId: number,
-  code: string
+  code: string,
+  username: string
 ) {
   const { data: link, error: lookupError } = await supabase
     .from('telegram_links')
@@ -248,7 +250,7 @@ async function linkPulseAccount(
 
   const { data: member, error: memberError } = await supabase
     .from('members')
-    .select('full_name')
+    .select('full_name, telegram_handle')
     .eq('id', link.member_id)
     .maybeSingle()
 
@@ -262,7 +264,8 @@ async function linkPulseAccount(
     chatId,
     `Connected to the PULSE account of ${member?.full_name ?? 'this member'}. ` +
     'You will receive PULSE notifications for this account. ' +
-    'Not you? Send /stop to disconnect.'
+    'Not you? Send /stop to disconnect.' +
+    handleMismatchNote(member?.telegram_handle, username)
   )
 }
 
@@ -359,27 +362,9 @@ Deno.serve(async (req) => {
     // --------------------------------------------------------
 
     if (/^\/start$/.test(messageText)) {
-      if (!username) {
-        await reply(
-          chatId,
-          'Please set a Telegram username in Settings, then send /start again.'
-        )
-
-        console.warn('Tester registration rejected: no username')
-        return new Response('ok')
-      }
-
+      // Everyone but an approved tester links through the website
       if (!isAllowedTester) {
-        console.warn(
-          'Tester registration rejected: username not allowed',
-          username
-        )
-
-        await reply(
-          chatId,
-          'Your Telegram username is not on the PULSE tester list. Please contact your team administrator.'
-        )
-
+        await reply(chatId, START_HELP)
         return new Response('ok')
       }
 
@@ -398,16 +383,13 @@ Deno.serve(async (req) => {
     // --------------------------------------------------------
 
     if (linkMatch) {
-      await linkPulseAccount(chatId, linkMatch[1])
+      await linkPulseAccount(chatId, linkMatch[1], username)
       return new Response('ok')
     }
 
     // Invalid /start formats
     if (/^\/start\b/.test(messageText)) {
-      await reply(
-        chatId,
-        'To register as a tester, send /start. To link a PULSE account, use Connect Telegram on the website.'
-      )
+      await reply(chatId, START_HELP)
     }
 
     return new Response('ok')

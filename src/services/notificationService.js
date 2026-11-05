@@ -66,6 +66,37 @@ export async function fetchTelegramLinked() {
   return response.data === true
 }
 
+// Link codes need a real Pulse login, and it must be this person's.
+// Placeholder demo sign-ups have none, so there is nothing to link them to.
+export async function canLinkTelegram(email) {
+  if (!supabase) {
+    return false
+  }
+  const response = await supabase.auth.getSession()
+  const signedInEmail = response.data?.session?.user?.email
+  return !!signedInEmail && signedInEmail.toLowerCase() === String(email || '').toLowerCase()
+}
+
+// Opens the Pulse bot on this person's one-time code; pressing Start there links their Telegram.
+export async function openTelegramLink() {
+  const name = (import.meta.env.VITE_TELEGRAM_BOT_USERNAME || 'pulse_wad2_bot').replace('@', '').trim()
+  // Open the tab during the click: browsers, phones especially, block one opened after waiting on the server
+  const tab = window.open('', '_blank')
+  try {
+    const code = await createTelegramLinkCode()
+    const url = 'https://t.me/' + name + '?start=' + encodeURIComponent(code)
+    if (tab) {
+      tab.opener = null
+      tab.location.href = url
+    } else {
+      window.location.href = url
+    }
+  } catch (error) {
+    if (tab) tab.close()
+    throw error
+  }
+}
+
 // Requests a Telegram account-linking code from Supabase.
 // The PostgreSQL RPC generates the code.
 // Supabase Edge Functions handle Telegram Bot API communication.

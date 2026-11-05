@@ -65,7 +65,7 @@ export const supabase={
    {status:'eligible',full_name:'Fixture Exco',ccas:['Fixture Arts Club'],roles:[{code:'LOGISTICS',name:'Logistics Director'}]})
   if(['rpc_update_my_profile','rpc_set_my_roles'].includes(name))return result({})
   if(name==='cfg_text')return result('2026-12-31')
-  if(name==='rpc_my_telegram_link')return result(false)
+  if(name==='rpc_my_telegram_link')return result(!!config().telegramLinksAfterCode&&window.__foundation.calls.some(c=>c.name==='rpc_create_telegram_link_code'))
   if(name==='rpc_simulator_workflow_capabilities')return result({contract_version:4,application_enabled:false,invitations_enabled:false})
   if(name==='rpc_simulator_plan_history')return result({plans:[],invitations:[],audit:[]})
   if(name==='rpc_simulator_my_invitations')return result({invitations:[]})

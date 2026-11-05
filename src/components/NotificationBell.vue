@@ -5,7 +5,7 @@
 import { ref, watch, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { session, showToast } from '../services/sessionState'
-import { markRead, createTelegramLinkCode, fetchTelegramLinked } from '../services/notificationService'
+import { markRead, openTelegramLink, fetchTelegramLinked } from '../services/notificationService'
 import {
   notificationStore,
   unreadCount,
@@ -151,20 +151,9 @@ async function connectTelegram() {
     showToast('Sign in with a Pulse account to connect Telegram.', 'danger')
     return
   }
-  // Open the tab during the click: browsers, phones especially, block one opened after waiting on the server
-  const tab = window.open('', '_blank')
   try {
-    const code = await createTelegramLinkCode()
-    const name = botName.replace('@', '').trim()
-    const url = 'https://t.me/' + name + '?start=' + encodeURIComponent(code)
-    if (tab) {
-      tab.opener = null
-      tab.location.href = url
-    } else {
-      window.location.href = url
-    }
+    await openTelegramLink()
   } catch (error) {
-    if (tab) tab.close()
     console.log(error.message)
     showToast(error.message, 'danger')
   }

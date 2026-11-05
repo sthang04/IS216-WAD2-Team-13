@@ -1,11 +1,13 @@
 <script setup>
-import { ref, reactive } from 'vue';
+import { ref, reactive, onUnmounted } from 'vue';
 import { checkSignupEligibility, signUpExco } from '../services/authService';
+import { canLinkTelegram, fetchTelegramLinked, openTelegramLink } from '../services/notificationService';
 import PasswordVisibilityToggle from '../components/PasswordVisibilityToggle.vue';
 
 const emit = defineEmits(['done', 'cancel']);
 
 // Step 1: check the email is on OSL's ExCo list. Step 2: set up the profile, role and password.
+// Step 3: connect Telegram. A bot can't message someone until they press Start, so a handle alone can't do this.
 const step = ref(1)
 const email = ref('')
 const ccas = ref([]) // set by OSL; one per CCA they lead
@@ -18,6 +20,42 @@ const confirmPassword = ref('')
 const showPassword = ref(false)
 const errorMsg = ref('')
 const isSubmitting = ref(false)
+const newPersona = ref(null)
+const savedHandle = ref('')
+const telegramOpened = ref(false)
+const telegramLinked = ref(false)
+let linkTimer = null
+
+function stopCheckingLink() {
+  clearInterval(linkTimer)
+  linkTimer = null
+}
+
+onUnmounted(stopCheckingLink)
+
+async function handleConnectTelegram() {
+  errorMsg.value = ''
+  try {
+    await openTelegramLink()
+  } catch (err) {
+    errorMsg.value = err.message
+    return
+  }
+  telegramOpened.value = true
+  // The bot links them when they press Start, so keep checking until that happens
+  stopCheckingLink()
+  linkTimer = setInterval(async () => {
+    if (await fetchTelegramLinked()) {
+      telegramLinked.value = true
+      stopCheckingLink()
+    }
+  }, 3000)
+}
+
+function finishSignUp() {
+  stopCheckingLink()
+  emit('done', newPersona.value)
+}
 
 async function handleCheckEmail() {
   errorMsg.value = ''
@@ -70,7 +108,13 @@ async function handleCreateAccount() {
       telegramHandle: handle,
       password: password.value,
     })
-    emit('done', persona)
+    newPersona.value = persona
+    savedHandle.value = handle
+    if (await canLinkTelegram(email.value)) {
+      step.value = 3
+    } else {
+      finishSignUp()
+    }
   } catch (err) {
     errorMsg.value = err.message
   } finally {
@@ -90,11 +134,13 @@ function backToEmail() {
 
       <div class="d-flex align-items-center gap-2 mb-1">
         <span class="badge bg-danger text-white rounded-pill px-3 py-1" style="font-size: 0.7rem; font-weight: 800; letter-spacing: 0.05em;">PULSE</span>
-        <span class="text-muted small">ExCo Sign Up • Step {{ step }} of 2</span>
+        <span class="text-muted small">ExCo Sign Up • Step {{ step }} of 3</span>
       </div>
-      <h4 class="fw-bold mb-1">Create your ExCo account</h4>
+      <h4 class="fw-bold mb-1">{{ step === 3 ? 'Connect your Telegram' : 'Create your ExCo account' }}</h4>
       <p class="text-muted small mb-3">
-        Only ExCos that OSL has added to the ExCo list can sign up.
+        {{ step === 3
+          ? 'Your account is ready. Connect Telegram to get slot release, meeting and run-of-show alerts from the Pulse bot.'
+          : 'Only ExCos that OSL has added to the ExCo list can sign up.' }}
       </p>
 
       <div v-if="errorMsg" class="alert alert-danger py-2 px-3 small rounded-3 mb-3" role="alert">
@@ -114,7 +160,7 @@ function backToEmail() {
       </form>
 
       <!-- Step 2: profile + password (CCA comes from OSL's list and can't be changed) -->
-      <form v-else @submit.prevent="handleCreateAccount">
+      <form v-else-if="step === 2" @submit.prevent="handleCreateAccount">
         <div class="p-3 rounded-3 mb-3 border" style="font-size: 0.8rem;">
           <div class="d-flex justify-content-between">
             <span class="text-muted">SMU email</span>
@@ -173,7 +219,28 @@ function backToEmail() {
         </button>
       </form>
 
-      <button type="button" class="btn btn-link w-100 text-muted small text-decoration-none" :disabled="isSubmitting" @click="emit('cancel')">
+      <!-- Step 3: pressing Start in the bot links this account to their Telegram -->
+      <div v-else>
+        <div v-if="telegramLinked" class="alert alert-success py-2 px-3 small rounded-3 mb-3" role="status">
+          ✓ Telegram connected. Your Pulse alerts will arrive there.
+        </div>
+        <template v-else>
+          <p class="small mb-2">Sign in to Telegram as <strong>@{{ savedHandle }}</strong>, then press <strong>Start</strong> in the bot.</p>
+          <p v-if="telegramOpened" class="text-muted small mb-3" role="status">Waiting for you to press Start in Telegram…</p>
+          <button type="button" class="btn btn-pulse-primary text-white w-100 py-2.5 fw-bold shadow-sm mb-2" @click="handleConnectTelegram">
+            <span class="text-white">{{ telegramOpened ? 'Open Telegram again' : 'Connect Telegram' }}</span>
+          </button>
+        </template>
+        <button v-if="telegramLinked" type="button" class="btn btn-pulse-primary text-white w-100 py-2.5 fw-bold shadow-sm" @click="finishSignUp">
+          <span class="text-white">Continue to Pulse →</span>
+        </button>
+        <button v-else type="button" class="btn btn-link w-100 text-muted small text-decoration-none" @click="finishSignUp">
+          Skip for now
+        </button>
+        <p v-if="!telegramLinked" class="text-muted text-center mb-0" style="font-size: 0.72rem;">You can connect later from the notification bell.</p>
+      </div>
+
+      <button v-if="step !== 3" type="button" class="btn btn-link w-100 text-muted small text-decoration-none" :disabled="isSubmitting" @click="emit('cancel')">
         Already have an account? Sign in
       </button>
 
