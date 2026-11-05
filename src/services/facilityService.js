@@ -356,9 +356,15 @@ export function bookingActions(booking, options) {
     return actions
   }
  
+  // Came to us through a transfer OSL approved: it stays with us
+  if (isOurs && booking.status === STATUSES.CONFIRMED) {
+    actions.push({ type: 'locked', label: 'Locked', hint: 'Your CCA received this slot through a transfer, so it can’t be released again.' })
+    return actions
+  }
+
   // Too close to the booking date
   if (!booking.is_transfer_window_open) {
-    actions.push({ type: 'locked', label: 'Locked', hint: 'Transfer requests must be made at least ' + TRANSFER_LEAD_DAYS + ' days before the booking' })
+    actions.push({ type: 'locked', label: 'Locked', hint: 'Transfer requests must be made at least ' + TRANSFER_LEAD_DAYS + ' days before the booking.' })
     return actions
   }
  
@@ -388,7 +394,7 @@ export function bookingActions(booking, options) {
     if (options.conflictingBooking) {
       actions.push({
         type: 'blocked_conflict',
-        label: 'Existing Booking',
+        label: 'Max bookings reached',
         hint: 'Your CCA already holds ' + (options.conflictingBooking.facility_name || 'a facility') + ' at this time.'
       })
       return actions
@@ -405,11 +411,11 @@ export function bookingActions(booking, options) {
  
   // Otherwise: join or leave the waitlist
   if (options.waitlistEntry) {
-    actions.push({ type: 'leave', label: 'Leave waitlist (#' + options.waitlistEntry.queue_position + ')', variant: 'warning' })
+    actions.push({ type: 'leave', label: 'Leave waitlist', variant: 'leave' })
   } else if (options.conflictingBooking) {
     actions.push({
       type: 'blocked_conflict',
-      label: 'Existing Booking',
+      label: 'Max bookings reached',
       hint: 'Your CCA already holds ' + (options.conflictingBooking.facility_name || 'a facility') + ' at this time.'
     })
   } else {

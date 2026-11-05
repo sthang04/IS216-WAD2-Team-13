@@ -28,7 +28,7 @@ const TYPE_CLASS = {
 <template>
   <article class="pulse-panel pulse-facility overflow-hidden" :class="[TYPE_CLASS[facility.facility_type], { 'is-open': expanded }]" :style="{ '--i': index }" :id="`facility-${facility.id}`">
     <header class="pulse-facility-head p-3 p-lg-4 d-flex flex-wrap justify-content-between gap-3" @click="emit('toggle', facility.id)">
-      <div class="flex-grow-1" style="min-width: 240px;">
+      <div class="flex-grow-1" style="min-width: min(240px, 100%);">
         <div class="d-flex align-items-center flex-wrap gap-2 mb-1">
           <h3 class="h5 fw-bold mb-0">
             <button type="button" class="pulse-facility-toggle" :aria-expanded="expanded" :aria-controls="`facility-slots-${facility.id}`" @click.stop="emit('toggle', facility.id)">{{ facility.name }}</button>
@@ -66,7 +66,6 @@ const TYPE_CLASS = {
             :busy="busyBookingId === booking.booking_id"
             :highlight-club-id="highlightClubId"
             :waitlist-entry="waitlistByBooking[booking.booking_id] || null"
-            :show-reference="false"
             @action="(type, b) => emit('action', type, b)"
           />
         </div>

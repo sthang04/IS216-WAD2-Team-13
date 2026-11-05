@@ -12,7 +12,7 @@
   --pf-hero-to: #4a1430;
   --pf-booked-bg: #eef0f3;      --pf-booked-fg: #475467;
   --pf-proposed-bg: #fff4d6;    --pf-proposed-fg: #8a5a00;
-  --pf-claim-bg: #f3e8ff;       --pf-claim-fg: #6b21a8;     /* anything you can claim: same green as the Claim button */
+  --pf-claim-bg: #f3e8ff;       --pf-claim-fg: #6b21a8;     /* anything you can claim: same purple as the Claim button */
   --pf-pending-bg: #e0f2fe;     --pf-pending-fg: #075985;
   --pf-confirmed-bg: #dcfce7;   --pf-confirmed-fg: #166534;
   --pf-rejected-bg: #fee2e2;    --pf-rejected-fg: #991b1b;
@@ -23,7 +23,7 @@
    (.pulse-facility on its own is a facility card, styled further down.) */
 .pulse-facility-module {
   font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
-  background: var(--pf-bg);
+  background: transparent;
   color: var(--pf-text);
 }
  
@@ -218,6 +218,7 @@
 }
 
 .pulse-search-icon {
+  z-index: 2;
   left: 1rem;
   top: 50%;
   transform: translateY(-50%);
@@ -330,9 +331,10 @@
   padding: 1.25rem 1.5rem;
   border-radius: 1.25rem;
   background: var(--pf-panel);
-  border: 2px solid var(--pf-primary);
-  box-shadow: 0 0 0 4px var(--pf-primary-soft);
+  border: 2px solid var(--pf-green);
+  box-shadow: 0 0 0 4px var(--pf-confirmed-bg);
 }
+.pulse-offer-eyebrow { color: var(--pf-confirmed-fg); }
 .pulse-countdown { font-size: 2rem; font-weight: 800; font-variant-numeric: tabular-nums; }
 .pulse-countdown.urgent { color: var(--pf-primary); }
 .pulse-queue { margin: 0; padding: 0.5rem 1.5rem 0.75rem 3rem; background: var(--pf-bg); border-bottom: 1px solid var(--pf-border); }
@@ -343,8 +345,14 @@
 .pulse-detail-grid dd { margin: 0; font-weight: 600; }
 .pulse-ref-box { padding: 0.75rem 1rem; border-radius: 0.9rem; background: var(--pf-bg); border: 1px dashed var(--pf-border); }
 .pulse-timeline { list-style: none; padding-left: 1rem; border-left: 2px solid var(--pf-border); }
-.pulse-timeline li { position: relative; padding: 0 0 0.6rem 0.5rem; }
-.pulse-timeline li::before { content: ''; position: absolute; left: -1.33rem; top: 0.35rem; width: 9px; height: 9px; border-radius: 50%; background: var(--pf-primary); }
+.pulse-timeline li { --act: var(--pf-muted); position: relative; padding: 0 0 0.75rem 0.5rem; animation: pulse-timeline-in .4s var(--pf-ease, ease) both; animation-delay: calc(var(--i, 0) * 70ms); }
+.pulse-timeline li::before { content: ''; position: absolute; left: -1.42rem; top: 0.3rem; width: 11px; height: 11px; border-radius: 50%; background: var(--act); box-shadow: 0 0 0 3px color-mix(in srgb, var(--act) 20%, transparent); }
+.pulse-timeline li strong { color: var(--act); }
+.pulse-timeline li.act-released, .pulse-timeline li.act-relisted_after_rejection { --act: #7c3aed; }
+.pulse-timeline li.act-claimed, .pulse-timeline li.act-osl_email_requested { --act: #0284c7; }
+.pulse-timeline li.act-approved { --act: #15803d; }
+.pulse-timeline li.act-rejected, .pulse-timeline li.act-signoff_expired { --act: #dc2626; }
+@keyframes pulse-timeline-in { from { opacity: 0; transform: translateX(-8px); } }
  
 /* ---------- modal + toast ---------- */
 .pulse-modal-backdrop {
@@ -374,6 +382,9 @@
    Colour, depth and motion
    ===================================================================== */
 :root {
+  --pf-paper: #fffdf7;
+  --pf-cal-mark: #334155;       /* today and the chosen day: red read as an error here */
+  --pf-cal-mark-soft: #e8ecf2;
   --pf-amber: #f59e0b;
   --pf-sky: #0ea5e9;
   --pf-green: #16a34a;
@@ -469,9 +480,9 @@
 .pulse-tab-count-hot { background: var(--pf-green); color: #fff; animation: pulse-ping 1.8s ease-out infinite; }
  
 @keyframes pulse-ping {
-  0%   { box-shadow: 0 0 0 0 rgba(245, 158, 11, .55); }
-  80%  { box-shadow: 0 0 0 9px rgba(245, 158, 11, 0); }
-  100% { box-shadow: 0 0 0 0 rgba(245, 158, 11, 0); }
+  0%   { box-shadow: 0 0 0 0 rgba(22, 163, 74, .55); }
+  80%  { box-shadow: 0 0 0 9px rgba(22, 163, 74, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(22, 163, 74, 0); }
 }
  
 /* ---------- banners + week ---------- */
@@ -553,8 +564,8 @@
 .btn:active:not(:disabled) { transform: scale(.96); }
 .btn-pulse-primary { background: linear-gradient(135deg, var(--pf-primary), #be185d); border: 0; box-shadow: 0 4px 12px rgba(225, 29, 72, .25); }
 .btn-pulse-primary:hover:not(:disabled) { box-shadow: 0 6px 18px rgba(225, 29, 72, .38); transform: translateY(-1px); }
-.btn-pulse-amber { background: var(--pf-proposed-bg); color: var(--pf-proposed-fg); border: 1px solid color-mix(in srgb, var(--pf-amber) 40%, transparent); font-weight: 600; }
-.btn-pulse-amber:hover { background: var(--pf-amber); color: #1f1300; }
+.btn-pulse-leave { background: var(--pf-primary-soft); color: var(--pf-primary-dark); border: 1px solid color-mix(in srgb, var(--pf-primary) 45%, transparent); font-weight: 600; }
+.btn-pulse-leave:hover { background: var(--pf-primary); border-color: var(--pf-primary); color: #fff; }
 
 /* Claim (take a slot) is green so it stands apart from the red Release button */
 .btn-pulse-claim { background: linear-gradient(135deg, #8b5cf6, #7c3aed); border: 0; color: #fff; font-weight: 600; box-shadow: 0 4px 12px rgba(124, 58, 237, .25); }
@@ -622,8 +633,8 @@
 @keyframes pulse-modal-in { from { opacity: 0; transform: translateY(16px) scale(.97); } }
 .pulse-offer-card { animation: pulse-rise .5s var(--pf-ease) both, pulse-glow-card 3s ease-in-out infinite; }
 @keyframes pulse-glow-card {
-  0%, 100% { box-shadow: 0 0 0 4px var(--pf-primary-soft); }
-  50%      { box-shadow: 0 0 0 8px var(--pf-primary-soft); }
+  0%, 100% { box-shadow: 0 0 0 4px var(--pf-confirmed-bg); }
+  50%      { box-shadow: 0 0 0 8px var(--pf-confirmed-bg); }
 }
  
 @media (prefers-reduced-motion: reduce) {
@@ -747,8 +758,8 @@
 .pulse-cal-day.selectable:hover { transform: translateY(-2px); box-shadow: 0 6px 14px rgba(20, 10, 30, .08); }
 .pulse-cal-day.locked { opacity: .55; }
 .pulse-cal-day.outside { opacity: .3; }
-.pulse-cal-day.today { border-color: var(--pf-primary); }
-.pulse-cal-day.selected { border-color: var(--pf-primary); box-shadow: 0 0 0 3px var(--pf-primary-soft); background: var(--pf-panel); }
+.pulse-cal-day.today { border-color: var(--pf-cal-mark); }
+.pulse-cal-day.selected { border-color: var(--pf-cal-mark); box-shadow: 0 0 0 3px var(--pf-cal-mark-soft); background: var(--pf-panel); }
 .pulse-cal-weekday { font-size: .7rem; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--pf-muted); }
 .pulse-cal-num { font-size: 1.5rem; font-weight: 800; line-height: 1.1; }
 .pulse-cal-mark { position: absolute; top: .45rem; right: .55rem; font-size: .8rem; color: var(--pf-primary); font-weight: 800; }
@@ -806,7 +817,8 @@
   /* Stats inside Hero: force clean single-row 3-column grid */
   .pulse-hero .col-lg-5 > div {
     display: grid !important;
-    grid-template-columns: repeat(3, 1fr) !important;
+    grid-auto-flow: column !important;
+    grid-auto-columns: 1fr !important;
     gap: 0.3rem !important;
     width: 100% !important;
   }
@@ -856,8 +868,7 @@
 /* Tear-off pad: next week rips the page off from right to left; previous week sticks it back on */
 .pulse-cal-pad { position: relative; perspective: 1400px; overflow-x: clip; }
 .pulse-cal-sheet {
-  background: var(--pf-panel);
-  border-top: 2px dashed var(--pf-border);   /* the perforation */
+  background: var(--pf-paper);
   transform-origin: 0 0;                        /* the last corner to let go */
   backface-visibility: hidden;
   will-change: transform, opacity;
@@ -942,23 +953,24 @@
 .pulse-cal-grid { gap: .6rem; }
 .pulse-cal-day {
   min-height: 112px; padding: .6rem .7rem; gap: .15rem;
-  background-image: repeating-linear-gradient(to bottom, transparent 0 25px, color-mix(in srgb, var(--pf-border) 70%, transparent) 25px 26px);
-  background-position: 0 30px; background-repeat: no-repeat;
+  border-color: #e4dcc9; background: #fff;
 }
+.pulse-cal-day.selectable:hover { background: rgba(120, 90, 40, .07); box-shadow: none; }
+.pulse-cal-day.selected, .pulse-cal-day.selected:hover { background: var(--pf-cal-mark-soft); }
 .pulse-cal-top { display: flex; align-items: center; justify-content: space-between; gap: .25rem; min-height: 1.1rem; }
 .pulse-cal-tag { display: inline-flex; align-items: center; gap: .2rem; font-size: .62rem; font-weight: 700; color: var(--pf-muted); }
-.pulse-cal-tag.today { color: var(--pf-primary); }
+.pulse-cal-tag.today { color: var(--pf-cal-mark); }
 .pulse-cal-num { font-size: 1.6rem; }
 /* Written into the day like an agenda entry */
 .pulse-cal-entry {
-  margin-top: auto; padding: .15rem .4rem; border-left: 3px solid var(--pf-violet); border-radius: 2px;
+  margin-top: auto; padding: .15rem .5rem; border-radius: 999px;
   background: var(--pf-claim-bg); color: var(--pf-claim-fg); font-size: .68rem; font-weight: 700; line-height: 1.25; text-align: left;
 }
 .pulse-cal-day.locked, .pulse-cal-day.passed { opacity: 1; cursor: not-allowed; }
-.pulse-cal-day.passed { background: #f0f0f3; background-image: none; }
+.pulse-cal-day.passed { background: #f8f5ec; }
 .pulse-cal-day.passed .pulse-cal-num, .pulse-cal-day.passed .pulse-cal-weekday { color: #a9a6b2; }
-.pulse-cal-day.locked { background-color: #f6f5f8; background-image: repeating-linear-gradient(135deg, transparent 0 7px, rgba(107, 100, 117, .08) 7px 8px); background-position: 0 0; }
-.pulse-cal-day.locked .pulse-cal-num { color: var(--pf-muted); }
+.pulse-cal-day.locked { background: #f8f5ec; }
+.pulse-cal-day.locked .pulse-cal-num { color: #a9a6b2; }
 .pulse-cal-foot { gap: .6rem .9rem; }
 .pulse-lock-note { display: inline-flex; align-items: center; gap: .4rem; padding: .35rem .75rem; font-size: .85rem; font-weight: 700; }
 .pulse-lock-note:not(.open) { background: var(--pf-booked-bg); color: var(--pf-booked-fg); }
@@ -973,16 +985,15 @@
   .pulse-facility-chevron { position: absolute; top: 1rem; right: .9rem; }
   /* The whole week fits, like a phone's calendar: number, then a marker */
   .pulse-cal-grid { grid-template-columns: repeat(7, minmax(0, 1fr)) !important; gap: .3rem !important; padding: .75rem .75rem .6rem !important; overflow: visible; }
-  .pulse-cal-day { min-height: 74px !important; padding: .45rem .1rem !important; align-items: center; text-align: center; background-image: none; }
-  .pulse-cal-day.locked { background-image: repeating-linear-gradient(135deg, transparent 0 6px, rgba(107, 100, 117, .08) 6px 7px); }
+  .pulse-cal-day { min-height: 74px !important; padding: .45rem .1rem !important; align-items: center; text-align: center; }
   .pulse-cal-top { justify-content: center; flex-direction: column; gap: .1rem; min-height: 0; }
   .pulse-cal-num { font-size: 1.15rem !important; }
   .pulse-cal-entry { margin-top: auto; padding: 0; border: 0; background: none; }
   .pulse-cal-entry-count { display: inline-grid; place-items: center; min-width: 1.2rem; height: 1.2rem; padding: 0 .2rem; border-radius: 999px; background: var(--pf-violet); color: #fff; font-size: .68rem; font-weight: 700; line-height: 1; }
   .pulse-cal-key { display: inline-flex; align-items: center; gap: .4rem; font-size: .8rem; color: var(--pf-muted); }
   .pulse-cal-foot { padding: .15rem .85rem 1rem; }
-  .pulse-lock-note { font-size: .8rem; padding: .3rem .65rem; align-items: flex-start; }
-  .pulse-lock-note .pulse-dot { margin-top: .35rem; flex: none; }
+  .pulse-lock-note { font-size: .8rem; padding: .45rem .65rem; }
+  .pulse-lock-note .pulse-dot { flex: none; }
   .pulse-cal-hint { font-size: .8rem; color: var(--pf-muted); }
 }
 
@@ -1033,9 +1044,199 @@
 .pulse-folder-swap-enter-from { opacity: 0; transform: translateY(8px); }
 .pulse-folder-swap-leave-to { opacity: 0; }
 
+/* ---------- The calendar is a pad of paper: sheets stacked underneath ---------- */
+.pulse-cal {
+  background: var(--pf-paper);
+  border-color: #eee7d8;
+  box-shadow:
+    0 6px 0 -2px #fbf7ec, 0 7px 0 -2px #e7e0d0,
+    0 12px 0 -4px #f8f3e6, 0 13px 0 -4px #e2dac8,
+    0 22px 28px rgba(70, 50, 20, .12);
+}
+.pulse-cal-day.today .pulse-cal-num { color: var(--pf-cal-mark); }
+
+/* ---------- Clear filters ---------- */
+.pulse-clear-filters {
+  display: inline-flex; align-items: center; gap: .3rem; padding: .3rem .75rem; border: 1px solid var(--pf-primary); border-radius: 999px;
+  background: var(--pf-panel); color: var(--pf-primary); font-size: .8rem; font-weight: 600; transition: background .2s, color .2s;
+}
+.pulse-clear-filters svg { width: .9em; height: .9em; fill: none; stroke: currentColor; stroke-width: 2.6; stroke-linecap: round; }
+.pulse-clear-filters:hover:not(:disabled) { background: var(--pf-primary); color: #fff; }
+.pulse-clear-filters:disabled { border-color: var(--pf-border); color: #a9a6b2; cursor: not-allowed; }
+
+/* ---------- Waitlist: each block in its stat's colour ---------- */
+.pulse-block { border-top: 4px solid var(--tone); }
+.pulse-block > .pulse-section-head { border-left: 0; background: color-mix(in srgb, var(--tone) 12%, var(--pf-panel)); }
+
+.pulse-queue-btn {
+  display: inline-flex; align-items: center; gap: .3rem; padding: .3rem .75rem; white-space: nowrap;
+  border: 1px solid var(--pf-sky); border-radius: .5rem; background: var(--pf-pending-bg); color: var(--pf-pending-fg); font-weight: 600;
+  transition: background .2s, color .2s;
+}
+.pulse-queue-btn:hover, .pulse-queue-btn.open { background: var(--pf-sky); color: #fff; }
+.pulse-queue-btn svg { width: 1em; height: 1em; fill: none; stroke: currentColor; stroke-width: 2.6; stroke-linecap: round; stroke-linejoin: round; transition: transform .25s var(--pf-ease); }
+.pulse-queue-btn.open svg { transform: rotate(180deg); }
+
+/* The queue, front on the left: the slot, then each CCA lining up behind it */
+.pulse-queue-wrap { padding: .85rem 1.5rem 1rem; background: var(--pf-bg); border-bottom: 1px solid var(--pf-border); }
+.pulse-queue-wrap:last-child { border-bottom: 0; }
+/* Lines up with the text inside the "#1 in queue" label, which has .6rem of padding */
+.pulse-queue-ahead { padding-left: .6rem; color: var(--pf-pending-fg); font-weight: 600; }
+ol.pulse-queue { position: relative; display: flex; flex-wrap: wrap; gap: .6rem; min-height: 3.2rem; margin: 0; padding: 0; list-style: none; background: none; border: 0; }
+.pulse-queue-spot {
+  position: relative; display: flex; align-items: center; gap: .55rem; padding: .45rem .8rem .45rem .5rem;
+  border: 1px solid var(--pf-border); border-radius: .6rem; background: var(--pf-panel);
+  transition: background .3s, border-color .3s;
+}
+.pulse-queue-num { display: grid; place-items: center; flex: none; width: 1.6rem; height: 1.6rem; border-radius: 50%; background: var(--pf-booked-bg); color: var(--pf-booked-fg); font-weight: 700; }
+.pulse-queue-state { font-size: .72rem; color: var(--pf-muted); }
+.pulse-queue-spot.is-offered { border-color: var(--pf-green); }
+.pulse-queue-spot.is-offered .pulse-queue-num { background: var(--pf-green); color: #fff; }
+.pulse-queue-spot.is-you { border-color: var(--pf-primary); background: var(--pf-primary-soft); }
+.pulse-queue-spot.is-you strong { color: var(--pf-primary-dark); }
+.pulse-queue-spot.is-you .pulse-queue-num { background: var(--pf-primary); color: #fff; }
+/* Each CCA swipes in from the back of the line */
+.pulse-q-enter-active { transition: opacity .5s ease, transform .55s var(--pf-ease); transition-delay: calc(var(--i, 0) * 110ms); }
+.pulse-q-enter-from { opacity: 0; transform: translateX(70px); }
+@media (max-width: 575.98px) {
+  .pulse-queue-wrap { padding: .75rem .85rem; }
+  ol.pulse-queue { flex-direction: column; }
+}
+
+/* ---------- Rotating strip: one item at a time ---------- */
+.pulse-spotlight { position: relative; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .6rem 1rem; margin-bottom: 1rem; padding: .75rem 1.5rem; overflow: hidden; border: 1px solid var(--pf-border); border-radius: 1rem; background: color-mix(in srgb, var(--tone) 7%, var(--pf-panel)); transition: background .4s; }
+.pulse-spotlight.is-flush { margin-bottom: 0; border-width: 0 0 1px; border-radius: 0; }
+.pulse-spotlight-slide { display: flex; flex-wrap: wrap; align-items: center; gap: .4rem .8rem; flex: 1 1 18rem; min-width: 0; padding: 0; border: 0; background: none; color: inherit; font: inherit; text-align: left; }
+button.pulse-spotlight-slide:hover strong { text-decoration: underline; }
+.pulse-spotlight-tag { padding: .2rem .6rem; border-radius: 999px; background: var(--tone); color: #fff; font-size: .72rem; font-weight: 700; white-space: nowrap; }
+.pulse-spotlight-text { flex: 1 1 12rem; min-width: 0; font-size: .85rem; }
+.pulse-spotlight-dots { display: flex; gap: .15rem; }
+.pulse-spotlight-dot { display: grid; place-items: center; width: 1.25rem; height: 1.25rem; padding: 0; border: 0; background: none; }
+.pulse-spotlight-dot::before { content: ''; width: .5rem; height: .5rem; border-radius: 50%; background: color-mix(in srgb, var(--tone) 30%, #c9c5d0); transition: transform .25s, background .25s; }
+.pulse-spotlight-dot.active::before { background: var(--tone); transform: scale(1.35); }
+.pulse-spotlight-bar { position: absolute; left: 0; bottom: 0; width: 100%; height: 2px; background: var(--tone); opacity: .55; transform-origin: left; animation: pulse-spot-bar var(--rotate, 6s) linear both; }
+.pulse-spotlight.is-paused .pulse-spotlight-bar { animation-play-state: paused; }
+@keyframes pulse-spot-bar { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+.pulse-spot-enter-active { transition: opacity .35s ease, transform .35s var(--pf-ease); }
+.pulse-spot-leave-active { transition: opacity .18s ease, transform .18s ease; }
+.pulse-spot-enter-from { opacity: 0; transform: translateX(26px); }
+.pulse-spot-leave-to { opacity: 0; transform: translateX(-16px); }
+
 @media (prefers-reduced-motion: reduce) {
+  .pulse-timeline li { animation: none; }
+  .pulse-q-enter-active { transition: none; }
+  .pulse-queue-btn svg, .pulse-spotlight, .pulse-spotlight-dot::before, .pulse-spot-enter-active, .pulse-spot-leave-active { transition: none; }
   .pulse-facility-fold, .pulse-facility.is-open .pulse-facility-fold { transition: none; }
   .pulse-facility.is-open .pulse-facility-fold .pulse-slot { animation: none; }
   .pulse-facility-chevron, .pulse-folder-tab, .pulse-cal-step { transition: none; }
   .pulse-folder-swap-enter-active, .pulse-folder-swap-leave-active { transition: none; }
+}
+
+/* ---------- Locked: says why on hover, focus or tap ---------- */
+.pulse-locked { position: relative; border-radius: .3rem; }
+.pulse-existing { position: relative; cursor: help; }
+.pulse-locked:focus-visible, .pulse-existing:focus-visible { outline: 2px solid var(--pf-primary); outline-offset: 2px; }
+.pulse-locked[data-tip]:hover svg, .pulse-locked[data-tip]:focus svg { animation: pulse-lock-wiggle .45s ease; }
+.pulse-locked[data-tip]:hover::after, .pulse-locked[data-tip]:focus::after,
+.pulse-existing[data-tip]:hover::after, .pulse-existing[data-tip]:focus::after {
+  content: attr(data-tip); position: absolute; right: calc(100% + .55rem); top: 50%; z-index: 5; width: 15rem; padding: .45rem .65rem; border-radius: .5rem;
+  background: var(--pf-text); color: #fff; font-size: .75rem; font-weight: 500; line-height: 1.35; white-space: normal; text-align: left;
+  transform: translateY(-50%); animation: pulse-tip-in .18s ease both; pointer-events: none;
+}
+@keyframes pulse-tip-in { from { opacity: 0; margin-right: -6px; } }
+@keyframes pulse-lock-wiggle { 25% { transform: rotate(-12deg); } 75% { transform: rotate(12deg); } }
+@media (max-width: 991.98px) {
+  /* The row stacks here, so there is no room beside the lock: open underneath it */
+  .pulse-locked, .pulse-existing { flex-wrap: wrap; }
+  .pulse-locked[data-tip]:hover::after, .pulse-locked[data-tip]:focus::after,
+  .pulse-existing[data-tip]:hover::after, .pulse-existing[data-tip]:focus::after { position: static; width: 100%; transform: none; }
+}
+
+/* ---------- Small alignment fixes ---------- */
+/* Block headings line up with the rows under them */
+.pulse-section-head { padding-inline: 1.5rem; }
+@media (max-width: 991.98px) { .pulse-section-head { padding-inline: 1rem; } }
+@media (max-width: 575.98px) { .pulse-section-head { padding-inline: .85rem; } .pulse-spotlight { padding-inline: .85rem; } }
+/* View queue and Hide queue are the same width, so nothing shifts when it toggles */
+.pulse-queue-btn { min-width: 7.5rem; justify-content: center; }
+
+/* ---------- Life around the page ---------- */
+.pulse-cal-day { animation: pulse-rise .4s var(--pf-ease) backwards; animation-delay: calc(var(--i, 0) * 45ms); }
+.pulse-cal-num { transition: color .2s, transform .2s var(--pf-ease); }
+.pulse-cal-day.selectable:hover .pulse-cal-num { transform: scale(1.08); transform-origin: left center; }
+.pulse-block, .pulse-folder, .pulse-spotlight { animation: pulse-rise .5s var(--pf-ease) backwards; }
+.pulse-spotlight.is-flush { animation: none; }
+.pulse-block { transition: box-shadow .25s var(--pf-ease), transform .25s var(--pf-ease); }
+.pulse-block:hover { box-shadow: 0 12px 28px rgba(20, 10, 30, .08); }
+.pulse-slot-actions .btn, .pulse-queue-btn, .pulse-clear-filters:not(:disabled) { transition: transform .18s var(--pf-ease), box-shadow .18s, background .2s, color .2s; }
+.pulse-slot-actions .btn:hover:not(:disabled), .pulse-queue-btn:hover, .pulse-clear-filters:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 5px 12px rgba(20, 10, 30, .14); }
+.pulse-slot-actions .btn:active:not(:disabled), .pulse-queue-btn:active { transform: scale(.97); }
+@media (prefers-reduced-motion: reduce) {
+  .pulse-cal-day, .pulse-block, .pulse-folder, .pulse-spotlight, .pulse-spotlight-bar { animation: none; }
+  .pulse-locked[data-tip]:hover svg, .pulse-locked[data-tip]:focus svg, .pulse-locked[data-tip]:hover::after, .pulse-locked[data-tip]:focus::after, .pulse-existing[data-tip]:hover::after, .pulse-existing[data-tip]:focus::after { animation: none; }
+  .pulse-cal-num, .pulse-block, .pulse-slot-actions .btn, .pulse-queue-btn, .pulse-clear-filters { transition: none; }
+  .pulse-slot-actions .btn:hover:not(:disabled), .pulse-queue-btn:hover, .pulse-clear-filters:hover:not(:disabled), .pulse-slot-actions .btn:active:not(:disabled), .pulse-queue-btn:active, .pulse-cal-day.selectable:hover .pulse-cal-num { transform: none; }
+}
+
+/* OSL review card: the reference and its Copy button sit on one line in the details list */
+.pulse-detail-ref { display: flex; flex-wrap: wrap; align-items: center; gap: .25rem .6rem; }
+.pulse-detail-ref .font-monospace { overflow-wrap: anywhere; }
+.pulse-detail-ref .btn { padding: 0 .5rem; font-size: .72rem; line-height: 1.5; }
+
+/* The rotating strip when it sits along the bottom of the dark hero */
+.pulse-hero-footer { margin-top: 1.1rem; }
+.pulse-hero-footer .pulse-spotlight { margin-bottom: 0; padding: .6rem 1rem; border-color: rgba(255, 255, 255, .16); background: rgba(255, 255, 255, .09); color: #fff; backdrop-filter: blur(6px); }
+.pulse-hero-footer .text-muted { color: rgba(255, 255, 255, .72) !important; }
+.pulse-hero-footer .pulse-spotlight-dot::before { background: rgba(255, 255, 255, .32); }
+.pulse-hero-footer .pulse-spotlight-dot.active::before { background: #fff; }
+.pulse-hero-footer .pulse-spotlight-bar { background: #fff; opacity: .5; }
+
+/* ---------- Tablet and phone ---------- */
+/* Day tiles are too narrow for "1 available slot": use the number and the legend */
+@media (max-width: 991.98px) {
+  .pulse-cal-entry { margin-top: auto; padding: 0; background: none; }
+  .pulse-cal-entry-text { display: none; }
+  .pulse-cal-entry-count { display: inline-grid; place-items: center; min-width: 1.2rem; height: 1.2rem; padding: 0 .2rem; border-radius: 999px; background: var(--pf-violet); color: #fff; font-size: .68rem; font-weight: 700; line-height: 1; }
+  .pulse-cal-key { display: inline-flex; align-items: center; gap: .4rem; font-size: .8rem; color: var(--pf-muted); }
+}
+/* All five My Club tabs on one line. If a very small phone can't fit them, the row slides */
+@media (max-width: 575.98px) {
+  .pulse-folder-tabs { flex-wrap: nowrap; gap: .15rem; padding-inline: .3rem; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .pulse-folder-tab { flex: 1 0 auto; padding: .4rem .3rem .35rem; font-size: .68rem; text-align: center; white-space: nowrap; }
+}
+
+/* The calendar's note is a rectangle, with its icon centred against the text */
+.pulse-lock-note { align-items: center; border-radius: .5rem; }
+.pulse-lock-note svg { flex: none; }
+
+/* ---------- Booking rows on small screens ----------
+   Date and status share a line, then holder and action, so a row uses the width
+   it has instead of stacking every item on its own line. */
+@media (max-width: 991.98px) {
+  .pulse-slot, .pulse-slot.no-ref { display: flex; flex-wrap: wrap; align-items: flex-start; gap: .45rem .75rem; }
+  .pulse-slot-when { flex: 1 1 9rem; min-width: 0; }
+  .pulse-slot-status { flex: 0 1 auto; margin-left: auto; text-align: right; }
+  .pulse-slot-who { flex: 1 1 11rem; min-width: 0; }
+  .pulse-slot-ref { flex: 0 0 auto; margin-left: auto; }
+  .pulse-slot-actions { flex: 0 1 auto; margin-left: auto; align-self: center; justify-content: flex-end; }
+  .pulse-queue-ahead { padding-inline: .6rem; }
+  .pulse-locked[data-tip]:hover::after, .pulse-locked[data-tip]:focus::after,
+  .pulse-existing[data-tip]:hover::after, .pulse-existing[data-tip]:focus::after { width: min(13rem, 70vw); }
+}
+/* Smaller type on phones, in line with the other pages */
+@media (max-width: 575.98px) {
+  .pulse-slot, .pulse-slot.no-ref { padding: .65rem .8rem; font-size: .85rem; }
+  .pulse-slot .small, .pulse-slot.small { font-size: .75rem; }
+  .pulse-slot .pulse-badge { padding: .18rem .5rem; font-size: .68rem; }
+  .pulse-slot-actions .btn, .pulse-queue-btn { padding: .25rem .55rem; font-size: .72rem; }
+  .pulse-queue-btn { min-width: 0; }
+  .pulse-slot-actions .pulse-existing, .pulse-locked { font-size: .7rem; }
+  .pulse-section-head { padding-block: .7rem; }
+  .pulse-section-head .h6 { font-size: .9rem; }
+  .pulse-section-head .small { font-size: .72rem; }
+  .pulse-facility-head { padding: .75rem 3rem .75rem .8rem !important; gap: .4rem !important; }
+  .pulse-facility-head .h5 { font-size: .95rem; }
+  .pulse-facility-head .small { font-size: .75rem; }
+  .pulse-type-chip, .pulse-facility-head .pulse-chip, .pulse-facility-head .pf-tag { padding: .1rem .45rem; font-size: .65rem; }
+  .pulse-facility-chevron { top: .7rem; right: .7rem; width: 1.7rem; height: 1.7rem; }
 }

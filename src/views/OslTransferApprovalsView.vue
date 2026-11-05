@@ -9,6 +9,7 @@ import TransferReviewCard from '../components/TransferReviewCard.vue'
 import PageHero from '../components/PageHero.vue'
 import FacilityTabs from '../components/FacilityTabs.vue'
 import ConfirmActionModal from '../components/ConfirmActionModal.vue'
+import SpotlightCarousel from '../components/SpotlightCarousel.vue'
 import { session, showToast } from '../services/sessionState'
 import { listenForCalendarChanges, formatDate, formatTime, formatReference } from '../services/facilityService'
 import { fetchPendingTransfers, fetchRecentDecisions, fetchAuditHistory, approveTransfer, rejectTransfer } from '../services/transferService'
@@ -143,6 +144,19 @@ const sortedDecisions = computed(() => {
     .sort((a, b) => new Date(b.decided_at) - new Date(a.decided_at))
 })
 
+// The strip above the table: the latest decisions, one at a time
+const decisionSlides = computed(() => {
+  return sortedDecisions.value.slice(0, 6).map((d) => ({
+    key: d.transfer_id,
+    tag: d.state === 'APPROVED' ? 'Approved' : 'Not approved',
+    tone: d.state === 'APPROVED' ? 'green' : 'red',
+    title: d.facility_name,
+    meta: formatDate(d.booking_date) + ', ' + formatTime(d.start_time),
+    detail: d.releasing_club_name + ' → ' + d.claiming_club_name,
+    side: d.decided_at ? new Date(d.decided_at).toLocaleDateString('en-SG', { timeZone: 'Asia/Singapore', day: 'numeric', month: 'short' }) : ''
+  }))
+})
+
 // ---------------- Opening one transfer from a link ----------------
 
 const focusTransfer = computed(() => {
@@ -260,7 +274,7 @@ async function confirmDecision(reason) {
 
   <div v-if="!session.isOslAdmin" class="pulse-panel p-5 text-center">
     <h2 class="h6 fw-bold">OSL administrators only</h2>
-    <p class="text-muted small mb-0">This page shows internal audit vouchers. The database refuses these requests for anyone else.</p>
+    <p class="text-muted small mb-0">This page is for OSL staff. The database refuses these requests for anyone else.</p>
   </div>
 
   <template v-else>
@@ -270,7 +284,7 @@ async function confirmDecision(reason) {
         type="search"
         class="form-control pulse-search flex-grow-1 w-auto"
         style="min-width: 220px"
-        placeholder="Search FBS reference, facility, CCA, date or audit voucher…"
+        placeholder="Search by FBS, facility or CCA…"
         aria-label="Search transfers"
       />
       <label class="d-flex align-items-center gap-2 small text-muted mb-0">
@@ -304,10 +318,11 @@ async function confirmDecision(reason) {
 
       <section class="pulse-panel overflow-hidden">
         <header class="p-3 border-bottom"><h2 class="h6 fw-bold mb-0">Recent decisions</h2></header>
+        <SpotlightCarousel v-if="decisionSlides.length > 1" class="is-flush" :slides="decisionSlides" label="Latest OSL decisions" />
         <p v-if="!sortedDecisions.length" class="p-3 text-muted small mb-0">{{ decisions.length ? 'No decisions match your search.' : 'No decisions yet.' }}</p>
         <div v-else class="table-responsive">
           <table class="table table-sm align-middle mb-0 small">
-            <thead><tr><th class="ps-3">Decision</th><th>Booking</th><th>Transfer</th><th>FBS reference</th><th>Audit voucher</th><th>Confirmation email</th></tr></thead>
+            <thead><tr><th class="ps-3">Decision</th><th>Booking</th><th>Transfer</th><th>FBS reference</th><th>Confirmation email</th></tr></thead>
             <tbody>
               <tr v-for="d in sortedDecisions" :key="d.transfer_id">
                 <td class="ps-3">
@@ -316,8 +331,7 @@ async function confirmDecision(reason) {
                 </td>
                 <td>{{ d.facility_name }}<div class="text-muted">{{ formatDate(d.booking_date) }}, {{ formatTime(d.start_time) }}</div></td>
                 <td>{{ d.releasing_club_name }} → {{ d.claiming_club_name }}</td>
-                <td class="font-monospace">{{ formatReference(d.fbs_reference) }}</td>
-                <td class="font-monospace">{{ d.audit_voucher_id }}</td>
+                <td class="font-monospace text-nowrap">{{ formatReference(d.fbs_reference) }}</td>
                 <td>{{ d.confirmation_email_status || '—' }}</td>
               </tr>
             </tbody>

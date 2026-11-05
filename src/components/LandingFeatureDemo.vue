@@ -265,7 +265,7 @@ onUnmounted(() => clearTimeout(timer))
                   <span class="btn btn-sm btn-pulse-primary demo-press" :style="{ animationDuration: `${STEP_MS}ms` }">Approve</span>
                   <span class="btn btn-sm btn-outline-secondary">Reject</span>
                 </div>
-                <div v-else key="done" class="demo-review-done">Signed off · audit voucher issued to both CCAs</div>
+                <div v-else key="done" class="demo-review-done">Signed off · both CCAs notified</div>
               </Transition>
             </div>
             <div v-else key="other" class="demo-slot-card is-dim">

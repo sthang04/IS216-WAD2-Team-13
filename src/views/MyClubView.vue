@@ -10,12 +10,13 @@ import FacilityTabs from '../components/FacilityTabs.vue'
 import WeekNavigator from '../components/WeekNavigator.vue'
 import BookingSlotCard from '../components/BookingSlotCard.vue'
 import ConfirmActionModal from '../components/ConfirmActionModal.vue'
+import SpotlightCarousel from '../components/SpotlightCarousel.vue'
 import { loadOffers } from '../services/notificationStore'
-import { session, activeMembership, activeClubName, canManageActiveClub, showToast } from '../services/sessionState'
+import { session, activeClubName, canManageActiveClub, showToast } from '../services/sessionState'
 import {
   STATUSES, fetchCalendar, fetchClubTransfers, releaseBooking, undoRelease,
   listenForCalendarChanges, bookingActions, defaultWeekStart, weekStartOf, addDays,
-  formatDate, formatTime, formatReference
+  formatDate, formatTime, singaporeToday
 } from '../services/facilityService'
 import { fetchActiveClubEntries } from '../services/waitlistService'
 import { requestOslEmail } from '../services/transferService'
@@ -155,6 +156,20 @@ const TAB_COLOURS = {
   successful: 'var(--pf-green)',
   rejected: '#8a8494'
 }
+// The strip above the tabs: what this CCA has coming up this week
+const nextUpSlides = computed(() => {
+  const today = singaporeToday()
+  return assigned.value
+    .filter((booking) => booking.booking_date >= today)
+    .slice(0, 6)
+    .map((booking) => ({
+      key: booking.booking_id,
+      tag: 'Agenda for this week',
+      tone: 'teal',
+      title: booking.facility_name,
+      meta: formatDate(booking.booking_date) + ', ' + formatTime(booking.start_time) + ' – ' + formatTime(booking.end_time)
+    }))
+})
 const emailNeedsAttention = computed(() => pendingTransfers.value.some((transfer) => emailFailed(transfer)))
 
 function actionsFor(booking) {
@@ -179,8 +194,7 @@ function emailFailed(transfer) {
 function slotDetails(row) {
   return [
     { label: 'Facility', value: row.facility_name },
-    { label: 'When', value: formatDate(row.booking_date, true) + ', ' + formatTime(row.start_time) + ' – ' + formatTime(row.end_time) },
-    { label: 'FBS reference', value: formatReference(row.fbs_reference) }
+    { label: 'When', value: formatDate(row.booking_date, true) + ', ' + formatTime(row.start_time) + ' – ' + formatTime(row.end_time) }
   ]
 }
 
@@ -262,14 +276,16 @@ async function confirmPending() {
   <PageHero
     tag="My Club"
     :title="activeClubName || 'My Club'"
-    :subtitle="activeMembership
-      ? 'Your CCA’s bookings and transfers, week by week. Every transfer needs OSL approval.'
-      : 'Your CCA’s bookings and transfers, week by week.'"
+    subtitle="Your CCA’s bookings and transfers"
     :stats="session.activeClubId ? [
       { label: 'Facilities booked', value: assigned.length, tone: 'plain' },
       { label: 'Pending transfers', value: pendingTransfers.length, tone: 'sky' }
     ] : []"
-  />
+  >
+    <template #footer>
+      <SpotlightCarousel v-if="!loading && nextUpSlides.length" :slides="nextUpSlides" label="Your CCA's agenda for this week" />
+    </template>
+  </PageHero>
 
 
   <div v-if="!session.activeClubId" class="pulse-panel p-5 text-center pulse-empty">
@@ -341,7 +357,7 @@ async function confirmPending() {
               </div>
             </header>
             <p v-if="!pendingTransfers.length" class="p-3 text-muted small mb-0">Nothing waiting for OSL this week.</p>
-            <div v-for="(t, i) in pendingTransfers" :key="t.transfer_id" class="pulse-slot is-pending" :style="{ '--i': i }">
+            <div v-for="(t, i) in pendingTransfers" :key="t.transfer_id" class="pulse-slot no-ref is-pending" :style="{ '--i': i }">
               <div class="pulse-slot-when">
                 <div class="fw-semibold">{{ formatDate(t.booking_date) }}</div>
                 <div class="small text-muted">{{ formatTime(t.start_time) }} – {{ formatTime(t.end_time) }}</div>
@@ -352,7 +368,6 @@ async function confirmPending() {
                 <component :is="t.direction === 'OUTGOING' ? 'strong' : 'span'">{{ t.releasing_club_name }}</component> →
                 <component :is="t.direction === 'OUTGOING' ? 'span' : 'strong'">{{ t.claiming_club_name }}</component>
               </div>
-              <div class="pulse-slot-ref small font-monospace">{{ formatReference(t.fbs_reference) }}</div>
               <div class="pulse-slot-actions">
                 <template v-if="emailFailed(t)">
                   <button v-if="t.direction === 'OUTGOING' && canManageActiveClub" type="button" class="btn btn-sm btn-pulse-primary pulse-attention" :disabled="busyId === t.transfer_id" @click="askResendOsl(t)">Resend to OSL</button>
@@ -396,7 +411,7 @@ async function confirmPending() {
               </div>
             </header>
             <p v-if="!successfulTransfers.length" class="p-3 text-muted small mb-0">No approved transfers this week.</p>
-            <div v-for="(t, i) in successfulTransfers" :key="t.transfer_id" class="pulse-slot" :class="t.direction === 'OUTGOING' ? 'is-handed-over' : 'is-confirmed'" :style="{ '--i': i }">
+            <div v-for="(t, i) in successfulTransfers" :key="t.transfer_id" class="pulse-slot no-ref" :class="t.direction === 'OUTGOING' ? 'is-handed-over' : 'is-confirmed'" :style="{ '--i': i }">
               <div class="pulse-slot-when">
                 <div class="fw-semibold">{{ formatDate(t.booking_date) }}</div>
                 <div class="small text-muted">{{ formatTime(t.start_time) }} – {{ formatTime(t.end_time) }}</div>
@@ -409,7 +424,6 @@ async function confirmPending() {
                 <component :is="t.direction === 'OUTGOING' ? 'strong' : 'span'">{{ t.releasing_club_name }}</component> →
                 <component :is="t.direction === 'OUTGOING' ? 'span' : 'strong'">{{ t.claiming_club_name }}</component>
               </div>
-              <div class="pulse-slot-ref small font-monospace">{{ formatReference(t.fbs_reference) }}</div>
               <div class="pulse-slot-actions small text-muted">Approved {{ t.decided_at ? new Date(t.decided_at).toLocaleDateString('en-SG', { day: 'numeric', month: 'short' }) : '' }}</div>
             </div>
           </section>
@@ -423,7 +437,7 @@ async function confirmPending() {
               </div>
             </header>
             <p v-if="!rejectedTransfers.length" class="p-3 text-muted small mb-0">No rejected transfers this week.</p>
-            <div v-for="(t, i) in rejectedTransfers" :key="t.transfer_id" class="pulse-slot is-rejected" :style="{ '--i': i }">
+            <div v-for="(t, i) in rejectedTransfers" :key="t.transfer_id" class="pulse-slot no-ref is-rejected" :style="{ '--i': i }">
               <div class="pulse-slot-when">
                 <div class="fw-semibold">{{ formatDate(t.booking_date) }}</div>
                 <div class="small text-muted">{{ formatTime(t.start_time) }} – {{ formatTime(t.end_time) }}</div>
@@ -437,7 +451,6 @@ async function confirmPending() {
                 <component :is="t.direction === 'OUTGOING' ? 'span' : 'strong'">{{ t.claiming_club_name }}</component>
                 <div v-if="t.rejection_reason" class="text-muted">Reason: {{ t.rejection_reason }}</div>
               </div>
-              <div class="pulse-slot-ref small font-monospace">{{ formatReference(t.fbs_reference) }}</div>
               <div class="pulse-slot-actions small text-muted">{{ t.decided_at ? new Date(t.decided_at).toLocaleDateString('en-SG', { day: 'numeric', month: 'short' }) : '' }}</div>
             </div>
           </section>

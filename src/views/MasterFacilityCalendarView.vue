@@ -11,12 +11,13 @@ import FacilityTabs from '../components/FacilityTabs.vue'
 import PageHero from '../components/PageHero.vue'
 import WeekNavigator from '../components/WeekNavigator.vue'
 import FacilityFilters from '../components/FacilityFilters.vue'
+import SpotlightCarousel from '../components/SpotlightCarousel.vue'
 import FacilityCard from '../components/FacilityCard.vue'
 import ConfirmActionModal from '../components/ConfirmActionModal.vue'
 import { loadOffers } from '../services/notificationStore'
 import { session, activeClubName, canManageActiveClub, showToast } from '../services/sessionState'
 import {
-  STATUSES, OTHER_CCA_FILTER, MY_CCA_FILTER, UNAVAILABLE_FILTER, formatReference, fetchFacilities, fetchCalendar, releaseBooking, undoRelease, claimBooking,
+  STATUSES, OTHER_CCA_FILTER, MY_CCA_FILTER, UNAVAILABLE_FILTER, fetchFacilities, fetchCalendar, releaseBooking, undoRelease, claimBooking,
   listenForCalendarChanges, bookingActions, defaultWeekStart, weekStartOf, addDays,
   formatWeekLabel, formatDate, formatTime
 } from '../services/facilityService'
@@ -222,6 +223,25 @@ function matchesAvailability(booking) {
   return booking.status === choice
 }
 
+// The strip above the filters: slots another CCA has released this week
+const claimableSlides = computed(() => {
+  const clubId = session.value.activeClubId
+  return bookings.value
+    .filter((booking) => booking.status === STATUSES.PROPOSED && booking.is_transfer_window_open && !booking.offered_club_id && booking.owner_club_id !== clubId)
+    .slice()
+    .sort((a, b) => (a.booking_date + a.start_time).localeCompare(b.booking_date + b.start_time))
+    .slice(0, 6)
+    .map((booking) => ({
+      key: booking.booking_id,
+      date: booking.booking_date,
+      tag: 'Available to Claim',
+      tone: 'violet',
+      title: booking.facility_name,
+      meta: formatDate(booking.booking_date) + ', ' + formatTime(booking.start_time) + ' – ' + formatTime(booking.end_time),
+      detail: 'Released by ' + (booking.owner_club_name || 'another CCA')
+    }))
+})
+
 // Bookings that pass the status and day filters
 const visibleBookings = computed(() => {
   return bookings.value.filter((booking) => {
@@ -404,8 +424,7 @@ function slotDetails(booking) {
   return [
     { label: 'Facility', value: booking.facility_name },
     { label: 'When', value: formatDate(booking.booking_date, true) + ', ' + formatTime(booking.start_time) + ' – ' + formatTime(booking.end_time) },
-    { label: 'Holder', value: booking.owner_club_name },
-    { label: 'FBS reference', value: formatReference(booking.fbs_reference) }
+    { label: 'Holder', value: booking.owner_club_name }
   ]
 }
 
@@ -509,7 +528,17 @@ async function runAction(booking, action) {
       { label: 'Facilities available', value: counts.available, tone: 'violet' },
       { label: 'Pending', value: counts.pending, tone: 'sky' }
     ]"
-  />
+  >
+    <template #footer>
+      <SpotlightCarousel
+        v-if="!loading && claimableSlides.length"
+        :slides="claimableSlides"
+        label="Slots available to claim this week"
+        click-hint="Show this day’s bookings"
+        @select="selectedDay = $event.date"
+      />
+    </template>
+  </PageHero>
 
   <section v-if="simulatorFocus" data-testid="simulator-calendar-focus" class="pulse-banner pulse-banner-view" aria-label="Simulator facility request">
     <p v-if="simulatorFocus.error" role="status">{{ simulatorFocus.error }}</p>
