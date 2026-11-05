@@ -11,6 +11,8 @@ const availableDates = computed(() => eventDates(props.event))
 const unavailable = computed(() => props.disabled || !scheduleRange(props.event))
 watch(() => [props.start,props.end,props.event], () => {
  for (const key of ['start','end']) if (props[key]) dates[key] = props[key].slice(0,10)
+ // No time yet: start on the event's first date so only the time needs typing
+ for (const key of ['start','end']) if (!props[key] && !availableDates.value.includes(dates[key])) dates[key] = availableDates.value[0] || ''
  if (!scheduleRange(props.event)) dates.start = dates.end = ''
 }, {immediate:true})
 watch(() => props.event, () => { feedback.value = '' })
@@ -47,17 +49,23 @@ function chooseTime(key, value) {
  feedback.value = ''
  emit('update:'+key,value)
 }
-// '2026-11-05T09:30' -> '09:30' for the time box, and back
+// '2026-11-05T09:30' -> '09:30' for the time box (same input as Day-of Ops), and '9:30 AM' for messages
 const clockOf = value => value ? String(value).split('T')[1]?.slice(0,5) || '' : ''
-// Accept valid times as they're typed, but only complain when the box is left:
-// half-typed values ("1" before "10") must not snap the box back mid-typing.
+function displayTime(value) {
+ const clock = clockOf(value)
+ if (!clock) return ''
+ const [h, m] = clock.split(':').map(Number)
+ return (h % 12 || 12) + ':' + String(m).padStart(2,'0') + (h < 12 ? ' AM' : ' PM')
+}
+// Accept a valid time as soon as it is complete; only complain when the box is left,
+// so a half-typed hour never snaps the box back mid-typing.
 function typeTime(key, clock, leaving = false) {
  const value = clock ? dates[key] + 'T' + clock : ''
  if (value && options(key).includes(value) && permitted(key, value)) {
   feedback.value = ''
   if (value !== props[key]) emit('update:'+key, value)
- } else if (leaving) {
-  feedback.value = 'Enter a time within the event (' + clockOf(options(key)[0]) + '–' + clockOf(options(key).at(-1)) + '). Until must be later than From.'
+ } else if (leaving && clock) {
+  feedback.value = 'Enter a time within the event (' + displayTime(options(key)[0]) + '–' + displayTime(options(key).at(-1)) + '). Until must be later than From.'
  }
 }
 function formatDate(date) {
@@ -81,13 +89,14 @@ function formatDate(date) {
      </div>
     </div>
     <div class="interval-control">
-     <label :for="id+'-'+field.key">Time</label>
-     <!-- Typed time (a minute-by-minute list was too long); checked against the event below -->
-     <input :id="id+'-'+field.key" type="time" :aria-label="field.label" :value="clockOf(props[field.key])" :min="clockOf(options(field.key)[0])" :max="clockOf(options(field.key).at(-1))" :aria-describedby="id+'-picker-help'" :disabled="!dates[field.key]" @change="typeTime(field.key,$event.target.value)" @blur="typeTime(field.key,$event.target.value,true)" class="form-control" />
+     <label :for="id+'-'+field.key">Time <span class="time-example">(e.g. {{ field.key==='start'?'10:00 AM':'6:00 PM' }})</span></label>
+     <!-- Typed time with a --:-- mask and an AM/PM switch; checked when the box is left -->
+     <!-- Same time box as the Day-of Ops event form -->
+     <input :id="id+'-'+field.key" type="time" step="900" :aria-label="field.label" :value="clockOf(props[field.key])" :aria-describedby="id+'-picker-help'" :disabled="!dates[field.key]" @change="typeTime(field.key,$event.target.value)" @blur="typeTime(field.key,$event.target.value,true)" class="form-control form-control-sm time-input" />
     </div>
    </div>
   </fieldset>
-  <p :id="id+'-picker-help'" class="small text-muted mb-0">Type a time or use the clock icon. Singapore time, within the event; Until must be later than From.</p>
+  <p :id="id+'-picker-help'" class="small text-muted mb-0">Times must be within the event<template v-if="options('start').length"> ({{ displayTime(options('start')[0]) }}–{{ displayTime(options('end').at(-1) || options('start').at(-1)) }})</template>, Singapore time.</p>
   <p v-if="feedback" role="status" class="small text-warning-emphasis mb-0">{{ feedback }}</p>
  </div>
 </template>
@@ -104,4 +113,7 @@ function formatDate(date) {
 .calendar-control .form-select{padding-left:1.7rem}.interval-control select:disabled{opacity:.6}
 .interval-control select:focus-visible{outline:2px solid var(--pulse-primary);outline-offset:2px}
 @media(max-width:575px){.interval-control .form-select{font-size:.8rem!important}}
+@media(max-width:575px){.interval-controls{grid-template-columns:1fr}}
+.time-input{min-height:44px;border-radius:.65rem;font-size:.85rem}
+.time-example{color:var(--pulse-ink-muted);font-weight:400}
 </style>

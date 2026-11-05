@@ -317,7 +317,8 @@ function createDisruption() {
   return { id: 'D' + nextDisruptionId++, type: 'MEMBER_UNAVAILABLE',
     memberId: eventMembers.value[0]?.id ?? null, facilityBookingId:eventLinkedBookings.value[0]?.id ?? null, venueName: eventFacilities.value[0] || '',
     segmentId: delayActivities.value.find(a=>!a.is_fixed)?.id ?? null, delayMinutes: 30,
-    start: toSingaporeLocal(selectedEvent.value?.starts_at), end: toSingaporeLocal(selectedEvent.value?.ends_at) }
+    // Times start empty: the organiser types when the person or room is unavailable
+    start: '', end: '' }
 }
 function addDisruption() { disruptionCards.value.push(createDisruption()) }
 // Add/Remove edits only this hypothetical session; persisted history is separate.

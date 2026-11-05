@@ -44,6 +44,7 @@ export function prepareDisruptionCards(data, eventId, cards) {
       return {...base,segmentId:segment.id,delayMinutes}
     }
     if (!['MEMBER_UNAVAILABLE','FACILITY_UNAVAILABLE'].includes(card.type)) throw new Error('Unsupported disruption type.')
+    if (!card.start || !card.end) throw new Error('Disruption '+(index+1)+': type the From and Until times.')
     const start = timestamp(card.start), end = timestamp(card.end)
     if (Date.parse(start) >= Date.parse(end)) throw new Error('Disruption '+(index+1)+': end must be after start.')
     // Resource outages are event-level intervals and may span concurrent activities
@@ -141,6 +142,8 @@ function buildVenueMoves(data,disruptions,facilityRecovery,simulated,delayedChan
         .slice(0,4).map(room => ({ id:'venue-fill-'+venue+'-'+r.room+'-'+room, title:'Move '+[...new Set(left.map(seg => seg.title))].join(', ')+' to '+room, kind:'venue-fill',
           room, span, changes:left.map(seg => ({segmentId:seg.id,venueName:room})), requiresApproval:true }))
     }
+    // No room can take any of it: leave these activities to the per-activity options
+    if (!rooms.length) return null
     const moved = recs.map(r => String(r.segmentId))
     return { venue, segmentIds:moved, options:rooms.map(r => {
       const changes = new Map(delayedChanges.map(c => [String(c.segmentId),{...c}]))
