@@ -159,7 +159,7 @@ const hasConfirmedThisWeek = computed(() => weekMeetings.value.some((w) => w.sta
 
 function statusBadge(w) {
   if (w.status === 'CONFIRMED') return { cls: 'pulse-badge-confirmed', label: 'Confirmed' }
-  if (w.status === 'EXPIRED') return { cls: 'pulse-badge-rejected', label: 'Expired' }
+  if (w.status === 'EXPIRED') return { cls: 'pulse-badge-rejected', label: 'Voting closed' }
   // Everyone answered, so the server keeps it COLLECTING after the deadline
   if (new Date(w.vote_deadline).getTime() <= now.value + clockOffset.value) return { cls: 'pulse-badge-rejected', label: 'Voting closed' }
   return { cls: 'pulse-badge-pending', label: 'Collecting' }
@@ -1091,7 +1091,7 @@ function exportConfirmed() {
             <div class="d-flex justify-content-between align-items-start gap-2 mb-1">
               <h6 class="fw-bold mb-0">{{ meeting.title }}</h6>
               <span class="pulse-badge" :class="votingOpen ? 'pulse-badge-pending' : 'pulse-badge-rejected'">
-                {{ votingOpen ? 'Collecting' : meeting.status === 'EXPIRED' ? 'Expired' : 'Voting closed' }}
+                {{ votingOpen ? 'Collecting' : 'Voting closed' }}
               </span>
             </div>
             <div class="text-muted small" :class="meeting.agenda ? 'mb-2' : 'mb-3'">Organised by {{ meeting.organiser_name }}</div>
@@ -1104,6 +1104,9 @@ function exportConfirmed() {
               <div class="small fw-bold text-muted text-uppercase">{{ votingOpen ? 'Voting closes in' : 'Voting closed' }}</div>
               <div v-if="votingOpen" class="countdown">{{ countdownText }}</div>
               <div class="small text-muted">{{ deadlineLabel(meeting.vote_deadline) }}</div>
+              <p class="small mb-0 mt-2" role="status">
+                {{ votingOpen ? 'Submit your availability before the deadline. Responses cannot be added or changed afterward.' : 'Voting has closed. Responses can no longer be added or changed. The organiser can still confirm the meeting.' }}
+              </p>
             </div>
 
             <template v-if="amParticipant">
@@ -1250,7 +1253,7 @@ function exportConfirmed() {
             </template>
 
             <p v-else class="small text-muted mb-0">
-              {{ meeting.organiser_name }} will confirm the meeting time once everyone has responded.
+              {{ meeting.organiser_name }} can confirm the meeting time once everyone has responded or the voting deadline has passed.
             </p>
           </div>
         </template>
