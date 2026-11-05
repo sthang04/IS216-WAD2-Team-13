@@ -1,5 +1,6 @@
 <script setup>
-import { ref, computed, watch, nextTick } from 'vue';
+import { ref, computed, watch, nextTick, onMounted } from 'vue';
+import { getOpsTasksForMember } from '../services/opsService';
 import { useRoute } from 'vue-router';
 import SimulatorInvitationInbox from '../components/SimulatorInvitationInbox.vue';
 import { getWalkTime } from '../services/onemap';
@@ -77,7 +78,9 @@ const selectedDateLabel = computed(() => {
 
 // 'Adhoc' is stored in the data, 'Ad hoc' is what people see
 function categoryLabel(cat) {
-  return cat === 'Adhoc' ? 'Ad hoc' : cat
+  if (cat === 'Adhoc') return 'Ad hoc';
+  if (cat === 'Day-of Ops') return 'Day-of Ops';
+  return cat;
 }
 
 // Official SMU Buildings for OneMap API Geocoding
@@ -200,8 +203,45 @@ watch(scheduleEvents, (events) => {
   try { localStorage.setItem(storageKey.value, JSON.stringify(events)) } catch (e) { /* storage full or blocked */ }
 }, { deep: true })
 
-// If the logged-in persona changes, load that persona's own saved schedule
-watch(storageKey, () => { scheduleEvents.value = loadSavedEvents() ?? sampleEvents() })
+// If the logged-in persona changes, load that persona's own saved schedule and resync ops
+watch(storageKey, () => {
+  scheduleEvents.value = loadSavedEvents() ?? sampleEvents();
+  syncOpsTasks(false);
+});
+
+// ---- Live Cross-Sync with Day-of Operations ----
+const opsSyncInfo = ref(null);
+
+function syncOpsTasks(forceToast = false) {
+  const memberName = props.activePersona?.name || 'Rachel Tan';
+  const cca = props.activePersona?.cca || 'Eurhythmix';
+  const { tasks, eventName, eventDate, tasksCount } = getOpsTasksForMember(memberName, cca);
+
+  if (tasksCount > 0) {
+    opsSyncInfo.value = { eventName, eventDate, eventCount: tasksCount };
+    
+    // Retain non-ops events and merge fresh ops tasks
+    const customAndAcademic = scheduleEvents.value.filter(e => !e.isOpsTask && !String(e.id).startsWith('ops-'));
+    scheduleEvents.value = [...customAndAcademic, ...tasks];
+
+    // Jump to the ops event date if viewing default placeholder date
+    if (selectedDate.value === '2026-10-23' && eventDate) {
+      selectedDate.value = eventDate;
+    }
+
+    if (forceToast) {
+      toastMsg.value = `⚡ Synced ${tasksCount} Day-of Ops tasks from "${eventName}".`;
+      setTimeout(() => { toastMsg.value = ''; }, 4000);
+    }
+  } else {
+    opsSyncInfo.value = null;
+  }
+}
+
+onMounted(() => {
+  syncOpsTasks(false);
+});
+
 
 // All events, in order of date then start time
 const sortedEvents = computed(() =>
@@ -297,7 +337,7 @@ const filteredEvents = computed(() => {
 const conflictingEventIds = computed(() => {
   const conflicts = new Set();
   const academics = scheduleEvents.value.filter(e => e.category === 'Academic');
-  const ccas = scheduleEvents.value.filter(e => e.category === 'CCA');
+  const ccas = scheduleEvents.value.filter(e => e.category === 'CCA' || e.category === 'Day-of Ops');
 
   for (const acad of academics) {
     for (const cca of ccas) {
@@ -760,6 +800,14 @@ function exportCalendarICS() {
               <button
                 type="button"
                 class="btn btn-sm py-1 px-3 rounded-pill"
+                :class="selectedCategory === 'Day-of Ops' ? 'btn-danger text-white fw-bold' : 'btn-light text-muted'"
+                @click="selectedCategory = 'Day-of Ops'"
+              >
+                Day-of Ops
+              </button>
+              <button
+                type="button"
+                class="btn btn-sm py-1 px-3 rounded-pill"
                 :class="selectedCategory === 'Adhoc' ? 'btn-danger text-white fw-bold' : 'btn-light text-muted'"
                 @click="selectedCategory = 'Adhoc'"
               >
@@ -771,6 +819,38 @@ function exportCalendarICS() {
               {{ dayEvents.filter(e => e.status === 'Completed').length }}/{{ dayEvents.length }} Done
             </span>
 
+          </div>
+        </div>
+
+        <!-- Day-of Operations Live Sync Banner -->
+        <div v-if="opsSyncInfo" class="alert alert-light border shadow-xs py-2 px-3 mb-3 d-flex flex-wrap align-items-center justify-content-between gap-2" style="border-radius: 0.75rem;">
+          <div class="d-flex align-items-center gap-2">
+            <span class="badge bg-warning bg-opacity-25 text-dark border border-warning-subtle px-2 py-1" style="font-size: 0.7rem; font-weight: 700;">
+              ⚡ DAY-OF OPS SYNCED
+            </span>
+            <span class="small text-dark fw-semibold" style="font-size: 0.8rem;">
+              {{ opsSyncInfo.eventCount }} rehearsal tasks linked from <strong>{{ opsSyncInfo.eventName }}</strong> ({{ opsSyncInfo.eventDate }})
+            </span>
+          </div>
+          <div class="d-flex align-items-center gap-2">
+            <button 
+              v-if="selectedDate !== opsSyncInfo.eventDate"
+              type="button" 
+              class="btn btn-sm btn-outline-danger py-1 px-2.5 rounded-pill fw-bold"
+              style="font-size: 0.72rem;"
+              @click="selectedDate = opsSyncInfo.eventDate"
+            >
+              Jump to {{ opsSyncInfo.eventName }} Day →
+            </button>
+            <button 
+              type="button" 
+              class="btn btn-sm btn-light border py-1 px-2 rounded-pill text-muted"
+              style="font-size: 0.72rem;"
+              title="Refresh tasks from Day-of Operations"
+              @click="syncOpsTasks(true)"
+            >
+              ↻ Refresh Sync
+            </button>
           </div>
         </div>
 
@@ -789,9 +869,11 @@ function exportCalendarICS() {
             :style="{
               borderLeft: event.category === 'Academic'
                 ? '4px solid #3b82f6 !important'
-                : event.category === 'CCA'
-                  ? '4px solid #ef4444 !important'
-                  : '4px solid #10b981 !important'
+                : event.category === 'Day-of Ops'
+                  ? '4px solid #f59e0b !important'
+                  : event.category === 'CCA'
+                    ? '4px solid #ef4444 !important'
+                    : '4px solid #10b981 !important'
             }"
           >
             <div class="d-flex justify-content-between align-items-start gap-2 mb-2">
@@ -803,9 +885,13 @@ function exportCalendarICS() {
                   <span class="badge" :class="{
                     'bg-primary': event.category === 'Academic',
                     'bg-danger': event.category === 'CCA',
+                    'bg-warning text-dark': event.category === 'Day-of Ops',
                     'bg-success': event.category === 'Adhoc'
                   }" style="font-size: 0.65rem;">
                     {{ categoryLabel(event.category) }}
+                  </span>
+                  <span v-if="event.isOpsTask" class="badge text-white px-2 py-0.5 rounded-pill" style="background-color: var(--pulse-purple-transit); font-size: 0.65rem;">
+                    ⚡ Production Duty
                   </span>
                   <span v-if="conflictingEventIds.has(event.id)" class="badge bg-warning text-dark border border-warning" style="font-size: 0.65rem;">
                     Clash Detected

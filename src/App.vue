@@ -755,16 +755,22 @@ onMounted(async () => {
         <!-- Global Toast Alert -->
         <div 
           v-if="toast" 
-          class="alert alert-dismissible fade show shadow-sm mb-3 py-2 px-3" 
+          class="alert fade show shadow-sm mb-3 py-2 px-3 d-flex align-items-center justify-content-between gap-2" 
           :class="`alert-${toastType}`" 
           role="alert"
           style="border-radius: 0.85rem;"
         >
-          <div class="d-flex align-items-center gap-2 pe-4" style="font-size: 0.825rem;">
+          <div class="d-flex align-items-center gap-2 min-w-0" style="font-size: 0.825rem;">
             <strong class="text-nowrap flex-shrink-0">Notice:</strong>
-            <span class="flex-grow-1">{{ toast }}</span>
+            <span class="flex-grow-1" style="word-break: break-word;">{{ toast }}</span>
           </div>
-          <button type="button" class="btn-close" aria-label="Close notice" @click="toast = ''"></button>
+          <button 
+            type="button" 
+            class="btn-close flex-shrink-0" 
+            aria-label="Close notice" 
+            style="position: static; padding: 0.35rem; font-size: 0.725rem; margin-left: auto;" 
+            @click="toast = ''"
+          ></button>
         </div>
  
 

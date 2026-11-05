@@ -213,17 +213,24 @@ defineExpose({ reload: loadNotifications })
         </TransitionGroup>
       </div>
       <p v-if="notificationStore.items.length" class="pulse-tiny text-muted text-center mb-0 py-1 border-top">Swipe left on a notification to delete it</p>
-      <div v-if="botName" class="d-flex gap-2 px-3 py-2 border-top">
-        <button
-          v-if="botName"
-          type="button"
-          class="btn btn-sm"
-          :class="telegramLinked ? 'btn-success' : 'btn-outline-secondary'"
-          :title="telegramLinked ? 'Click to link a different Telegram account instead' : ''"
-          @click="connectTelegram"
-        >
-          {{ telegramLinked ? '✓ Connected to Telegram' : 'Connect Telegram' }}
-        </button>
+      <div v-if="botName" class="p-2 border-top bg-light-subtle">
+        <div class="d-flex align-items-center justify-content-between gap-2">
+          <button
+            type="button"
+            class="btn btn-sm flex-grow-1 text-truncate"
+            :class="telegramLinked ? 'btn-success' : 'btn-outline-secondary'"
+            :title="telegramLinked ? 'Click to link a different Telegram account' : 'Link your Telegram to receive instant alerts'"
+            @click="connectTelegram"
+          >
+            {{ telegramLinked ? '✓ Connected to Telegram' : 'Connect Telegram' }}
+          </button>
+        </div>
+        <div v-if="telegramLinked" class="text-muted mt-1 px-1 text-center" style="font-size: 0.68rem;">
+          Receiving live alerts. Send <code class="text-danger fw-bold">/stop</code> in the bot to disconnect anytime.
+        </div>
+        <div v-else class="text-muted mt-1 px-1 text-center" style="font-size: 0.68rem;">
+          Connect your Telegram to receive live slot release &amp; schedule alerts.
+        </div>
       </div>
     </div>
   </div>

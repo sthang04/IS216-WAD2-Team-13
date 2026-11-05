@@ -104,6 +104,26 @@
   overflow: hidden;
 }
 .pf-notification-panel { width: min(360px, calc(100vw - 32px)); }
+@media (max-width: 576px) {
+  .pf-notification-panel {
+    position: fixed !important;
+    top: 58px !important;
+    left: 12px !important;
+    right: 12px !important;
+    width: auto !important;
+    max-width: calc(100vw - 24px) !important;
+    z-index: 1090 !important;
+    box-shadow: 0 16px 40px rgba(15, 23, 42, 0.28) !important;
+    border-radius: 1rem !important;
+  }
+  .pulse-notification-list {
+    max-height: 60vh !important;
+  }
+  .pulse-persona-panel {
+    right: 0 !important;
+    max-width: calc(100vw - 24px) !important;
+  }
+}
 .pulse-notification-list { max-height: 380px; overflow-y: auto; }
 .pulse-notification-item, .pulse-persona-item {
   display: block; width: 100%; text-align: left;

@@ -48,16 +48,17 @@ watch(() => session.value.ready, (ready) => {
     <Transition name="toast">
     <div
       v-if="toast.message"
-      class="alert shadow-sm pulse-toast"
+      class="alert shadow-sm pulse-toast d-flex align-items-center justify-content-between gap-2"
       :class="`alert-${toast.type}`"
       role="status"
     >
-      {{ toast.message }}
+      <span class="flex-grow-1">{{ toast.message }}</span>
 
       <button
         type="button"
-        class="btn-close float-end"
+        class="btn-close flex-shrink-0"
         aria-label="Dismiss"
+        style="position: static; padding: 0.35rem; font-size: 0.725rem; margin-left: auto;"
         @click="toast.message = ''"
       ></button>
     </div>

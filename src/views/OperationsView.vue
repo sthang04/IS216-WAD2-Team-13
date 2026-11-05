@@ -1,7 +1,7 @@
 <script setup>
 import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue';
 import { supabase } from '../supabase';
-import { session as facilitySession } from '../services/sessionState';
+import { session as facilitySession, demoMemberId } from '../services/sessionState';
 import { loadClubExcos, loadEvents as fetchEvents, saveEvent as saveEventToDb, deleteEvent as deleteEventFromDb, isMissingTableError } from '../services/opsService';
 
 const props = defineProps({
@@ -495,7 +495,19 @@ onBeforeUnmount(() => {
 /* ================================================================== */
 
 const MIN_MEAL_MINUTES = 15 // a meal can be squeezed down to this before it moves
-const DELAY_OPTIONS = [5, 10, 15, 30] // minutes
+const DELAY_OPTIONS = [5, 10, 15, 30, 45, 60] // minutes
+const customDelayMinutes = ref('')
+
+function handleCustomDelay() {
+  const mins = parseInt(customDelayMinutes.value, 10)
+  if (!mins || isNaN(mins) || mins <= 0) {
+    showToast('Please enter a valid number of minutes to delay.')
+    return
+  }
+  applyOneClickDelay(mins)
+  customDelayMinutes.value = ''
+  showDelayMenu.value = false
+}
 
 const delayNotice = ref(null) // { summary, warnings[] }
 const totalDelay = ref(0)
@@ -541,7 +553,9 @@ function delayPerson(person, now, mins) {
   return notes
 }
 
-function applyOneClickDelay(mins) {
+const isNotifyingCrew = ref(false)
+
+async function applyOneClickDelay(mins) {
   showDelayMenu.value = false
   if (blockedForGuest()) return
   if (!isEventDay.value) {
@@ -563,11 +577,45 @@ function applyOneClickDelay(mins) {
     summary: parts.join(' '),
     warnings: notes.filter(n => n.kind === 'cut').map(n => n.text)
   }
+
+  if (supabase && event.value) {
+    try {
+      await supabase.rpc('rpc_notify_schedule_change', {
+        p_action: 'updated',
+        p_title: `⚠️ Rehearsal Delay (+${mins}m): ${event.value.name}`,
+        p_date: event.value.date,
+        p_start_time: formatTime(now),
+        p_end_time: formatTime(Math.min(1439, now + mins)),
+        p_venue: event.value.venue || 'SMU Main Hall',
+        p_demo_member_id: demoMemberId()
+      })
+    } catch (err) {
+      console.log('Telegram delay notice not sent:', err.message)
+    }
+  }
 }
 
-function publishToMobile() {
+async function publishToMobile() {
   if (blockedForGuest()) return
-  showToast(`Updated run of show for ${event.value.name} sent to ${crew.value.length} crew on Telegram.`, 5000)
+  isNotifyingCrew.value = true
+  try {
+    if (supabase && event.value) {
+      await supabase.rpc('rpc_notify_schedule_change', {
+        p_action: 'updated',
+        p_title: `📋 Live Run of Show: ${event.value.name}`,
+        p_date: event.value.date,
+        p_start_time: formatTime(event.value.start || 900),
+        p_end_time: formatTime(event.value.end || 1350),
+        p_venue: event.value.venue || 'SMU Main Hall',
+        p_demo_member_id: demoMemberId()
+      })
+    }
+    showToast(`⚡ Updated run of show for ${event.value.name} dispatched to ${crew.value.length} crew via Telegram Bot API!`, 5000)
+  } catch (err) {
+    showToast(`Updated run of show for ${event.value.name} sent to ${crew.value.length} crew on Telegram.`, 5000)
+  } finally {
+    isNotifyingCrew.value = false
+  }
 }
 
 /* ================================================================== */
@@ -992,17 +1040,65 @@ function clearLate(person) {
             </svg>
             <span>Delay current tasks ▾</span>
           </button>
-          <div v-if="showDelayMenu" class="ops-more-menu shadow-sm border rounded-3 py-1">
-            <button v-for="mins in DELAY_OPTIONS" :key="mins" type="button" class="dropdown-item small py-2 px-3" @click="applyOneClickDelay(mins)">+{{ mins }} min</button>
+          <div v-if="showDelayMenu" class="ops-more-menu shadow-lg border rounded-3 py-1 overflow-hidden" style="min-width: 220px; z-index: 1050;">
+            <div class="px-3 py-1.5 text-uppercase fw-bold text-muted border-bottom" style="font-size: 0.65rem; letter-spacing: 0.04em;">
+              Quick Presets
+            </div>
+            <div class="py-1">
+              <button v-for="mins in DELAY_OPTIONS" :key="mins" type="button" class="dropdown-item small py-1.5 px-3 d-flex justify-content-between align-items-center" @click="applyOneClickDelay(mins)">
+                <span class="fw-semibold">+{{ mins }} min</span>
+                <span class="text-muted" style="font-size: 0.68rem;">Delay</span>
+              </button>
+            </div>
+            <div class="p-2.5 border-top bg-light">
+              <label for="customDelayInput" class="small fw-bold text-dark d-block mb-1" style="font-size: 0.72rem;">
+                Custom Delay:
+              </label>
+              <div class="input-group input-group-sm mb-1">
+                <input 
+                  id="customDelayInput"
+                  v-model.number="customDelayMinutes" 
+                  type="number" 
+                  min="1" 
+                  max="300" 
+                  placeholder="Minutes" 
+                  class="form-control form-control-sm px-2"
+                  style="font-size: 0.78rem;"
+                  @keyup.enter="handleCustomDelay"
+                />
+                <button 
+                  type="button" 
+                  class="btn btn-sm btn-warning text-dark fw-bold px-2.5" 
+                  :disabled="!customDelayMinutes || customDelayMinutes <= 0"
+                  style="font-size: 0.75rem;"
+                  @click="handleCustomDelay"
+                >
+                  Apply
+                </button>
+              </div>
+              <div class="d-flex justify-content-between align-items-center">
+                <small class="text-muted" style="font-size: 0.66rem;">e.g. 45, 90 mins</small>
+                <button type="button" class="btn btn-link p-0 text-muted ops-small text-decoration-none" style="font-size: 0.68rem;" @click="showDelayMenu = false">Close</button>
+              </div>
+            </div>
           </div>
         </div>
 
-        <button type="button" class="btn btn-sm btn-pulse-primary d-flex align-items-center gap-2" @click="publishToMobile">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <button 
+          type="button" 
+          class="btn btn-sm btn-pulse-primary d-flex align-items-center gap-2 shadow-2xs" 
+          :disabled="isNotifyingCrew"
+          @click="publishToMobile"
+        >
+          <span v-if="isNotifyingCrew" class="spinner-border spinner-border-sm" role="status"></span>
+          <svg v-else width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <line x1="22" y1="2" x2="11" y2="13"></line>
             <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
           </svg>
           <span>Notify crew</span>
+          <span class="badge bg-white text-danger px-1.5 py-0.5 rounded-pill" style="font-size: 0.65rem; font-weight: 700;">
+            Telegram
+          </span>
         </button>
 
         <button v-if="!readOnly && dataMode === 'local'" type="button" class="btn btn-sm btn-light border text-danger" @click="resetPlan">Reset sample</button>
@@ -1279,7 +1375,7 @@ function clearLate(person) {
               <div v-if="checkInStatus(p) !== 'in' && lateChoiceFor === p.memberId" class="d-flex flex-wrap align-items-center gap-1 mt-2">
                 <span class="ops-small text-muted me-1">How late?</span>
                 <button v-for="mins in LATE_OPTIONS" :key="mins" type="button" class="btn btn-sm btn-outline-warning text-dark py-0 px-2 ops-small fw-bold" @click="reportLateETA(p, mins)">{{ mins }} min</button>
-                <button type="button" class="btn btn-link btn-sm p-0 ms-1 text-muted ops-small text-decoration-none" @click="lateChoiceFor = null">Cancel</button>
+                <button type="button" class="btn btn-sm btn-light border py-0 px-2 ops-small text-muted rounded-pill" @click="lateChoiceFor = null">Cancel</button>
               </div>
               <div v-else-if="checkInStatus(p) !== 'in'" class="d-flex gap-2 mt-2">
                 <button type="button" class="btn btn-sm btn-outline-success flex-grow-1 py-1 ops-small fw-bold" @click="checkInPerformer(p)">Check in</button>
@@ -1490,9 +1586,15 @@ function clearLate(person) {
   position: absolute;
   left: 0;
   top: calc(100% + 4px);
-  z-index: 20;
-  min-width: 140px;
+  z-index: 1050;
+  min-width: 220px;
   background: #fff;
+}
+@media (max-width: 768px) {
+  .ops-more-menu {
+    left: auto;
+    right: 0;
+  }
 }
 
 /* Block colours (same as the crew spreadsheet legend) */
