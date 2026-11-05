@@ -276,12 +276,17 @@ export async function checkSignupEligibility(email) {
     'new.exco@scis.smu.edu.sg',
     'new.exco.2025@scis.smu.edu.sg',
     'demo.onboarding@scis.smu.edu.sg',
-    'onboarding.demo@scis.smu.edu.sg'
+    'onboarding.demo@scis.smu.edu.sg',
+    'kjshim@smu.edu.sg',
+    'ccwong@smu.edu.sg'
   ]
   if (DEMO_ONBOARDING_EMAILS.includes(normalized)) {
+    const defaultName = normalized === 'kjshim@smu.edu.sg'
+      ? 'Prof. K. J. Shim'
+      : (normalized === 'ccwong@smu.edu.sg' ? 'Chein Wong' : 'New ExCo Member')
     return {
       email: normalized,
-      fullName: 'New ExCo Member',
+      fullName: defaultName,
       ccas: ['SMU Eurhythmix'],
       roles: [
         { code: 'LOGISTICS_DIRECTOR', name: 'Logistics Director' },
@@ -325,9 +330,14 @@ export async function signUpExco({ email, fullName, positions, telegramHandle, p
     'new.exco@scis.smu.edu.sg',
     'new.exco.2025@scis.smu.edu.sg',
     'demo.onboarding@scis.smu.edu.sg',
-    'onboarding.demo@scis.smu.edu.sg'
+    'onboarding.demo@scis.smu.edu.sg',
+    'kjshim@smu.edu.sg',
+    'ccwong@smu.edu.sg'
   ]
   if (DEMO_ONBOARDING_EMAILS.includes(normalized)) {
+    const defaultName = normalized === 'kjshim@smu.edu.sg'
+      ? 'Prof. K. J. Shim'
+      : (normalized === 'ccwong@smu.edu.sg' ? 'Chein Wong' : 'New ExCo Member')
     const roleCode = positions['SMU Eurhythmix'] || 'LOGISTICS_DIRECTOR'
     const roleLabels = {
       'LOGISTICS_DIRECTOR': 'Eurhythmix Logistics Director',
@@ -339,7 +349,7 @@ export async function signUpExco({ email, fullName, positions, telegramHandle, p
     }
     const persona = {
       id: 'new-exco-demo',
-      name: fullName || 'New ExCo Member',
+      name: fullName || defaultName,
       email: normalized,
       role: 'club',
       roleLabel: roleLabels[roleCode] || 'Eurhythmix ExCo Member',
