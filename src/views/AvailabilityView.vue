@@ -679,8 +679,9 @@ function nudgedText(p) {
   return `Nudged ${ago === 0 ? 'just now' : `${ago} min ago`} · again in ${wait} min`
 }
 
+const nudgeablePending = computed(() => pending.value.filter((p) => p.member_id !== myId.value && p.telegram_linked === true))
 const allPendingNudged = computed(() => {
-  const others = pending.value.filter((p) => p.member_id !== myId.value)
+  const others = nudgeablePending.value
   return others.length > 0 && others.every((p) => recentlyNudged(p))
 })
 
@@ -1133,23 +1134,22 @@ function exportConfirmed() {
             </div>
 
             <template v-if="amParticipant">
-              <div class="d-flex justify-content-between align-items-center small mb-2">
+              <p v-if="canVote" class="small text-muted mb-3">Click to mark all days as unavailable. Use Undo to clear this response and choose available times.</p>
+              <div class="d-flex justify-content-between align-items-center gap-3 small">
                 <span class="text-muted">Your response</span>
-                <strong :class="myResponse?.responded_at ? 'text-success' : 'text-warning-emphasis'">
-                  {{ myResponse?.responded_at ? (mySlotCount ? `${mySlotCount} hour${mySlotCount === 1 ? '' : 's'} free` : 'None of these days work') : 'Not yet' }}
+                <strong :class="myResponse?.responded_at ? 'text-success' : 'text-muted'">
+                  {{ myResponse?.responded_at ? (mySlotCount ? `${mySlotCount} hour${mySlotCount === 1 ? '' : 's'} free` : 'None of these days work') : 'No response yet' }}
                 </strong>
               </div>
               <button
-                v-if="canVote"
+                v-if="canVote && myResponse?.responded_at"
                 type="button"
-                class="btn btn-outline-secondary bg-white text-secondary w-100 py-2 fw-bold"
+                class="btn btn-outline-secondary bg-white text-secondary w-100 py-2 fw-bold mt-2"
                 :disabled="responseSaving"
-                :aria-pressed="!!myResponse?.responded_at && mySlotCount === 0"
-                @click="myResponse?.responded_at && mySlotCount === 0 ? undoResponse() : answerNoneWork()"
+                @click="undoResponse()"
               >
-                {{ responseSaving ? 'Saving...' : myResponse?.responded_at && mySlotCount === 0 ? 'Undo' : 'None of these days work' }}
+                {{ responseSaving ? 'Saving...' : 'Undo' }}
               </button>
-              <p v-if="canVote" class="small text-muted mt-2 mb-0">Click to mark all days as unavailable. Click again to clear this response and choose available times.</p>
             </template>
           </div>
 
@@ -1172,7 +1172,7 @@ function exportConfirmed() {
               >
                 <div class="small">
                   <strong class="d-block">{{ p.full_name }}{{ p.member_id === myId ? ' (you)' : '' }}</strong>
-                  <span v-if="recentlyNudged(p)" class="d-block text-success fw-semibold member-meta">{{ nudgedText(p) }}</span>
+                  <span v-if="p.telegram_linked === true && recentlyNudged(p)" class="d-block text-success fw-semibold member-meta">{{ nudgedText(p) }}</span>
                   <span v-if="p.telegram_linked === false" class="member-meta member-warning">
                     <svg class="member-warning-icon" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                       <path d="M10.3 3.9 2.1 18.1a2 2 0 0 0 1.7 3h16.4a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z" />
@@ -1183,7 +1183,7 @@ function exportConfirmed() {
                   </span>
                 </div>
                 <button
-                  v-if="isOrganiser && votingOpen && p.member_id !== myId"
+                  v-if="isOrganiser && votingOpen && p.member_id !== myId && p.telegram_linked === true"
                   type="button"
                   class="btn btn-sm btn-pulse-outline py-1 px-2 fw-bold nudge-btn"
                   :disabled="nudging !== null || recentlyNudged(p)"
@@ -1198,7 +1198,7 @@ function exportConfirmed() {
                 v-if="isOrganiser && votingOpen"
                 type="button"
                 class="btn btn-outline-secondary btn-sm w-100 py-2 fw-bold mt-1"
-                :disabled="nudging !== null || allPendingNudged"
+                :disabled="nudging !== null || !nudgeablePending.length || allPendingNudged"
                 @click="nudge(null)"
               >
                 <span v-if="nudging === 'all'" class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>
