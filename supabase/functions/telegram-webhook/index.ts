@@ -157,14 +157,14 @@ async function disconnectChat(chatId: number) {
     )
   }
 
-  const { error: demoError } = await supabase
+  const { error: recipientError } = await supabase
     .from('demo_recipients')
     .update({ telegram_chat_id: null, updated_at: new Date().toISOString() })
     .eq('telegram_chat_id', chatId)
 
-  if (demoError) {
+  if (recipientError) {
     throw new Error(
-      `Unable to disconnect demo recipient: ${demoError.message}`
+      `Unable to disconnect notification recipient: ${recipientError.message}`
     )
   }
 

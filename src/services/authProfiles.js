@@ -88,7 +88,7 @@ export const DEMO_PERSONAS = {
     name: 'Chloe Ang',
     email: 'chloe.osl@smu.edu.sg',
     role: 'admin',
-    roleLabel: 'OSL Facility Administrator',
+    roleLabel: 'OSL Administrator',
     cca: 'Office of Student Life',
     allowedClubs: ['ACF ExCo', 'Office of Student Life'],
     isDev: false,

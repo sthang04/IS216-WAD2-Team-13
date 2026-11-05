@@ -25,10 +25,10 @@ test('offer acceptance requires review and updates the booking to pending sign-o
  const dialog=page.getByRole('dialog',{name:'Accept this waitlist offer?',exact:true})
  await expect(dialog).toContainText('Fixture Music Room')
  await dialog.getByRole('button',{name:'Accept and claim',exact:true}).click()
- await expect(page.getByRole('status').filter({hasText:'Pending Admin Sign-off'})).toBeVisible()
+ await expect(page.getByRole('status').filter({hasText:'awaiting OSL approval'})).toBeVisible()
  await expect(page.getByRole('button',{name:'Accept and claim',exact:true})).toHaveCount(0)
  await page.getByRole('link',{name:'All Facilities',exact:true}).click()
- await expect(room(page,'Fixture Music Room')).toContainText('Pending Admin Sign-off')
+ await expect(room(page,'Fixture Music Room')).toContainText('Awaiting OSL approval')
 })
 
 test('declining an offer supports cancellation before removing it',async({page,app})=>{

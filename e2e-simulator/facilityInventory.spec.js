@@ -3,7 +3,7 @@
 // Uses isolated fixture responses; passing UI checks do not prove deployed database or delivery integration.
 // Purpose: fixture-backed facility Inventory browser regressions for simulator controls and state.
 // Use Setup -> Actions -> Assert; real Vue/engine code runs, but these tests do not prove live Supabase integration.
-import {test,expect} from '@playwright/test'
+import {test,expect} from '../e2e/helpers/browserUi.js'
 // Isolated inventory fixture, NOT a live assertion about Event 900001 or Sports Hall.
 test('active unbooked Sports Hall renders as a ranked tentative replacement in the real simulator',async({page})=>{
  await page.route('https://**',route=>route.abort())

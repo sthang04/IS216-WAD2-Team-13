@@ -172,7 +172,7 @@ const message = computed(() => {
 
     const count = props.unansweredCount
     if (count === 0) {
-      return "Yay! You're all caught up! ✨"
+      return "No unread notifications."
     }
     if (count === 1) {
       return 'You have 1 new notification.'

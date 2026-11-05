@@ -1,7 +1,7 @@
 // BROWSER TEST PURPOSE: read Only user workflows and regression coverage.
 // Setup opens the real Vue UI; actions use its controls; assertions check visible results/state.
 // Uses the configured application/backend; do not replace missing evidence with a passing skip.
-import {test,expect} from '@playwright/test'
+import {test,expect} from '../../e2e/helpers/browserUi.js'
 import {loadEnv} from 'vite'
 import {guardReadOnlyBackend} from '../helpers/readOnlyBackend.js'
 
@@ -36,7 +36,7 @@ async function signInNormally(page){
  }else{
   // The app publicly offers a normal one-click demo-account login. Exercise
   // that UI if present; its local-persona fallback is NEVER accepted as auth.
-  const drawer=page.getByRole('button',{name:/Click here for 1-Click Login/})
+  const drawer=page.getByRole('button',{name:/Try a demo account/})
   if(!await drawer.isVisible())return false
   await drawer.click()
   const account=page.getByRole('button',{name:/Rachel Tan/})

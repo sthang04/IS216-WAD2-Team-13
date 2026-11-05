@@ -140,7 +140,7 @@ function backToEmail() {
       <p class="text-muted small mb-3">
         {{ step === 3
           ? 'Your account is ready. Connect Telegram to get slot release, meeting and run-of-show alerts from the Pulse bot.'
-          : 'Only ExCos that OSL has added to the ExCo list can sign up.' }}
+          : 'Only ExCo members on OSL’s approved list can create an account.' }}
       </p>
 
       <div v-if="errorMsg" class="alert alert-danger py-2 px-3 small rounded-3 mb-3" role="alert">

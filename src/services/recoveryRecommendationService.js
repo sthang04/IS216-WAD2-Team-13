@@ -248,7 +248,7 @@ STEP 4:
 Try moving an affected activity 30 minutes later.
 
 STEP 5:
-Return tentative recovery options for organizer review.
+Return tentative recovery options for organiser review.
 
 IMPORTANT LIMITATIONS:
 - Known facility bookings do not prove a room is free.
@@ -554,7 +554,7 @@ export function recommendFacilityRecovery(
       laterTimes,
 
       // If no tentative alternatives are identified,
-      // advise the organizer to coordinate manually.
+      // advise the organiser to coordinate manually.
       advice:
         alternatives.length || laterTimes.length
           ? 'Review tentative alternatives and request approval before changing bookings'

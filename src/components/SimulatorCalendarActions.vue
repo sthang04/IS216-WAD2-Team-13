@@ -18,7 +18,7 @@ const options=computed(()=>rows.value===null?[]:calendarOptionsForRecommendation
  ...props,rows:rows.value,bookingActions,waitlistEntries:entries.value,
  clubId:clubMatches.value?session.value.activeClubId:null,
  // Match the calendar's display permissions exactly. RPCs remain responsible
- // for real claim permissions; no organizer identity is passed as proof.
+ // for real claim permissions; no organiser identity is passed as proof.
  canClaim:clubMatches.value&&canManageActiveClub.value,isOslAdmin:session.value.isOslAdmin
 }))
 const day=t=>new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Singapore'}).format(new Date(t))

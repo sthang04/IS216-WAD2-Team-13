@@ -1,6 +1,6 @@
 // Real-app facility and role browser regressions. Setup signs in through the UI;
 // actions use visible controls; assertions verify current pages and permissions.
-import {test,expect} from '@playwright/test'
+import {test,expect} from './helpers/browserUi.js'
 import {signIn,navigate,fits} from './helpers/userJourney.js'
 
 test('campus facilities and their booking rows load after one-click sign-in',async({page})=>{
@@ -36,7 +36,7 @@ test('Dev Administrator can switch club context and open its personal schedule',
  await expect(page.locator('#clubSwitcher')).toHaveValue('Rentak')
  await expect(page.locator('.pulse-banner-view')).not.toBeVisible()
  await navigate(page,'Personal Schedule',/My Schedule/)
- await expect(page.getByRole('heading',{name:/here is your daily schedule/})).toBeVisible()
+ await expect(page.getByRole('heading',{name:/here are your schedule/})).toBeVisible()
  await expect(page.getByText(/Rentak.*Academic Timetable/)).toBeVisible()
  await fits(page,'Administrator schedule')
 })

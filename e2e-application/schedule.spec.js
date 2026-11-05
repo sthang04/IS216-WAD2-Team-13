@@ -2,7 +2,25 @@
 // Setup opens the real Vue UI; actions use its controls; assertions check visible results/state.
 // Uses isolated fixture responses; passing UI checks do not prove deployed database or delivery integration.
 ﻿import {test,expect} from './fixtures/app.js'
-import {openScheduleForm,scheduleCard,downloadText,guest} from './fixtures/journeys.js'
+import {openScheduleForm,scheduleCard,downloadText} from './fixtures/journeys.js'
+
+test('a signed-in member sees tasks from the events saved in Operations, not the sample',async({page,app})=>{
+ const task={id:'t1',member_id:7001,title:'Fixture saved task',task_type:'setup',start_time:'10:00:00',end_time:'11:00:00',venue:'Fixture Hall',is_fixed:false}
+ await app.open('/personal-schedule',{authenticated:true,savedOpsEvents:[
+  {id:'e1',name:'Fixture Saved Event',event_date:'2099-01-02',venue:'Fixture Hall',start_time:null,end_time:null,
+   ops_event_crew:[{member_id:7001,checked_in_at:null,late:null}],ops_tasks:[task]},
+  {id:'e2',name:'Fixture Other Crew Event',event_date:'2099-01-03',venue:'Fixture Hall',start_time:null,end_time:null,
+   ops_event_crew:[{member_id:7002,checked_in_at:null,late:null}],ops_tasks:[{...task,id:'t2',member_id:7002,title:'Fixture not mine'}]}]})
+ await expect(page.getByText(/1 Day-of Ops task linked from/)).toContainText('Fixture Saved Event')
+ await expect(page.getByText(/linked from/)).not.toContainText('Showcase')
+ await expect(page.getByText(/linked from/)).not.toContainText('Other Crew')
+})
+
+test('with no saved tasks, a signed-in member sees no Day-of Ops link at all',async({page,app})=>{
+ await app.open('/personal-schedule',{authenticated:true,savedOpsEvents:[]})
+ await expect(page.getByRole('heading',{name:/here are your schedule/})).toBeVisible()
+ await expect(page.getByText(/linked from/)).toHaveCount(0)
+})
 
 test('create, edit, toggle and delete a custom personal schedule entry',async({page,app})=>{
  await app.open('/personal-schedule',{authenticated:true})
@@ -47,7 +65,7 @@ test('calendar download contains custom title, venue and Singapore timestamps',a
  await app.open('/personal-schedule',{authenticated:true})
  const modal=await openScheduleForm(page,'Fixture exported event')
  await modal.getByRole('button',{name:'Add to Schedule',exact:true}).click()
- const {text,name}=await downloadText(page,()=>page.getByRole('button',{name:'Sync / Export .ics',exact:true}).click())
+ const {text,name}=await downloadText(page,()=>page.getByRole('button',{name:'Export calendar (.ics)',exact:true}).click())
  expect(name).toMatch(/\.ics$/)
  expect(text).toContain('BEGIN:VCALENDAR')
  expect(text).toContain('SUMMARY:Fixture exported event')
@@ -66,19 +84,15 @@ test('overlapping academic and custom events display a clash warning',async({pag
  await expect(page.getByText('Academic Timetable Conflict Detected',{exact:true})).toBeVisible()
 })
 
-test('guest cannot create, edit, delete or toggle personal schedule state',async({page,app})=>{
- await guest(page,app,'/personal-schedule')
- await page.getByRole('button',{name:'Add Event / Class',exact:true}).click()
- await expect(page.getByText(/Guest view is read-only/).first()).toBeVisible()
- await expect(page.locator('.modal.show')).toHaveCount(0)
- const title='IS216 Web Application Development II (G1)'
- const card=scheduleCard(page,title)
- await card.getByRole('button',{name:'Delete',exact:true}).click()
- await expect(page.getByRole('heading',{name:title,exact:true})).toBeVisible()
- await card.getByRole('button',{name:'Edit',exact:true}).click()
- await expect(page.locator('.modal.show')).toHaveCount(0)
- await card.getByRole('button',{name:'Completed',exact:true}).click()
- await expect(card.getByRole('button',{name:'Completed',exact:true})).toBeVisible()
+// Guest entry was removed; verify the supported signed-out boundary instead.
+test('signed-out access to /personal-schedule requests login without exposing protected controls',async({page,app})=>{
+ await app.open('/personal-schedule')
+ await expect(page).toHaveURL(/redirect=/)
+ await expect(page.locator('input[name="smu_user_password"]')).toBeVisible()
+ await expect(page.getByRole('button',{name:/explore live facility calendar as guest/i})).toHaveCount(0)
+ await page.reload()
+ await expect(page.locator('input[name="smu_user_password"]')).toBeVisible()
+ await expect(page.getByRole('button',{name:'Submit claim',exact:true})).toHaveCount(0)
 })
 
 test('end time preceding start time is rejected by the schedule form',async({page,app})=>{

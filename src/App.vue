@@ -442,7 +442,7 @@ onMounted(async () => {
                   <span style="font-size: 0.7rem; font-weight: 700; text-transform: uppercase; color: var(--pulse-purple-transit);">Dev Scope:</span>
                 </span>
                 <select 
-                  id="clubSwitcher" 
+                  id="clubSwitcher"
                   aria-label="Club scope"
                   v-model="selectedClub" 
                   class="form-select form-select-sm fw-bold club-switcher-select" 
@@ -471,7 +471,7 @@ onMounted(async () => {
                   <span style="font-size: 0.7rem; font-weight: 700; text-transform: uppercase; color: var(--pulse-primary);">Club:</span>
                 </span>
                 <select 
-                  id="clubSwitcher" 
+                  id="clubSwitcher"
                   aria-label="Club scope"
                   v-model="selectedClub" 
                   class="form-select form-select-sm fw-bold club-switcher-select" 
@@ -575,7 +575,7 @@ onMounted(async () => {
  
               <div 
                 v-if="profileMenuOpen" 
-                class="card shadow-lg position-absolute end-0 mt-2 p-2 border-0 pulse-account-menu" 
+                class="card shadow-lg position-absolute end-0 mt-2 p-2 border-0 pulse-account-menu"
                 style="min-width: 260px; z-index: 1050; border-radius: 0.85rem;"
               >
                 <!-- Signed-in identity (the avatar only shows initials) -->
@@ -668,7 +668,7 @@ onMounted(async () => {
                   class="btn btn-sm btn-link text-danger text-start px-3 py-1 text-decoration-none"
                   @click="handleSignOut"
                 >
-                  Sign Out to Landing
+                  Sign out
                 </button>
               </div>
             </div>

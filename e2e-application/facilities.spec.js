@@ -2,7 +2,7 @@
 // Setup opens the real Vue UI; actions use its controls; assertions check visible results/state.
 // Uses isolated fixture responses; passing UI checks do not prove deployed database or delivery integration.
 ﻿import {test,expect} from './fixtures/app.js'
-import {room,guest} from './fixtures/journeys.js'
+import {room} from './fixtures/journeys.js'
 
 test('facility type, equipment, capacity and search filters constrain actual cards',async({page,app})=>{
  await app.open('/facilities',{authenticated:true,facilities:true})
@@ -47,11 +47,11 @@ test('claim stays pending and appears in My Club rather than claiming approval',
  const card=room(page,'Fixture Music Room')
  await card.getByRole('button',{name:'Claim',exact:true}).click()
  await page.getByRole('dialog',{name:'Claim this slot?',exact:true}).getByRole('button',{name:'Submit claim',exact:true}).click()
- await expect(card).toContainText('Pending Admin Sign-off')
+ await expect(card).toContainText('Awaiting OSL approval')
  await page.getByRole('link',{name:'My Club',exact:true}).click()
  const pending=page.locator('#section-pending')
  await expect(pending).toContainText('Fixture Music Room')
- await expect(pending).toContainText('Pending Admin Sign-off')
+ await expect(pending).toContainText('Awaiting OSL approval')
 })
 
 test('failed claim leaves the slot claimable and reports the server refusal',async({page,app})=>{
@@ -61,7 +61,7 @@ test('failed claim leaves the slot claimable and reports the server refusal',asy
  await page.getByRole('dialog',{name:'Claim this slot?',exact:true}).getByRole('button',{name:'Submit claim',exact:true}).click()
  await expect(page.getByRole('status').filter({hasText:'Fixture operation denied'})).toBeVisible()
  await expect(card.getByRole('button',{name:'Claim',exact:true})).toBeEnabled()
- await expect(card).not.toContainText('Pending Admin Sign-off')
+ await expect(card).not.toContainText('Awaiting OSL approval')
 })
 
 test('week navigation changes URL and booking data, refresh preserves the week',async({page,app})=>{
@@ -82,11 +82,25 @@ test('calendar read failure is visible rather than inventing bookings',async({pa
  await expect(page.getByRole('button',{name:'Claim',exact:true})).toHaveCount(0)
 })
 
-test('guest receives no release, claim or waitlist mutation controls',async({page,app})=>{
- await app.open('/',{facilities:true})
- await page.getByRole('button',{name:/explore live facility calendar as guest/i}).click()
- await expect(room(page,'Fixture Music Room')).toBeVisible()
- for(const name of ['Claim','Release','Join waitlist'])await expect(page.getByRole('button',{name,exact:true})).toHaveCount(0)
- await page.getByRole('link',{name:'My Club',exact:true}).click()
- await expect(page.getByRole('heading',{name:'My Club is for CCA members',exact:true})).toBeVisible()
+// Guest entry was removed; verify the supported signed-out boundary instead.
+test('signed-out access to /facilities requests login without exposing protected controls',async({page,app})=>{
+ await app.open('/facilities')
+ await expect(page).toHaveURL(/redirect=/)
+ await expect(page.locator('input[name="smu_user_password"]')).toBeVisible()
+ await expect(page.getByRole('button',{name:/explore live facility calendar as guest/i})).toHaveCount(0)
+ await page.reload()
+ await expect(page.locator('input[name="smu_user_password"]')).toBeVisible()
+ await expect(page.getByRole('button',{name:'Submit claim',exact:true})).toHaveCount(0)
+})
+
+test('day tiles follow the search, and suggestions and capacity labels match real results',async({page,app})=>{
+ await app.open('/facilities',{authenticated:true,facilities:true})
+ const tile=page.getByText('1 open',{exact:true})
+ await expect(tile).toBeVisible()
+ await page.getByLabel('Search facility, CCA or equipment',{exact:true}).fill('Fixture Dance')
+ await expect(tile).toHaveCount(0)
+ await page.getByLabel('Search facility, CCA or equipment',{exact:true}).fill('Fixture Music')
+ await expect(tile).toBeVisible()
+ await expect(page.getByRole('button',{name:'Connexion',exact:true})).toHaveCount(0)
+ await expect(page.getByLabel('Capacity',{exact:true}).locator('option')).toContainText(['Any capacity','1–25 people','26–50 people','51–150 people','151+ people'])
 })

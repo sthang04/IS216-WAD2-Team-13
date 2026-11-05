@@ -272,7 +272,9 @@ export function getStoredOpsEvents(clubName = "Eurhythmix") {
     const raw = localStorage.getItem(`pulse_ops_events:${clubName || "demo"}`)
     if (raw) {
       const parsed = JSON.parse(raw)
-      if (Array.isArray(parsed) && parsed.length > 0) return parsed
+      // The Operations page saves { events, selectedEventId }
+      const saved = Array.isArray(parsed) ? parsed : parsed?.events
+      if (Array.isArray(saved) && saved.length > 0) return saved
     }
   } catch {}
   return null
@@ -287,23 +289,30 @@ export function getOpsTasksForMember(memberName, clubName = "Eurhythmix") {
   }
 
   const normalizedTarget = memberName.trim().toLowerCase()
+  return opsTasksFromEvents(allEvents, (c) => {
+    const cName = (c.name || "").toLowerCase()
+    return cName === normalizedTarget || cName.includes(normalizedTarget) || normalizedTarget.includes(cName)
+  })
+}
+
+// A signed-in member's tasks, from the same saved events the Operations page shows
+export async function fetchMyOpsTasks(clubId, memberId) {
+  const excos = await loadClubExcos(clubId)
+  const events = await loadEvents(clubId, excos)
+  return opsTasksFromEvents(events, (c) => c.memberId === Number(memberId))
+}
+
+function opsTasksFromEvents(allEvents, isThisPerson) {
   const matchedTasks = []
-  let primaryEventName = ""
-  let primaryEventDate = ""
+  const matchedEvents = []
 
   for (const ev of allEvents) {
     if (!ev || !ev.crew || !Array.isArray(ev.crew)) continue
-    
-    const crewPerson = ev.crew.find(c => {
-      const cName = (c.name || "").toLowerCase()
-      return cName === normalizedTarget || cName.includes(normalizedTarget) || normalizedTarget.includes(cName)
-    })
+
+    const crewPerson = ev.crew.find(isThisPerson)
 
     if (crewPerson && Array.isArray(crewPerson.blocks) && crewPerson.blocks.length > 0) {
-      if (!primaryEventName) {
-        primaryEventName = ev.name
-        primaryEventDate = ev.date
-      }
+      matchedEvents.push(ev)
       for (const [idx, b] of crewPerson.blocks.entries()) {
         const startStr = typeof b.start === "number" ? minutesToTime(b.start).slice(0, 5) : (b.start || "15:00")
         const endStr = typeof b.end === "number" ? minutesToTime(b.end).slice(0, 5) : (b.end || "16:00")
@@ -330,10 +339,16 @@ export function getOpsTasksForMember(memberName, clubName = "Eurhythmix") {
     }
   }
 
+  // The banner points at the next event, or the latest one once they have all passed
+  const today = getTodayIso()
+  const ordered = [...matchedEvents].sort((a, b) => a.date.localeCompare(b.date))
+  const primary = ordered.find((ev) => ev.date >= today) || ordered[ordered.length - 1]
+
   return {
     tasks: matchedTasks,
-    eventName: primaryEventName,
-    eventDate: primaryEventDate,
-    tasksCount: matchedTasks.length
+    eventName: primary?.name || "",
+    eventDate: primary?.date || "",
+    tasksCount: matchedTasks.length,
+    eventsCount: matchedEvents.length
   }
 }

@@ -4,6 +4,7 @@ import {computed,ref,useId,onMounted,onUnmounted,watch,nextTick} from 'vue'
 import {controlRoomTime} from '../services/simulatorControlRoomService.js'
 const props=defineProps({model:Object,selectedId:[String,Number],replayVersion:{type:Number,default:0}}),emit=defineEmits(['select','inspect-edge'])
 const view=ref('village'),fit=ref(false),zoom=ref(1),viewport=ref(null),viewportWidth=ref(900),viewportHeight=ref(580),content=ref(null),measuredBounds=ref(null),uid=useId().replace(/:/g,'')
+const assigneeText=n=>{const a=n.assignees||[];return a.length>2?a.slice(0,2).join(', ')+' +'+(a.length-2):a.join(', ')}
 const label=s=>s==='direct'?'Direct impact':s==='downstream'?'Downstream risk':'No detected impact',themes=['#e97f9d','#75a7db','#e6b85b','#87bc8b','#a58bd4']
 function lines(title){const result=[''];for(const word of String(title||'Untitled activity').split(/\s+/).flatMap(w=>w.match(/.{1,26}/g)||[])){if((result.at(-1)+' '+word).trim().length>26&&result.at(-1))result.push(word);else result[result.length-1]=(result.at(-1)+' '+word).trim()}return result}
 const box=n=>({left:n.x-108,right:n.x+108,top:n.y-114,bottom:n.y+122+lines(n.title).length*17})
@@ -81,7 +82,7 @@ defineExpose({focusActivity})
      <ellipse class="impact-ground" cy="70" rx="83" ry="23"/><ellipse class="selection" cy="70" rx="92" ry="31"/>
      <g class="booth"><rect x="-55" y="-19" width="110" height="86" rx="8" fill="#fffaf3" stroke="#8b9ba4" stroke-width="2"/><rect x="-61" y="20" width="122" height="47" rx="5" fill="#e8cbaa" stroke="#8b9ba4" stroke-width="2"/><rect x="-48" y="26" width="96" height="31" rx="5" fill="#fff9ee"/><rect x="-54" y="-25" width="108" height="20" :fill="node.theme"/><path v-for="i in 6" :key="i" :d="'M'+(-54+(i-1)*18)+' -25 h9 l8 20 h-18 Z'" :fill="i%2?'#fff9f2':node.theme"/><path v-for="i in 6" :key="'a'+i" :d="'M'+(-54+(i-1)*18)+' -5 q9 17 18 0'" :fill="i%2?'#fff9f2':node.theme" stroke="#b9a7a0" stroke-width=".8"/><path d="M-62 -28 L0 -65 L62 -28 Z" :fill="node.theme" stroke="#8798a5" stroke-width="2"/><rect x="-26" y="-52" width="52" height="20" rx="5" fill="#fffaf4"/><text y="-37" text-anchor="middle" fill="#8b6578" font-size="17">&#10022;</text><rect x="-16" y="34" width="32" height="25" rx="5" :fill="node.theme"/></g>
      <rect class="impact-pill" x="-83" y="-105" width="166" height="26" rx="13"/><text y="-87" text-anchor="middle" class="status-text">{{ label(node.status) }}</text>
-     <text text-anchor="middle" class="activity-name"><tspan v-for="(line,i) in lines(node.title)" :key="i" x="0" :y="103+i*17">{{ line }}</tspan></text><text :y="112+lines(node.title).length*17" text-anchor="middle" class="activity-time">{{ controlRoomTime(node.simulated.starts_at) }}</text>
+     <text text-anchor="middle" class="activity-name"><tspan v-for="(line,i) in lines(node.title)" :key="i" x="0" :y="103+i*17">{{ line }}</tspan></text><text :y="112+lines(node.title).length*17" text-anchor="middle" class="activity-time">{{ controlRoomTime(node.simulated.starts_at) }}<template v-if="assigneeText(node)"> &middot; {{ assigneeText(node) }}</template></text>
     </g>
     </g></g></g>
     <!-- Reuse the reference's tabby, grey patches and shared yarn/paws as
@@ -106,7 +107,7 @@ defineExpose({focusActivity})
    </svg>
   </div>
   <p v-if="view==='village'" class="small text-muted mt-2 mb-0">{{ fit && fitScale<.8?'Overview scale. Explore map for readable labels.':fit?'Whole map':'Scroll or swipe to explore.' }}</p>
-  <div v-show="view==='list'" class="village-list" role="group" aria-label="Activity List"><button v-for="node in nodes" :key="node.id" type="button" :class="node.status" :aria-pressed="String(selectedId)===String(node.id)" @click="emit('select',node)"><span><strong>{{ node.title }}</strong><small>{{ controlRoomTime(node.simulated.starts_at) }}&ndash;{{ controlRoomTime(node.simulated.ends_at) }}</small></span><span>{{ label(node.status) }}</span></button></div>
+  <div v-show="view==='list'" class="village-list" role="group" aria-label="Activity List"><button v-for="node in nodes" :key="node.id" type="button" :class="node.status" :aria-pressed="String(selectedId)===String(node.id)" @click="emit('select',node)"><span><strong>{{ node.title }}</strong><small>{{ controlRoomTime(node.simulated.starts_at) }}&ndash;{{ controlRoomTime(node.simulated.ends_at) }}<template v-if="assigneeText(node)"> &middot; {{ assigneeText(node) }}</template></small></span><span>{{ label(node.status) }}</span></button></div>
  </div>
 </template>
 <style scoped>

@@ -2,7 +2,7 @@
 // Setup opens the real Vue UI; actions use its controls; assertions check visible results/state.
 // Uses isolated fixture responses; passing UI checks do not prove deployed database or delivery integration.
 ﻿import {test,expect} from './fixtures/app.js'
-import {eventSelect,runDelay,guest} from './fixtures/journeys.js'
+import {eventSelect,runDelay} from './fixtures/journeys.js'
 
 test('real app navigation loads authorized events and selected event activities',async({page,app})=>{
  await app.open('/facilities',{authenticated:true,simulation:true})
@@ -68,10 +68,15 @@ test('OSL account is redirected away from events',async({page,app})=>{
  await expect(page.getByRole('heading',{name:'Event Control Room',exact:true})).not.toBeVisible()
 })
 
-test('guest can browse route but cannot load authenticated event data',async({page,app})=>{
- await guest(page,app,'/events')
- await expect(page.getByRole('alert')).toContainText('Please sign in with your Supabase ExCo account')
- await expect(eventSelect(page).locator('option')).toHaveCount(0)
+// Guest entry was removed; verify the supported signed-out boundary instead.
+test('signed-out access to /events requests login without exposing protected controls',async({page,app})=>{
+ await app.open('/events')
+ await expect(page).toHaveURL(/redirect=/)
+ await expect(page.locator('input[name="smu_user_password"]')).toBeVisible()
+ await expect(page.getByRole('button',{name:/explore live facility calendar as guest/i})).toHaveCount(0)
+ await page.reload()
+ await expect(page.locator('input[name="smu_user_password"]')).toBeVisible()
+ await expect(page.getByRole('button',{name:'Submit claim',exact:true})).toHaveCount(0)
 })
 
 test('event switching confirms discard and clears prior simulation and recovery',async({page,app})=>{

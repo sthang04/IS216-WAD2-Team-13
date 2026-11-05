@@ -1,11 +1,11 @@
 <script setup>
 import { ref, computed, watch, nextTick, onMounted } from 'vue';
-import { getOpsTasksForMember } from '../services/opsService';
+import { getOpsTasksForMember, fetchMyOpsTasks, isMissingTableError } from '../services/opsService';
 import { useRoute } from 'vue-router';
 import SimulatorInvitationInbox from '../components/SimulatorInvitationInbox.vue';
 import { getWalkTime } from '../services/onemap';
 import { supabase } from '../supabase';
-import { demoMemberId } from '../services/sessionState';
+import { demoMemberId, session } from '../services/sessionState';
 
 const props = defineProps({
   active: { type: Boolean, default: true },
@@ -212,17 +212,40 @@ watch(storageKey, () => {
 // ---- Live Cross-Sync with Day-of Operations ----
 const opsSyncInfo = ref(null);
 
-function syncOpsTasks(forceToast = false) {
-  const memberName = props.activePersona?.name || 'Rachel Tan';
-  const cca = props.activePersona?.cca || 'Eurhythmix';
-  const { tasks, eventName, eventDate, tasksCount } = getOpsTasksForMember(memberName, cca);
+let opsSyncVersion = 0;
+
+// Signed in: the events saved in Operations. Otherwise: this browser's copy, or the sample.
+async function readOpsTasks() {
+  const { authUserId, activeClubId, memberId } = session.value;
+  if (supabase && authUserId && activeClubId && !props.readOnly) {
+    try {
+      return await fetchMyOpsTasks(activeClubId, memberId);
+    } catch (error) {
+      if (!isMissingTableError(error)) throw error;
+    }
+  }
+  return getOpsTasksForMember(props.activePersona?.name || 'Rachel Tan', props.activePersona?.cca || 'Eurhythmix');
+}
+
+async function syncOpsTasks(forceToast = false) {
+  const version = ++opsSyncVersion;
+  let result;
+  try {
+    result = await readOpsTasks();
+  } catch (error) {
+    // Keep what is on screen rather than showing tasks that may be wrong
+    console.log('Day-of Ops tasks not loaded:', error.message);
+    return;
+  }
+  if (version !== opsSyncVersion) return;
+  const { tasks, eventName, eventDate, tasksCount, eventsCount = 1 } = result;
+
+  // Saved schedules can hold tasks from events that have since changed, so always replace them
+  const customAndAcademic = scheduleEvents.value.filter(e => !e.isOpsTask && !String(e.id).startsWith('ops-'));
+  scheduleEvents.value = [...customAndAcademic, ...tasks];
 
   if (tasksCount > 0) {
-    opsSyncInfo.value = { eventName, eventDate, eventCount: tasksCount };
-    
-    // Retain non-ops events and merge fresh ops tasks
-    const customAndAcademic = scheduleEvents.value.filter(e => !e.isOpsTask && !String(e.id).startsWith('ops-'));
-    scheduleEvents.value = [...customAndAcademic, ...tasks];
+    opsSyncInfo.value = { eventName, eventDate, eventCount: tasksCount, otherEvents: eventsCount - 1 };
 
     // Jump to the ops event date if viewing default placeholder date
     if (selectedDate.value === '2026-10-23' && eventDate) {
@@ -241,6 +264,12 @@ function syncOpsTasks(forceToast = false) {
 onMounted(() => {
   syncOpsTasks(false);
 });
+
+// The session may finish loading after this page, or switch to another CCA
+watch(() => [session.value.ready, session.value.authUserId, session.value.activeClubId, session.value.memberId], () => {
+  syncOpsTasks(false);
+});
+
 
 
 // All events, in order of date then start time
@@ -400,7 +429,8 @@ async function sendScheduleAlert(action, ev) {
     });
     if (error) throw error;
   } catch (err) {
-    console.log('Telegram schedule alert not sent:', err.message);
+    console.log('Telegram schedule alert not queued:', err.message);
+    toastMsg.value += ' Telegram alert could not be queued: ' + err.message;
   }
 }
 
@@ -588,7 +618,7 @@ function exportCalendarICS() {
           <span v-if="apiMode" class="pulse-api-tag">OneMap Transit Guide</span>
           <span v-if="apiMode" class="pulse-api-tag">iCal OASIS Sync</span>
         </div>
-        <h3 class="fw-bold mb-1">Hi {{ activePersona.name }}, here is your daily schedule & assignments.</h3>
+        <h3 class="fw-bold mb-1">Hi {{ (activePersona.name || '').split(' ')[0] }}, here are your schedule and assignments for today.</h3>
         <p class="text-muted small mb-0">
           {{ activePersona.cca }} • Academic Timetable & Rehearsal Schedule • {{ selectedDateLabel }}
         </p>
@@ -606,7 +636,7 @@ function exportCalendarICS() {
             <polyline points="7 10 12 15 17 10"></polyline>
             <line x1="12" y1="15" x2="12" y2="3"></line>
           </svg>
-          <span>Sync / Export .ics</span>
+          <span>Export calendar (.ics)</span>
         </button>
 
         <button
@@ -651,7 +681,7 @@ function exportCalendarICS() {
           <span class="text-muted d-none d-md-inline" style="font-size: 0.7rem;">
             Switch to a future day, then use Add Event to prefill it.
           </span>
-          <input v-model="selectedDate" type="date" class="form-control form-control-sm" style="width: auto;" />
+          <input v-model="selectedDate" aria-label="Schedule date" type="date" class="form-control form-control-sm" style="width: auto;" />
         </div>
       </div>
     </div>
@@ -829,7 +859,7 @@ function exportCalendarICS() {
               ⚡ DAY-OF OPS SYNCED
             </span>
             <span class="small text-dark fw-semibold" style="font-size: 0.8rem;">
-              {{ opsSyncInfo.eventCount }} rehearsal tasks linked from <strong>{{ opsSyncInfo.eventName }}</strong> ({{ opsSyncInfo.eventDate }})
+              {{ opsSyncInfo.eventCount }} Day-of Ops task{{ opsSyncInfo.eventCount === 1 ? '' : 's' }} linked from <strong>{{ opsSyncInfo.eventName }}</strong> ({{ opsSyncInfo.eventDate }}){{ opsSyncInfo.otherEvents ? ` and ${opsSyncInfo.otherEvents} other event${opsSyncInfo.otherEvents === 1 ? '' : 's'}` : '' }}
             </span>
           </div>
           <div class="d-flex align-items-center gap-2">
@@ -876,9 +906,10 @@ function exportCalendarICS() {
                     : '4px solid #10b981 !important'
             }"
           >
-            <div class="d-flex justify-content-between align-items-start gap-2 mb-2">
-              <div>
-                <div class="d-flex align-items-center gap-2 mb-1">
+            <!-- Keep complete status words readable; let the header stack when space runs out. -->
+            <div class="schedule-entry-header d-flex flex-wrap justify-content-between align-items-start gap-2 mb-2">
+              <div class="schedule-entry-details">
+                <div class="schedule-entry-title d-flex flex-wrap align-items-center gap-2 mb-1">
                   <h6 class="fw-bold mb-0" :class="{ 'text-decoration-line-through text-muted': event.status === 'Completed' }">
                     {{ event.title }}
                   </h6>
@@ -910,7 +941,7 @@ function exportCalendarICS() {
               <!-- Status Badge / Toggle Button -->
               <button
                 type="button"
-                class="btn btn-sm py-1 px-2 rounded-pill fw-bold border"
+                class="schedule-entry-status btn btn-sm py-1 px-2 rounded-pill fw-bold border"
                 :class="{
                   'btn-success text-white': event.status === 'Completed',
                   'btn-warning text-dark': event.status === 'In Progress',
@@ -972,7 +1003,7 @@ function exportCalendarICS() {
       tabindex="-1"
       style="background-color: rgba(15, 23, 42, 0.65); z-index: 1055;"
     >
-      <div class="modal-dialog modal-dialog-centered">
+      <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable">
         <div class="modal-content border-0 shadow-lg" style="border-radius: 1rem;">
 
           <div class="modal-header border-bottom py-3 px-4 bg-light">
@@ -982,8 +1013,9 @@ function exportCalendarICS() {
             <button type="button" class="btn-close" aria-label="Close" @click="closeModal"></button>
           </div>
 
-          <form @submit.prevent="saveEvent">
-  <div class="modal-body p-4">
+          <!-- Keep this nested form shrinkable so its body scrolls and the save footer stays visible. -->
+          <form class="pulse-scrollable-modal-form" @submit.prevent="saveEvent">
+            <div class="modal-body p-4">
 
     <!-- Modal Error Banner -->
     <div
@@ -1039,14 +1071,14 @@ function exportCalendarICS() {
 
               <!-- SMU Building Selection for OneMap Route Calculation -->
               <div class="mb-3">
-                <label class="form-label small fw-bold text-dark">SMU Building (OneMap Searchable):</label>
+                <label class="form-label small fw-bold text-dark">SMU building:</label>
                 <select v-model="eventForm.building" class="form-select form-select-sm fw-bold text-primary" required>
                   <option v-for="b in SMU_BUILDINGS" :key="b" :value="b">
                     {{ b }}
                   </option>
                 </select>
                 <small class="text-muted" style="font-size: 0.675rem;">
-                  OneMap API uses this building location to calculate precise walking times between classes.
+                  We use this location to estimate walking time between events.
                 </small>
               </div>
 
@@ -1100,6 +1132,11 @@ function exportCalendarICS() {
 </template>
 
 <style scoped>
+/* Long titles may wrap naturally; status/category labels retain whole words. */
+.schedule-entry-details { flex: 1 1 14rem; min-width: 0; }
+.schedule-entry-title h6 { min-width: 0; overflow-wrap: anywhere; }
+.schedule-entry-title .badge, .schedule-entry-status { flex-shrink: 0; white-space: nowrap; word-break: normal; overflow-wrap: normal; }
+.schedule-entry-status { margin-left: auto; }
 .pulse-api-tag {
   font-size: 0.6rem;
   font-weight: 700;

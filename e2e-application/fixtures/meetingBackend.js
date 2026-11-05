@@ -11,12 +11,23 @@ export function createMeetingBackend(config) {
   vote_deadline:'2026-11-05T15:00:00Z',server_now:'2026-11-03T02:00:00Z',
   status:'COLLECTING',is_participant:true,is_organiser:true,can_confirm:true,organiser_name:'Fixture Exco'}:null,
   participants:roster.map(m=>({...m,responded_at:null,telegram_linked:true})),availability:[]}
+ // Explicit UI scenarios supply confirmed/expired/member states; ordinary fixtures stay unchanged.
+ if(initial.meeting)Object.assign(initial.meeting,config().meetingOptions||{})
  const state=JSON.parse(sessionStorage.getItem(key)||'null')||initial
+ state.baseline ||= []
  const ok=data=>({data:structuredClone(data),error:null})
  const persist=()=>sessionStorage.setItem(key,JSON.stringify(state))
  return async function rpc(name,args){
   if(name==='rpc_club_roster')return ok(config().meetings?roster:[])
-  if(['rpc_my_baseline','rpc_club_baselines'].includes(name))return ok([])
+  if(name==='rpc_my_baseline')return ok(state.baseline)
+  if(name==='rpc_club_baselines')return ok([])
+  if(name==='rpc_save_my_baseline'){
+   state.baseline=args.p_events.map(e=>({title:e.title,start_ms:e.start_ms??e.start,end_ms:e.end_ms??e.end,
+    rrule:e.rrule,exdates:e.exdates||[],source_file:args.p_file_name}))
+   persist();return ok(state.baseline.length)
+  }
+  if(name==='rpc_clear_my_baseline'){state.baseline=[];persist();return ok({})}
+  if(name==='rpc_cancel_meeting'){state.meeting=null;state.availability=[];persist();return ok({})}
   if(name==='rpc_meeting_snapshot'){
    const m=state.meeting;const visible=m&&(args.p_meeting_id===m.id||args.p_week_start===m.week_start)
    return ok({meeting:visible?m:null,participants:visible?state.participants:[],

@@ -3,7 +3,7 @@
 // Uses isolated fixture responses; passing UI checks do not prove deployed database or delivery integration.
 // Purpose: fixture-backed loading Recovery browser regressions for simulator controls and state.
 // Use Setup -> Actions -> Assert; real Vue/engine code runs, but these tests do not prove live Supabase integration.
-import { test, expect } from '@playwright/test'
+import { test, expect } from '../e2e/helpers/browserUi.js'
 
 // Browser E2E through the real Vue view and engine. All records are synthetic;
 // replacing the loader and client prevents any live Supabase/Telegram effects.

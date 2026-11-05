@@ -37,7 +37,7 @@ export function simulatorFacilityFacts(data,segmentId,start,end){
   })
   const confirmed=overlaps.filter(b=>['booked','officially confirmed booking'].includes(key(b.status)))
   // A Booked record conservatively blocks double booking; this does NOT certify
-  // its approval or grant this organizer rights to use that reservation.
+  // its approval or grant this organiser rights to use that reservation.
   if(confirmed.length)reasons.push('Another confirmed reservation overlaps this facility.')
   if(overlaps.length&&!confirmed.length)warnings.push('Visible calendar records overlap; check claim eligibility and approval in Facility Calendar.')
   return {id:f.id,name:f.name,type:f.facility_type || 'Unverified',capacity:knownCapacity?capacity:null,

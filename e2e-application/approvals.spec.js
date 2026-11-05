@@ -25,7 +25,7 @@ test('recent decisions list the latest action first and a late transfer reads as
 
 test('OSL searches pending requests, inspects audit evidence and restores search',async({page,app})=>{
  await app.open('/facilities/admin',{authenticated:true,role:'admin',facilities:true,transfers:true})
- await expect(page.getByRole('heading',{name:'Pending Admin Sign-off (1)',exact:true})).toBeVisible()
+ await expect(page.getByRole('heading',{name:'Awaiting OSL approval (1)',exact:true})).toBeVisible()
  await page.getByLabel('Search transfers',{exact:true}).fill('does not exist')
  await expect(page.getByText('No pending transfers match your search.',{exact:true})).toBeVisible()
  await page.getByLabel('Search transfers',{exact:true}).fill('FIXTURE-FBS-502')
@@ -61,7 +61,7 @@ test('failed approval retains pending request and displays refusal',async({page,
  await page.getByRole('button',{name:'Approve',exact:true}).click()
  await page.getByRole('dialog',{name:'Approve this transfer?',exact:true}).getByRole('button',{name:'Approve transfer',exact:true}).click()
  await expect(page.getByRole('status').filter({hasText:'Fixture operation denied'})).toBeVisible()
- await expect(page.getByRole('heading',{name:'Pending Admin Sign-off (1)',exact:true})).toBeVisible()
+ await expect(page.getByRole('heading',{name:'Awaiting OSL approval (1)',exact:true})).toBeVisible()
  await expect(page.getByText('No decisions yet.',{exact:true})).toBeVisible()
 })
 

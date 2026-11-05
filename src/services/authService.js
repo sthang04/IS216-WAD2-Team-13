@@ -15,7 +15,7 @@ import { resolveClubId, resolveClubName } from './sessionState'
 const LOCAL_SESSION_KEY = 'pulse_session'
 const SMU_EMAIL_PATTERN = /^[a-zA-Z0-9._%+-]+@([a-zA-Z0-9-]+\.)*smu\.edu\.sg$/i
  
-const NOT_EXCO_MESSAGE = 'Pulse sign-in is for CCA ExCos and OSL staff. Explore as a guest to view venues.'
+const NOT_EXCO_MESSAGE = 'Pulse sign-in is for CCA ExCos and OSL staff. Ask OSL to check your membership.'
  
 // Pages each role may open
 const VIEWS_BY_ROLE = {
@@ -125,7 +125,7 @@ function personaFromRows(rows, email) {
   // Label shown under the name, e.g. 'Eurhythmix Logistics Director'
   let roleLabel = ''
   if (isAdmin) {
-    roleLabel = 'OSL Facility Administrator'
+    roleLabel = 'OSL Administrator'
   } else if (ccas.length > 1) {
     roleLabel = 'ExCo (' + ccas.join(' & ') + ')'
   } else {
@@ -306,7 +306,7 @@ export async function checkSignupEligibility(email) {
  
   const result = response.data
   if (result.status === 'not_listed') {
-    throw new Error("This email isn't on the ExCo list. Ask OSL to add you, or explore as a guest.")
+    throw new Error("This email isn't on the ExCo list. Ask OSL to add you to the ExCo list.")
   }
   if (result.status === 'already_registered') {
     throw new Error('This email already has an account. Sign in instead.')

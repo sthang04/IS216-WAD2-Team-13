@@ -251,7 +251,7 @@ async function confirmDecision(reason) {
     title="Transfer approvals"
     subtitle="Verify each claim against FBS before it becomes an Officially Confirmed Booking."
     :stats="session.isOslAdmin ? [
-      { label: 'Awaiting sign-off', value: pendingTransfers.length, tone: 'sky' },
+      { label: 'Awaiting OSL approval', value: pendingTransfers.length, tone: 'sky' },
       { label: 'Approved', value: decisions.filter(d => d.state === 'APPROVED').length, tone: 'green' },
       { label: 'Rejected', value: decisions.filter(d => d.state === 'REJECTED' || d.state === 'EXPIRED').length, tone: 'red' }
     ] : []"
@@ -284,7 +284,7 @@ async function confirmDecision(reason) {
     <div v-if="loading" class="text-center py-5"><div class="spinner-border text-danger" role="status"></div></div>
 
     <template v-else>
-      <h2 class="h6 fw-bold mb-2">Pending Admin Sign-off ({{ filtered.length }})</h2>
+      <h2 class="h6 fw-bold mb-2">Awaiting OSL approval ({{ filtered.length }})</h2>
       <p v-if="!filtered.length" class="pulse-panel p-4 text-muted small">
         {{ pendingTransfers.length ? 'No pending transfers match your search.' : 'Nothing is waiting for approval.' }}
       </p>

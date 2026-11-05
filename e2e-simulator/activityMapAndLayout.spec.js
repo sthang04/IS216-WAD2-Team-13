@@ -1,10 +1,10 @@
-// BROWSER TEST PURPOSE: redesign user workflows and regression coverage.
+// BROWSER TEST PURPOSE: activity map and responsive layout workflows and regression coverage.
 // Setup opens the real Vue UI; actions use its controls; assertions check visible results/state.
 // Uses isolated fixture responses; passing UI checks do not prove deployed database or delivery integration.
-// Purpose: fixture-backed redesign browser regressions for simulator controls and state.
+// Purpose: fixture-backed activity map and responsive layout browser regressions for simulator controls and state.
 // Use Setup -> Actions -> Assert; real Vue/engine code runs, but these tests do not prove live Supabase integration.
 import {openTimeline,openFacilityHeatmap} from './helpers/disclosures.js'
-import {test,expect} from '@playwright/test'
+import {test,expect} from '../e2e/helpers/browserUi.js'
 async function boot(page,shape='branch'){
  await page.route('https://**',route=>route.abort())
  await page.route('**/src/services/simulationDataService.js*',route=>route.fulfill({contentType:'application/javascript',body:

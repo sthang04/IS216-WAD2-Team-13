@@ -32,6 +32,12 @@ const HISTORY_LABELS = {
   CLAIMED: 'Claimed'
 }
 
+function actionTime(entry) {
+  const at = entry.left_at || entry.claimed_at
+  return at ? new Date(at).toLocaleString('en-SG', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' }) : ''
+}
+
+
 async function load() {
   if (!session.value.activeClubId) {
     loading.value = false
@@ -91,7 +97,7 @@ async function confirmAccept() {
   busyId.value = entry.entry_id
   try {
     await claimBooking(entry.booking_id, session.value.activeClubId)
-    showToast('Offer accepted. ' + entry.facility_name + ' is Pending Admin Sign-off.', 'success')
+    showToast('Offer accepted. ' + entry.facility_name + ' is awaiting OSL approval.', 'success')
   } catch (error) {
     console.log(error.message)
     showToast(error.message, 'danger')
@@ -213,13 +219,19 @@ function onExpired() {
     </section>
 
     <section v-if="history.length" class="pulse-panel overflow-hidden">
-      <header class="p-3 border-bottom"><h2 class="h6 fw-bold mb-0">Past waitlist activity</h2></header>
+      <header class="p-3 border-bottom">
+        <h2 class="h6 fw-bold mb-0">Past waitlist activity</h2>
+        <p class="text-muted small mb-0">Dates are the booking dates. Times beside each status show when it happened.</p>
+      </header>
       <div v-for="entry in history" :key="entry.entry_id" class="pulse-slot no-ref text-muted">
         <div class="pulse-slot-when">
           <div class="fw-semibold">{{ formatDate(entry.booking_date) }}</div>
           <div class="small">{{ formatTime(entry.start_time) }} – {{ formatTime(entry.end_time) }}</div>
         </div>
-        <div class="pulse-slot-status small">{{ HISTORY_LABELS[entry.status] }}</div>
+        <div class="pulse-slot-status small">
+          {{ HISTORY_LABELS[entry.status] }}
+          <div v-if="actionTime(entry)" class="text-muted">{{ actionTime(entry) }}</div>
+        </div>
         <div class="pulse-slot-who small">{{ entry.facility_name }} · {{ entry.owner_club_name }}</div>
         <div class="pulse-slot-actions"></div>
       </div>
@@ -229,7 +241,7 @@ function onExpired() {
   <ConfirmActionModal
     :show="!!accepting"
     title="Accept this waitlist offer?"
-    message="Your claim becomes Pending Admin Sign-off until OSL approves it."
+    message="Your claim awaits OSL approval. It is only official once OSL approves it."
     :details="accepting ? [
       { label: 'Facility', value: accepting.facility_name },
       { label: 'When', value: `${formatDate(accepting.booking_date, true)}, ${formatTime(accepting.start_time)} – ${formatTime(accepting.end_time)}` }

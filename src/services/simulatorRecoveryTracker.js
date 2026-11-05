@@ -22,7 +22,7 @@ export function buildRecoveryTracker({plan,invitations=[],audit=[],manualAcknowl
    // Delivery is displayed separately below: a sent Telegram message cannot
    // satisfy consent, and an old acceptance cannot approve changed terms.
    const accepted=!!invite && state==='Accepted' && consentMatches(plan,invite,c.replacedMemberId)
-   const status=!invite?'Invitation required':accepted?'Accepted - organizer confirmation required':state==='Accepted'?'Consent requires renewed review':state==='Pending'?'Awaiting response':state
+   const status=!invite?'Invitation required':accepted?'Accepted - organiser confirmation required':state==='Accepted'?'Consent requires renewed review':state==='Pending'?'Awaiting response':state
    add({key:'member:'+c.segmentId+':'+c.replacedMemberId+':'+c.replacementMemberId,kind:'Member acceptance',activity:activity(c.segmentId),change:member(c.replacedMemberId)+' to '+member(c.replacementMemberId),status,satisfied:accepted,
     delivery:invite?(invite.delivery_status || 'Delivery unverified'):'Not requested',nextAction:!invite?'Create invitation below':accepted?'Review and confirm assignment':state==='Pending'?'Wait for the actual recipient to respond':state==='Declined'?'Choose another replacement and prepare a new recovery':'Review or create a new invitation',updated:invite?.responded_at || invite?.updated_at || invite?.created_at || updated})
   }
@@ -33,15 +33,15 @@ export function buildRecoveryTracker({plan,invitations=[],audit=[],manualAcknowl
   }
   if(c.starts_at!=null || c.ends_at!=null)add({key:'time:'+c.segmentId,kind:'Schedule validation',activity:activity(c.segmentId),change:'Proposed activity timing',status:'Subject to final server validation',satisfied:true,nextAction:'Compare times before Apply',updated})
  }
- add({key:'review',kind:'Organizer verification',activity:'Entire recovery',change:'Availability, qualifications and venue suitability',status:manualAcknowledged?'Review acknowledged':'Organizer review required',satisfied:manualAcknowledged,nextAction:'Review evidence and acknowledge below',updated})
+ add({key:'review',kind:'Organiser verification',activity:'Entire recovery',change:'Availability, qualifications and venue suitability',status:manualAcknowledged?'Review acknowledged':'Organiser review required',satisfied:manualAcknowledged,nextAction:'Review evidence and acknowledge below',updated})
  const readiness=workflowReadiness({enabled:true,plan,invites:invitations,manualAcknowledged})
-// Recorded member/room requirements and the organizer acknowledgement are
+// Recorded member/room requirements and the organiser acknowledgement are
  // separate steps; a satisfied row alone does not authorize Apply.
  const requirementsReady=plan.application_status==='Draft' && !(plan.blockers || []).length && rows.filter(r=>r.key!=='review').every(r=>r.satisfied) && workflowReadiness({enabled:true,plan,invites:invitations,manualAcknowledged:true}).ready
  let status=plan.application_status==='Applied'?'Applied':plan.application_status==='Undone'?'Undone':plan.application_status==='Cancelled'?'Cancelled':plan.application_status==='Draft' && plan.lifecycle!=='In Progress'?'Draft':
   (plan.blockers || []).length?'Stale or blocked':rows.some(r=>['Declined','Cancelled','Expired'].includes(r.status))?'Rejected or expired':
   readiness.ready && rows.every(r=>r.satisfied)?'Ready to apply':'Pending requirements'
- const nextAction=status==='Draft'?'Prepare recovery requests before tracking approvals.':status==='Applied'?'Review applied changes and original disruption resolution before Undo.':status==='Undone'?'Original schedule restored; review history.':status==='Cancelled'?'View history or prepare another proposal.':status==='Ready to apply'?(enabled?'Review and apply this saved recovery.':'Requirements are recorded; application is unavailable in this environment.'):
+ const nextAction=status==='Draft'?'Prepare recovery requests before tracking approvals.':status==='Applied'?'Review applied changes and original disruption resolution before Undo.':status==='Undone'?'Original schedule restored; review history.':status==='Cancelled'?'View history or prepare another proposal.':status==='Ready to apply'?(enabled?'Review and apply this saved recovery.':'Requirements are recorded; applying is turned off on this site.'):
   status==='Stale or blocked'?'Review the reported changes; refresh and rerun the simulation.':'Complete outstanding requirements, then refresh their authoritative status.'
  return {status,requirementsReady,rows,satisfied:rows.filter(r=>r.satisfied).length,total:rows.length,nextAction}
 }

@@ -118,8 +118,7 @@ Fixture-based browser results do not prove deployed database or Telegram deliver
 
 The two Node unit-test files and 28 non-browser Playwright contract files are kept,
 with comments explaining why they exist. They are excluded from browser E2E runs.
-No test files were deleted. See [the scope and preservation report](docs/testing-audit.md)
-for the retained-file inventory, coverage limits and configuration details.
 
-Verified: **1,242 browser checks passed**, with zero failures/skips/flaky results,
-across all six viewport sizes. The separate retained contract suite passed 263 checks.
+
+
+Genuine write-workflow E2E checks now cover booking transfer/OSL approval, database write refusals and multi-user meeting scheduling on the dedicated staging backend. Configure the ignored `.env.live-e2e.local` using `.env.live-e2e.example`; this workspace is prepared. Run `pnpm test:e2e:backend`, or include them through the normal `pnpm e2e` command. Read the [workflow setup, coverage and evidence notes](e2e-backend/README.md). Schedule readability assertions and reviewed screenshot comparisons are included in the application suite.

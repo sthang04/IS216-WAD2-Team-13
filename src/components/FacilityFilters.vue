@@ -16,13 +16,13 @@ const CAPACITY_OPTIONS = [
   { value: '1-25', label: '1–25 people' },
   { value: '26-50', label: '26–50 people' },
   { value: '51-150', label: '51–150 people' },
-  { value: '151+', label: '150+ people' }
+  { value: '151+', label: '151+ people' }
 ]
 
 // Values are the database statuses; labels are what users see
 const STATUS_OPTIONS = [
   { value: 'Proposed Peer Transfer', label: 'Available to Claim' },
-  { value: 'Pending Admin Sign-off', label: 'Pending Admin Sign-off' },
+  { value: 'Pending Admin Sign-off', label: 'Awaiting OSL approval' },
   { value: 'Booked', label: 'Booked' },
   { value: 'Officially Confirmed Booking', label: 'Officially Confirmed' }
 ]
@@ -37,14 +37,25 @@ function update(key, value) {
 
 // Dynamic Animated Typewriter Placeholder for Search Box
 const searchPlaceholderQueries = [
-  "Search 'Dance Studio A'…",
-  "Search 'Li Ka Shing B1'…",
-  "Search 'Sprung Floor'…",
+  "Search 'Dance Studio'…",
+  "Search 'Studio 7.2'…",
   "Search 'Samba Masala'…",
   "Search 'Acoustic Room'…",
   "Search 'Mirrors'…",
-  "Search 'ACC Concourse'…"
+  "Search 'ACC'…"
 ]
+
+// Only suggest searches that can find a facility
+const SUGGESTIONS = [
+  { label: 'Dance Studios', val: 'Dance' },
+  { label: 'Band & Acoustic', val: 'Acoustic' },
+  { label: 'Mirrors', val: 'Mirrors' },
+  { label: 'ACC Concourse', val: 'ACC' }
+]
+const suggestions = computed(() => SUGGESTIONS.filter((chip) => {
+  const word = chip.val.toLowerCase()
+  return props.facilities.some((f) => [f.name, f.location, f.facility_type, ...(f.equipment || [])].join(' ').toLowerCase().includes(word))
+}))
 const currentSearchPlaceholder = ref('')
 let searchPlaceholderTimer = null
 let sqIndex = 0
@@ -132,15 +143,9 @@ onUnmounted(() => {
 
       <!-- Quick Suggestion Chips (Apple-style fast filters) -->
       <div class="d-flex flex-wrap align-items-center gap-1 mt-2 ps-1">
-        <span class="text-muted small fw-semibold me-1" style="font-size: 0.72rem;">Suggested:</span>
+        <span v-if="suggestions.length" class="text-muted small fw-semibold me-1" style="font-size: 0.72rem;">Suggested:</span>
         <button
-          v-for="chip in [
-            { label: 'Dance Studios', val: 'Dance' },
-            { label: 'Connexion', val: 'Connexion' },
-            { label: 'Band & Acoustic', val: 'Acoustic' },
-            { label: 'Mirrors', val: 'Mirrors' },
-            { label: 'ACC Concourse', val: 'ACC' }
-          ]"
+          v-for="chip in suggestions"
           :key="chip.label"
           type="button"
           class="btn btn-sm pulse-search-chip"

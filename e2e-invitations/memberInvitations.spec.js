@@ -1,7 +1,7 @@
 // BROWSER TEST PURPOSE: member Invitations user workflows and regression coverage.
 // Setup opens the real Vue UI; actions use its controls; assertions check visible results/state.
 // Uses isolated fixture responses; passing UI checks do not prove deployed database or delivery integration.
-import {test,expect} from '@playwright/test'
+import {test,expect} from '../e2e/helpers/browserUi.js'
 import {readFileSync} from 'node:fs'
 const client=readFileSync(new URL('./memberClient.js',import.meta.url),'utf8')
 const service=readFileSync(new URL('../src/services/simulatorWorkflowService.js',import.meta.url),'utf8')
@@ -22,7 +22,7 @@ async function respond(page,id,verb){
  await box.getByRole('button',{name:'Confirm invitation response',exact:true}).click()
  await expect(page.getByText('Response persisted.',{exact:false})).toBeVisible()
 }
-test('ordinary member uses actual PULSE navigation and sees complete invitation terms without organizer permission',async({page})=>{
+test('ordinary member uses actual PULSE navigation and sees complete invitation terms without organiser permission',async({page})=>{
  await boot(page)
  const mobile=page.getByLabel('Navigate PULSE',{exact:true})
  if(await mobile.isVisible()){
@@ -32,8 +32,8 @@ test('ordinary member uses actual PULSE navigation and sees complete invitation 
   await nav.getByRole('button',{name:/Heatmap/}).click()
   await nav.getByRole('button',{name:/My Schedule/}).click()
  }else{
-  await page.getByRole('button',{name:'Availability Heatmap',exact:true}).click()
-  await page.getByRole('button',{name:'Personal Schedule',exact:true}).click()
+  await page.getByRole('button',{name:/^(Availability )?Heatmap$/,exact:true}).click()
+  await page.getByRole('button',{name:/^(Personal )?Schedule$/,exact:true}).click()
  }
  await expect(page).toHaveURL(/personal-schedule/)
  const item=card(page,'accept-me')
@@ -41,7 +41,7 @@ test('ordinary member uses actual PULSE navigation and sees complete invitation 
  await expect(item.getByRole('button',{name:'Accept this invitation',exact:true})).toBeEnabled()
  await expect(item.getByRole('button',{name:'Decline this invitation',exact:true})).toBeEnabled()
 })
-test('accept and decline update the exact mock records, survive reload, and drive the real organizer tracker service',async({page})=>{
+test('accept and decline update the exact mock records, survive reload, and drive the real organiser tracker service',async({page})=>{
  await boot(page);await respond(page,'accept-me','Accept');await respond(page,'decline-me','Decline')
  expect(await page.evaluate(()=>window.__memberInvitations.calls.filter(c=>c.name==='rpc_simulator_respond_invitation').map(c=>c.args))).toEqual([{p_invitation_id:'accept-me',p_response:'Accepted'},{p_invitation_id:'decline-me',p_response:'Declined'}])
  await page.reload()
@@ -90,5 +90,5 @@ test('loading, write errors and disabled backend gate are visible and never impl
  await expect(page.getByText(/^Loading your invitations/)).toBeVisible()
  await page.evaluate(()=>window.__memberInvitations.releaseReads())
  await expect(card(page,'accept-me').getByRole('button',{name:'Accept this invitation',exact:true})).toBeDisabled()
- await expect(page.getByText(/Responses are currently unavailable/)).toBeVisible()
+ await expect(page.getByText(/responding is turned off/)).toBeVisible()
 })

@@ -23,7 +23,7 @@ test('mobile booking confirmation is operable and updates the actual calendar',a
  expect(bounds.x).toBeGreaterThanOrEqual(0)
  expect(bounds.x+bounds.width).toBeLessThanOrEqual(page.viewportSize().width+1)
  await dialog.getByRole('button',{name:'Submit claim',exact:true}).tap()
- await expect(room(page,'Fixture Music Room')).toContainText('Pending Admin Sign-off')
+ await expect(room(page,'Fixture Music Room')).toContainText('Awaiting OSL approval')
  await fit(page)
 })
 

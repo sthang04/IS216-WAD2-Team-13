@@ -1,5 +1,5 @@
--- Who receives each persona's email and Telegram during the demo.
--- Run in the Supabase SQL Editor after 20261105120000_pulse_demo_recipients.sql,
+-- Who receives each persona's email and Telegram for configured accounts.
+-- Run in the Supabase SQL Editor after the recipient-routing migration dated 5 November 2026,
 -- with the placeholders replaced. Keep the real addresses out of git.
 -- Re-run or edit any time: changes apply on the next send, with no redeploy.
 --

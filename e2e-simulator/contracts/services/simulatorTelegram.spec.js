@@ -12,7 +12,8 @@ import {execFileSync} from 'node:child_process'
 import {stripTypeScriptTypes} from 'node:module'
 import {createSimulatorInvitationHandler} from '../../../supabase/functions/_shared/simulatorInvitationWorker.js'
 
-const baseline='831eb6571d4ce2ddac9cd828523df240bbdccf8e'
+// Preserve the latest merged sender behavior, including the team's current button labels.
+const baseline='78c2434'
 const senderPath='supabase/functions/send-telegram-notifications/index.ts'
 const original=execFileSync('git',['show',baseline+':'+senderPath],{encoding:'utf8'})
 const current=readFileSync(new URL('../../../'+senderPath,import.meta.url),'utf8')
@@ -23,6 +24,7 @@ function simulator({mode='live',enabled='true',token='fake',linked=true,fail=fal
  const client={from(table){assert.equal(table,'telegram_links','private worker must not touch public notifications or test chats')
   const q={select(){return q},eq(field,id){assert.equal(field,'member_id');assert.equal(id,7);return q},maybeSingle:async()=>({data:linked?{telegram_chat_id:123}:null,error:lookupError?{}:null})};return q
  },async rpc(name,args){calls.push(name)
+  if(name==='rpc_simulator_telegram_authorized')return {data:false}
   if(name==='rpc_simulator_claim_telegram'){
    if(queueError)throw Error('private queue offline')
    if(claimed)return {data:[]};claimed=true;return {data:rows}
@@ -43,7 +45,7 @@ function legacy(source=current,{type='WAITLIST_OFFER',mode='live',linked=true,fa
  const client={from(table){let status
   const q={select(){return q},eq(key,value){if(status)updates.push({id:value,status});return q},order(){return q},update(value){status=value.telegram_status;return q},limit:async()=>({data:queueError?null:[row],error:queueError?{message:'legacy queue offline'}:null}),maybeSingle:async()=>({data:linked?{telegram_chat_id:111}:null}),then(resolve,reject){return Promise.resolve(table==='telegram_test_chats'?{data:[{chat_id:222},{chat_id:333}]}:{data:null}).then(resolve,reject)}};return q
  },rpc(){assert.fail('original sender must never claim simulator work')}}
- const js=stripTypeScriptTypes(source.replaceAll('\r\n','\n').replace(/import .* from .*\n/,''))
+ const js=stripTypeScriptTypes(source.replaceAll('\r\n','\n').replace(/import .* from .*\n/g,''))
  new Function('createClient','Deno','fetch','console',js)(()=>client,{env:{get:key=>env[key]},serve:fn=>{handler=fn}},async(url,options)=>{sends.push(JSON.parse(options.body));return Response.json({ok:!fail},{status:fail?400:200})},{error(){},warn(){}})
  return {async run(auth='fake-service'){const r=await handler(new Request('https://worker.test',{method:'POST',headers:{Authorization:'Bearer '+auth}}));return {http:r.status,body:await r.json(),sends,updates}},sends,updates}
 }
@@ -71,7 +73,7 @@ test('existing service/manual JWT invocation behavior remains baseline-identical
 test('dedicated worker requires backend credential, rejects browsers/users/anonymous calls before any queue access',async()=>{
  const w=simulator()
  for(const token of [null,'','anon','user-jwt','wrong-service'])assert.equal((await w.run(token)).status,401)
- assert.equal((await w.run('fake-service','GET')).status,405);assert.equal(w.calls.length,0);assert.equal(w.sends.length,0)
+ assert.equal((await w.run('fake-service','GET')).status,405);assert.ok(w.calls.every(name=>name==='rpc_simulator_telegram_authorized'));assert.equal(w.sends.length,0)
 })
 test('private invitation is sent once, concurrent invocations use a mocked atomic claim, and link requires PULSE login',async()=>{
  const w=simulator();await Promise.all([w.run(),w.run()]);await w.run()
@@ -99,7 +101,7 @@ test('failed delivery persistence stays unconfirmed, cannot overwrite possible s
 })
 test('missing configuration, disabled worker, test mode and unsafe base URLs never claim private invitations',async()=>{
  for(const options of [{token:''},{enabled:'false'},{mode:'test'},{base:''},{base:'http://localhost:5173'},{base:'https://user:pass@pulse.example.test'}]){
-  const w=simulator(options);await w.run();assert.equal(w.calls.length,0);assert.equal(w.sends.length,0)
+  const w=simulator(options);await w.run();assert.equal(w.calls.filter(name=>name!=='cfg_text').length,0);assert.equal(w.sends.length,0)
  }
 })
 test('private queue failure cannot prevent original notifications and original queue failure cannot prevent simulator delivery',async()=>{
@@ -117,4 +119,11 @@ test('simulator SQL claim is private, service-only, bounded, stale-aware and ide
  assert.match(sql,/i.recipient_member_id=actor/);assert.match(sql,/THEN 'Stale'/)
  assert.match(sql,/delivery_status=p_status/);assert.match(sql,/'UNKNOWN'/)
  assert.doesNotMatch(sql,/INSERT INTO public.notifications|UPDATE simulator_private.release_gate|cron.schedule/)
+})
+
+// Newly connected types must reach the sender rather than being silently skipped.
+test('personal, crew, agenda and removed-participant types are deliverable',async()=>{
+ for(const type of ['SCHEDULE_CHANGED','OPS_SCHEDULE_CHANGED','MEETING_AGENDA_UPDATED','MEETING_REMOVED']){
+  const result=await legacy(current,{type}).run();assert.equal(result.body.sent,1);assert.equal(result.body.skipped,0)
+ }
 })

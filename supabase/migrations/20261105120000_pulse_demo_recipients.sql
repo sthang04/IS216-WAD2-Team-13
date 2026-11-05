@@ -6,7 +6,7 @@
 -- when EMAIL_DEMO_MODE=true / TELEGRAM_DELIVERY_MODE=demo, and starts with
 -- no addresses, so applying this migration sends nothing to anyone.
 -- members.student_email and transfer_email_config are not touched.
--- Fill it in with supabase/demo_recipients_setup.sql.
+-- Fill it in with supabase/notificationRecipientSetup.sql.
 -- =====================================================================
 
 create table if not exists public.demo_recipients (

@@ -1,6 +1,6 @@
 // SUPPORT FILE PURPOSE: app.js supplies shared setup or controlled data for the browser workflows.
 // Keep this support code: the Playwright tests depend on consistent setup and isolated state.
-﻿import {test as base,expect} from '@playwright/test'
+﻿import {test as base,expect} from '../../e2e/helpers/browserUi.js'
 import {readFileSync} from 'node:fs'
 
 const client=readFileSync(new URL('./client.js',import.meta.url),'utf8')
@@ -35,7 +35,7 @@ export const test=base.extend({
       sessionStorage.setItem('pulse-foundation-config',JSON.stringify(config))
       if(config.authenticated){
        sessionStorage.setItem('pulse-foundation-session',JSON.stringify({
-        id:'fixture-user',email:'fixture.exco@smu.edu.sg'}))
+        id:'fixture-user',email:config.email||'fixture.exco@smu.edu.sg'}))
       }
      }
     },config)
@@ -59,7 +59,11 @@ export const test=base.extend({
      const bar=page.getByRole('navigation',{name:'Mobile PULSE navigation',exact:true})
      const mobileLabel={facilities:/Facilities/,schedule:/My Schedule/,heatmap:/Heatmap/,operations:/Day-of Ops/,risk:/Risk Sandbox/}[view]
      if(mobileLabel && await bar.isVisible())await bar.getByRole('button',{name:mobileLabel}).click()
-     else await page.getByRole('button',{name:label,exact:true}).click()
+     else {
+      // Desktop labels shorten below 1400px; use the visible accessible name in either layout.
+      const names={facilities:/^(Master )?Facility Calendar$/,schedule:/^(Personal )?Schedule$/,heatmap:/^(Availability )?Heatmap$/,operations:/^(Day-of )?Operations$/,risk:/^(Event )?Risk Planning$/}
+      await page.getByRole('button',{name:names[view]||label,exact:true}).click()
+     }
     }
    },
   }

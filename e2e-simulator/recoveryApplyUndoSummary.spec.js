@@ -1,9 +1,9 @@
-// BROWSER TEST PURPOSE: recovery Stage Four user workflows and regression coverage.
+// BROWSER TEST PURPOSE: recovery Apply/Undo summaries user workflows and regression coverage.
 // Setup opens the real Vue UI; actions use its controls; assertions check visible results/state.
 // Uses isolated fixture responses; passing UI checks do not prove deployed database or delivery integration.
-// Purpose: fixture-backed recovery Stage Four browser regressions for simulator controls and state.
+// Purpose: fixture-backed recovery Apply/Undo summaries browser regressions for simulator controls and state.
 // Use Setup -> Actions -> Assert; real Vue/engine code runs, but these tests do not prove live Supabase integration.
-import {test,expect} from '@playwright/test'
+import {test,expect} from '../e2e/helpers/browserUi.js'
 import {bootRecovery,confirmRecovery} from './helpers/recoveryHarness.js'
 async function applied(page){const panel=await bootRecovery(page);await panel.getByRole('button',{name:'Apply selected recovery',exact:true}).click();await confirmRecovery(panel);await expect(panel.getByRole('region',{name:'Applied recovery',exact:true})).toBeVisible();return panel}
 // Mutations use the existing in-memory RPC harness; no external requests are allowed.

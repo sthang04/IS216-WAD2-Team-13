@@ -3,7 +3,7 @@
 // Uses isolated fixture responses; passing UI checks do not prove deployed database or delivery integration.
 // Purpose: fixture-backed original Booking browser regressions for simulator controls and state.
 // Use Setup -> Actions -> Assert; real Vue/engine code runs, but these tests do not prove live Supabase integration.
-import {test,expect} from '@playwright/test'
+import {test,expect} from '../e2e/helpers/browserUi.js'
 // Only this isolated page receives the test flag. Production source stays OFF.
 test('original booking discovery, explicit association and refresh enable the real facility input',async({page})=>{
  await page.route('https://**',r=>r.abort())

@@ -121,7 +121,7 @@ const queueNote = computed(() => {
           <span v-if="busy" class="spinner-border spinner-border-sm me-1"></span>{{ action.label }}
         </button>
       </template>
-      <span v-if="!actions.length && booking.status === 'Pending Admin Sign-off'" class="small text-muted">Awaiting OSL</span>
+      <span v-if="!actions.length && booking.status === 'Pending Admin Sign-off'" class="small text-muted">Only OSL can approve</span>
       <span v-else-if="!actions.length && booking.status === 'Officially Confirmed Booking'" class="small fw-semibold" :class="isOurs ? 'text-success' : 'text-muted'">✓ Confirmed</span>
     </div>
   </div>

@@ -38,7 +38,7 @@ const loadingStageText = ref('Verifying SMU ExCo Credentials & Whitelist...')
 // 11 Customizable Fun Fact Templates (No emdashes, pure Group 13 & Prof K lore)
 const FUN_FACT_TEMPLATES = [
   // 1. Prof K Catchphrase: BOOYAH!
-  "🎉 Prof K Catchphrase: 'BOOYAH!' - That iconic shout of victory Prof Kyong unleashes whenever there's no errors!",
+  "🎉 Prof K Catchphrase: 'BOOYAH!' - That iconic shout of victory Prof Kyong unleashes whenever there are no errors!",
 
   // 2. Prof K Vibes: Korean Acknowledgement
   "✨ Prof K Vibes: 'Ye~' (예~ yeish!) to make sure we're paying attention in class!",
@@ -339,7 +339,7 @@ async function handleManualLogin() {
 
 <template>
   <div 
-    class="min-vh-100 d-flex flex-column justify-content-center align-items-center position-relative py-3 py-lg-5 px-2 px-sm-3 pulse-login-canvas landing-type overflow-hidden"
+    class="min-vh-100 d-flex flex-column justify-content-center align-items-center position-relative py-3 py-lg-5 px-2 px-sm-3 pulse-login-canvas landing-type"
     @mousemove="handleMouseMove"
   >
     <!-- Liquid Ambient Aura Orbs (Modern Glass Lighting) -->
@@ -399,7 +399,7 @@ async function handleManualLogin() {
             </h1>
 
             <p class="text-muted mb-4 reveal d-none d-lg-block" style="--d: 2; font-size: 0.95rem; line-height: 1.6;">
-              A centralised co-curricular management platform for <strong>SMU</strong> student clubs, performance groups, and Office of Student Life (OSL) administrators. Simplifies arts studio handovers, automates waitlists for in-demand venues, and streamlines rehearsal logistics across the city campus.
+              A centralised co-curricular management platform for <strong>SMU</strong> student clubs, performance groups, and Office of Student Life (OSL) administrators that simplifies arts studio handovers, automates waitlists for in-demand venues, and streamlines rehearsal logistics across the city campus.
             </p>
 
             <!-- Interactive feature preview: plays release -> claim -> approve on a mini calendar -->
@@ -738,7 +738,7 @@ async function handleManualLogin() {
                       New ExCo Onboarding
                     </span>
                     <small class="text-muted d-block" style="font-size: 0.7rem; margin-top: 1px;">
-                      Approved CCAs via OSL Whitelist Check
+                      Check whether OSL has approved your ExCo account
                     </small>
                   </div>
                 </div>
@@ -764,10 +764,10 @@ async function handleManualLogin() {
               >
                 <div class="d-flex align-items-center text-start flex-grow-1 min-w-0" style="gap: 12px;">
                   <span class="badge rounded-pill demo-badge flex-shrink-0" style="font-size: 0.72rem; font-weight: 700; padding: 4px 10px;">
-                    1-Click
+                    Demo
                   </span>
                   <span class="fw-bold text-dark text-start" style="font-size: 0.82rem; letter-spacing: -0.01em; line-height: 1.3;">
-                    Click here for 1-Click Login<span class="d-none d-sm-inline"> for different personas</span>
+                    Try a demo account<span class="d-none d-sm-inline">: choose a role to explore Pulse</span>
                   </span>
                 </div>
                 <div class="d-flex align-items-center small text-muted flex-shrink-0 ms-2" style="font-size: 0.74rem; font-weight: 500; gap: 6px;">
@@ -793,7 +793,7 @@ async function handleManualLogin() {
                     <span class="text-uppercase fw-bold text-muted" style="font-size: 0.64rem; letter-spacing: 0.05em;">
                       Select a persona to sign in:
                     </span>
-                    <span class="small text-muted" style="font-size: 0.65rem;">Instant Session</span>
+                    <span class="small text-muted" style="font-size: 0.65rem;">Demo: sample data</span>
                   </div>
 
                   <div class="row g-2">
@@ -855,7 +855,7 @@ async function handleManualLogin() {
                       >
                         <div class="me-1 text-truncate">
                           <strong class="d-block text-dark text-truncate" style="font-size: 0.76rem;">Chloe Ang</strong>
-                          <small class="text-muted d-block text-truncate" style="font-size: 0.66rem;">OSL Admin</small>
+                          <small class="text-muted d-block text-truncate" style="font-size: 0.66rem;">Office of Student Life</small>
                         </div>
                         <span class="badge bg-dark text-white flex-shrink-0" style="font-size: 0.62rem;">OSL Admin</span>
                       </button>
@@ -969,6 +969,9 @@ async function handleManualLogin() {
    Liquid Glass & Mesh Aesthetic
    ========================================================================== */
 .pulse-login-canvas {
+  /* Decorative orbs may overflow, but must not create a hidden scroll container
+     that focus/scroll anchoring can pan sideways and clip the actual login UI. */
+  overflow: clip;
   background:
     radial-gradient(ellipse 60% 50% at 0% 0%, rgba(254, 205, 211, 0.55), transparent 70%),
     radial-gradient(ellipse 50% 60% at 100% 100%, rgba(186, 230, 253, 0.5), transparent 70%),
@@ -1178,7 +1181,7 @@ async function handleManualLogin() {
     padding-left: 0.5rem !important;
     padding-right: 0.5rem !important;
     justify-content: flex-start !important;
-    overflow-x: hidden !important;
+    overflow-x: clip !important;
     max-width: 100% !important;
     width: 100% !important;
   }

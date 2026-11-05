@@ -664,12 +664,6 @@ const recommendationBadge = computed(() => 'All Selected Disruptions')
     >
       <div>
         <div class="d-flex align-items-center gap-2 mb-1">
-          <span
-            class="badge bg-danger rounded-pill px-2 py-1"
-            style="font-size: 0.65rem; font-weight: 800;"
-          >
-            FEATURE 5
-          </span>
 
           <span
             v-if="apiMode"
@@ -746,7 +740,7 @@ const recommendationBadge = computed(() => 'All Selected Disruptions')
           class="badge bg-danger bg-opacity-10
                  text-danger border"
         >
-          Supabase • Read-Only
+          Simulation preview
         </span>
       </div>
 
@@ -789,7 +783,7 @@ const recommendationBadge = computed(() => 'All Selected Disruptions')
           <!-- Missing/RLS-hidden links are not evidence that a room is vacant. -->
           <p v-if="!eventFacilities.length" class="alert alert-warning small">
             No accessible linked facility bookings. Facility Unavailable needs an actual
-            calendar booking linked to this event's activity. Ask an authorized organizer
+            calendar booking linked to this event's activity. Ask an authorized organiser
             to verify and link an approved booking; no booking is created here.
           </p>
         </template>
@@ -936,7 +930,7 @@ const recommendationBadge = computed(() => 'All Selected Disruptions')
           </div>
         </div>
 
-        <p class="small text-muted">Overall options combine available building blocks and are checked against all selected disruptions. Search is limited to four choices per requirement and 64 combinations; this is not an exhaustive optimum. Individual member and facility suggestions remain available in Recovery Builder. Missing choices and unresolved conflicts require organizer review.</p>
+        <p class="small text-muted">Overall options combine available building blocks and are checked against all selected disruptions. Search is limited to four choices per requirement and 64 combinations; this is not an exhaustive optimum. Individual member and facility suggestions remain available in Recovery Builder. Missing choices and unresolved conflicts require organiser review.</p>
         </details>
         <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
           <span class="small" role="status">{{ overallRankedPlans.length }} ranked plans / {{ displayedRankedPlans.length }} shown</span>

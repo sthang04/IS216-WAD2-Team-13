@@ -24,7 +24,7 @@ const ICONS = {
 const SLOT_VIEWS = {
   booked: { badge: 'pulse-badge-booked', label: 'Booked', holder: 'Eurhythmix', stripe: 'transparent' },
   proposed: { badge: 'pulse-badge-proposed', label: 'Available to Claim', note: '3 CCAs currently in the queue', holder: 'Eurhythmix', stripe: '#16a34a' },
-  pending: { badge: 'pulse-badge-pending', label: 'Pending Admin Sign-off', holder: 'Eurhythmix', claiming: 'Samba Masala', stripe: '#0ea5e9' },
+  pending: { badge: 'pulse-badge-pending', label: 'Awaiting OSL approval', holder: 'Eurhythmix', claiming: 'Samba Masala', stripe: '#0ea5e9' },
   confirmed: { badge: 'pulse-badge-confirmed', label: 'Officially Confirmed', holder: 'Samba Masala', from: 'Eurhythmix', stripe: '#16a34a' },
 }
 

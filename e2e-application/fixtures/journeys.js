@@ -29,6 +29,8 @@ export async function downloadText(page,action){
  expect(await download.failure()).toBeNull()
  return {text,name:download.suggestedFilename()}
 }
+// Deprecated: public guest entry was removed. No current test calls this helper.
+// Retained for review only; removal is proposed in docs/testing-audit.md, pending your approval.
 export async function guest(page,app,path){
  await app.open('/')
  await page.getByRole('button',{name:/explore live facility calendar as guest/i}).click()

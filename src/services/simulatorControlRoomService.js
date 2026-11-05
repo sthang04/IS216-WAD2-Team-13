@@ -23,6 +23,8 @@ export function buildControlRoomModel(data={},eventId,result=null,disruptions=[]
  const conflicts=hasSimulation?result.newConflicts || []:[]
  const dependencies=(data.segment_dependencies || []).filter(d=>ids.has(String(d.prerequisite_segment_id))&&ids.has(String(d.dependent_segment_id)))
   .filter((d,index,rows)=>rows.findIndex(x=>same(x.prerequisite_segment_id,d.prerequisite_segment_id)&&same(x.dependent_segment_id,d.dependent_segment_id))===index)
+ const memberName=new Map((data.members || []).map(m=>[String(m.id),m.full_name]))
+ const assigneesOf=s=>[...new Set((data.segment_assignments || []).filter(a=>same(a.segment_id,s.id)).map(a=>memberName.get(String(a.member_id))).filter(Boolean))]
  const activities=original.map(s=>{
   const next=simulated.get(String(s.id)) || s
   const related=conflicts.filter(c=>same(c.segmentId,s.id)||(c.segmentIds || []).some(id=>same(id,s.id))||
@@ -30,7 +32,7 @@ export function buildControlRoomModel(data={},eventId,result=null,disruptions=[]
   const causes=[...(direct.get(String(s.id))?.causes || []).map(c=>c.reason),...related.map(c=>c.message || c.reason)].filter(Boolean)
   const status=direct.has(String(s.id))?'direct':downstream.has(String(s.id))?'downstream':'unchanged'
   if(status==='downstream'&&!causes.length)causes.push('Depends on an affected earlier activity; downstream risk requires review.')
-  return {...s,simulated:next,status,causes:[...new Set(causes)],
+  return {...s,simulated:next,status,causes:[...new Set(causes)],assignees:assigneesOf(s),
    originalStart:time(s.starts_at),originalEnd:time(s.ends_at),simulatedStart:time(next.starts_at),simulatedEnd:time(next.ends_at)}
  })
  // Deterministic dependency levels; cycles are reported rather than silently

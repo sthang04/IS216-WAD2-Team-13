@@ -15,7 +15,7 @@ const body=name=>{
  assert.ok(text,'Function missing: '+name)
  return text.split('END $$;')[0]
 }
-test('recovery authorization derives unique active identity and independently checks organizer membership',()=>{
+test('recovery authorization derives unique active identity and independently checks organiser membership',()=>{
  const actor=body('simulator_private.actor'),club=body('simulator_private.event_club')
  for(const text of ['auth.uid() IS NULL','m.auth_user_id=auth.uid()','m.is_active','matches<>1'])assert.ok(actor.includes(text),text)
  for(const text of ['p_event IS NULL OR p_manage IS NULL','e.club_name=c.name OR e.club_name=c.short_name',
@@ -24,7 +24,7 @@ test('recovery authorization derives unique active identity and independently ch
  assert.doesNotMatch(club,/rpc_simulator_event_roster|p_demo_member_id|current_member_id/)
  assert.doesNotMatch(sql,/CREATE(?: OR REPLACE)? FUNCTION public.rpc_simulator_event_roster/)
 })
-test('all recovery management paths require organizer checks, including history and both transitions',()=>{
+test('all recovery management paths require organiser checks, including history and both transitions',()=>{
  for(const name of ['rpc_simulator_start_plan','rpc_simulator_cancel_plan','rpc_simulator_attach_booking',
   'rpc_simulator_save_plan','rpc_simulator_invite','rpc_simulator_cancel_invitation','rpc_simulator_plan_history'])
   assert.match(body('public.'+name),/simulator_private.event_club\([^;]*,true\)/,name)
@@ -33,7 +33,7 @@ test('all recovery management paths require organizer checks, including history 
  assert.match(transition,/p_version IS NULL/)
  assert.match(transition,/p.version IS DISTINCT FROM p_version/)
 })
-test('private invitation responses reject NULL and require the actual recipient, not the organizer',()=>{
+test('private invitation responses reject NULL and require the actual recipient, not the organiser',()=>{
  const response=body('public.rpc_simulator_respond_invitation')
  assert.match(response,/i.recipient_member_id<>actor/)
  assert.match(response,/p_response IS NULL OR p_response NOT IN \('Accepted','Declined'\)/)

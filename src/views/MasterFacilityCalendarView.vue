@@ -236,7 +236,16 @@ const visibleBookings = computed(() => {
 // Open and pending slots per day, shown on the week calendar tiles
 const dayCounts = computed(() => {
   const result = {}
+  const facilityById = new Map(facilities.value.map((facility) => [facility.id, facility]))
   bookings.value.forEach((booking) => {
+    // Same filters as the list below, except the selected day: the tiles are how you pick one
+    const facility = facilityById.get(booking.facility_id)
+    if (!facility || !matchesFacility(facility) || !matchesSearch(booking, facility)) {
+      return
+    }
+    if (!bookingMatchesSimulatorFocus(booking, simulatorFocus.value) || !matchesAvailability(booking)) {
+      return
+    }
     if (!result[booking.booking_date]) {
       result[booking.booking_date] = { available: 0, pending: 0 }
     }
@@ -260,10 +269,10 @@ const groups = computed(() => {
     if (!matchesFacility(facility)) {
       return
     }
-    // Bookings are already sorted: released, pending, booked, confirmed
+    // Earliest first, so each facility reads like its week
     const facilityBookings = visibleBookings.value.filter((booking) => {
       return booking.facility_id === facility.id && matchesSearch(booking, facility)
-    })
+    }).sort((a, b) => (a.booking_date + a.start_time).localeCompare(b.booking_date + b.start_time))
     // While filtering, hide facilities with nothing to show
     if (facilityBookings.length > 0 || !isNarrowing) {
       result.push({ facility: facility, bookings: facilityBookings })
@@ -303,7 +312,8 @@ const actionsByBooking = computed(() => {
   const result = {}
   const activeId = session.value.activeClubId
   const myCurrentBookings = bookings.value.filter((b) =>
-    (b.owner_club_id === activeId && b.status === STATUSES.BOOKED) ||
+    // Approved ownership still occupies the time; pending claims also reserve it.
+    (b.owner_club_id === activeId && [STATUSES.BOOKED, STATUSES.CONFIRMED].includes(b.status)) ||
     (b.claiming_club_id === activeId && b.status === STATUSES.PENDING)
   )
   bookings.value.forEach((booking) => {
@@ -340,7 +350,7 @@ const CONFIRM_TEXT = {
   },
   claim: {
     title: 'Claim this slot?',
-    message: 'The booking becomes Pending Admin Sign-off. It is only official once OSL approves the transfer.',
+    message: 'The booking becomes Awaiting OSL approval. It is only official once OSL approves the transfer.',
     confirmLabel: 'Submit claim'
   },
   leave: {
@@ -425,7 +435,7 @@ async function confirmPending() {
     } else if (type === 'claim') {
       await claimBooking(booking.booking_id, clubId)
       reportRecoveryBookingClaim(route.query,booking.booking_id,clubId)
-      showToast('Claim submitted: Pending Admin Sign-off. The transfer request has been emailed to OSL.', 'success')
+      showToast('Claim submitted: awaiting OSL approval. The transfer request has been emailed to OSL.', 'success')
     } else if (type === 'leave') {
       await leaveWaitlist(booking.booking_id, clubId)
       showToast('Offer declined. The next CCA in the queue has been notified.', 'info')
@@ -458,7 +468,7 @@ async function runAction(booking, action) {
     :stats="[
       { label: 'Booked', value: counts.booked, tone: 'plain' },
       { label: 'Available to claim', value: counts.available, tone: 'green' },
-      { label: 'Pending approval', value: counts.pending, tone: 'sky' }
+      { label: 'Awaiting OSL approval', value: counts.pending, tone: 'sky' }
     ]"
   />
 

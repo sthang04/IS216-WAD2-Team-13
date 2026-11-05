@@ -9,7 +9,7 @@ test('valid login reaches the calendar; logout revokes protected navigation',asy
  await expect(page.getByRole('heading',{name:'Pulse - Master Facility Calendar',exact:true})).toBeVisible()
  await app.account()
  await expect(page.getByText('Fixture Arts Club Logistics Director',{exact:true})).toBeVisible()
- await page.getByRole('button',{name:'Sign Out to Landing',exact:true}).click()
+ await page.getByRole('button',{name:'Sign out',exact:true}).click()
  await expect(page).toHaveURL(/\/$/)
  await page.goto('/operations')
  await expect(page).toHaveURL(/\/?redirect=/)
@@ -41,9 +41,9 @@ test('membership lookup failure denies login rather than granting a role',async(
 
 test('restored session survives refresh; missing session redirects a protected URL',async({page,app})=>{
  await app.open('/personal-schedule',{authenticated:true})
- await expect(page.getByRole('heading',{name:/Hi Fixture Exco/})).toBeVisible()
+ await expect(page.getByRole('heading',{name:/Hi Fixture,/})).toBeVisible()
  await page.reload()
- await expect(page.getByRole('heading',{name:/Hi Fixture Exco/})).toBeVisible()
+ await expect(page.getByRole('heading',{name:/Hi Fixture,/})).toBeVisible()
  await page.evaluate(()=>window.__foundation.expire())
  await page.reload()
  await expect(page).toHaveURL(/\/?redirect=/)
@@ -122,7 +122,7 @@ test('a placeholder sign-up with no real login skips the Telegram step',async({p
 
 test('remembered real account requires its password after logout',async({page,app})=>{
  await app.open();await app.login();await expect(page).toHaveURL(/\/facilities$/)
- await app.account();await page.getByRole('button',{name:'Sign Out to Landing',exact:true}).click()
+ await app.account();await page.getByRole('button',{name:'Sign out',exact:true}).click()
  await expect(page.locator('input[autocomplete="current-password"]')).toBeVisible()
  await expect(page.getByRole('button',{name:/Fast Sign-In/})).toHaveCount(0)
  await page.getByPlaceholder('Password',{exact:true}).fill('FixturePass123!')

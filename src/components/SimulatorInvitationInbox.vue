@@ -1,6 +1,6 @@
 <script setup>
 // Purpose: Read real invitation terms and confirm exact accept/decline responses; delivery status is not acceptance.
-// This inbox records consent only. Assignment changes belong to the organizer's
+// This inbox records consent only. Assignment changes belong to the organiser's
 // separately authorized Apply operation; Telegram delivery is independent.
 import {ref,watch,onMounted,onUnmounted,nextTick} from 'vue'
 import {supabase} from '../supabase'
@@ -77,9 +77,9 @@ onUnmounted(()=>{clearInterval(expiryTimer);disposed=true;++generation;subscript
    <h2 class="h5 fw-bold mb-0">My Replacement Invitations</h2>
    <button type="button" class="btn btn-outline-secondary btn-sm" :disabled="busy || loading" @click="refresh">Refresh my invitations</button>
   </div>
-  <p class="small">Review requests to cover another member's role. Accepting does not assign you; the organizer must confirm recovery.</p>
+  <p class="small">Review requests to cover another member's role. Accepting does not assign you; the organiser must confirm recovery.</p>
   <p v-if="loading" role="status" class="small">Loading your invitations?</p>
-  <p v-if="!invitationEnabled && !loading" class="small text-muted">You can view invitations here. Responses are currently unavailable in this environment; contact your organizer.</p>
+  <p v-if="!invitationEnabled && !loading" class="small text-muted">Preview: you can view invitations here, but responding is turned off on this site. Contact your organiser instead.</p>
   <p v-if="readError" role="status" class="small text-warning">{{ readError }}</p>
   <p v-if="error" role="alert" class="small text-danger">{{ error }}</p>
   <p v-if="message" role="status" class="small text-success">{{ message }}</p>

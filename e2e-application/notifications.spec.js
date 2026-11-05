@@ -11,7 +11,7 @@ test('notification opens its actual route and read state survives reload',async(
  await bell(page).click()
  await page.getByRole('button',{name:/Fixture schedule update/}).click()
  await expect(page).toHaveURL(/personal-schedule$/)
- await expect(page.getByRole('heading',{name:/Hi Fixture Exco/})).toBeVisible()
+ await expect(page.getByRole('heading',{name:/Hi Fixture,/})).toBeVisible()
  await expect(bell(page)).toHaveAccessibleName('Notifications, 1 unread')
  await page.reload()
  await expect(bell(page)).toHaveAccessibleName('Notifications, 1 unread')

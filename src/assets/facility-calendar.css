@@ -103,6 +103,12 @@
   z-index: 1060;
   overflow: hidden;
 }
+/* Bound the panel while keeping heading/footer visible; only its list scrolls.
+   Header actions wrap on narrow screens instead of pushing controls off-screen. */
+.pf-notification-panel { width: min(360px, calc(100vw - 24px)); display: flex; flex-direction: column; }
+.pf-notification-panel > :not(.pulse-notification-list) { flex-shrink: 0; }
+.pf-notification-panel .pulse-notification-list { min-height: 0; flex: 0 1 auto; }
+.pf-notification-actions button { white-space: nowrap; }
 .pf-notification-panel { width: min(360px, calc(100vw - 32px)); }
 @media (max-width: 576px) {
   .pf-notification-panel {
@@ -306,11 +312,12 @@
 .pulse-slot-ref { word-break: break-all; }
 .pulse-slot.no-ref { grid-template-columns: 150px 210px 1fr auto; }
 @media (max-width: 991.98px) {
-  .pulse-slot { grid-template-columns: 1fr 1fr; padding: 0.85rem 1rem; }
+  /* Override the more specific no-ref desktop grid too, so queue text is not clipped. */
+  .pulse-slot, .pulse-slot.no-ref { grid-template-columns: 1fr 1fr; padding: 0.85rem 1rem; }
   .pulse-slot-actions { grid-column: 1 / -1; justify-content: flex-start; }
 }
 @media (max-width: 575.98px) {
-  .pulse-slot { grid-template-columns: 1fr; gap: 0.5rem; padding: 0.75rem 0.85rem; }
+  .pulse-slot, .pulse-slot.no-ref { grid-template-columns: 1fr; gap: 0.5rem; padding: 0.75rem 0.85rem; }
   .pulse-slot-actions { grid-column: 1; }
 }
  
@@ -347,6 +354,9 @@
   padding: 1rem;
 }
 .pulse-modal {
+  /* Long approval reasons/details scroll within the screen, including small phones. */
+  max-height: calc(100dvh - 2rem);
+  overflow-y: auto;
   width: min(520px, 100%);
   background: var(--pf-panel);
   border-radius: 1.25rem;

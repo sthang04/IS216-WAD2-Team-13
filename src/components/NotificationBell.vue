@@ -21,6 +21,22 @@ const root = ref(null)
 const botName = import.meta.env.VITE_TELEGRAM_BOT_USERNAME || 'pulse_wad2_bot'
 let ringTimer = null
 
+// Anchor to the bell, but clamp the entire panel to the visible screen. A width
+// limit alone still lets a right-aligned dropdown extend beyond the left edge.
+const panelStyle = ref({})
+function positionPanel() {
+  if (!root.value || !notificationStore.value.bellOpen) return
+  const anchor = root.value.getBoundingClientRect()
+  const width = Math.min(360, window.innerWidth - 24)
+  const left = Math.max(12, Math.min(anchor.right - width, window.innerWidth - width - 12))
+  panelStyle.value = {
+    width: width + 'px',
+    left: (left - anchor.left) + 'px',
+    right: 'auto',
+    maxHeight: Math.max(0, window.innerHeight - anchor.bottom - 20) + 'px'
+  }
+}
+
 // Shake the bell for 1.2 seconds (motion only, no sound)
 function ring() {
   ringing.value = false
@@ -39,6 +55,7 @@ watch(() => notificationStore.value.ringTick, ring)
 // Reload the list every time the panel opens
 watch(() => notificationStore.value.bellOpen, (isOpen) => {
   if (isOpen) {
+    positionPanel()
     loadNotifications()
     checkTelegram()
   }
@@ -81,6 +98,9 @@ onMounted(() => {
   document.addEventListener('pointerdown', closeOnOutside)
   document.addEventListener('keydown', closeOnEscape)
   window.addEventListener('focus', onWindowFocus)
+  // Re-clamp an open panel after resizing or scrolling its sticky header.
+  window.addEventListener('resize', positionPanel)
+  window.addEventListener('scroll', positionPanel, true)
 })
 
 onUnmounted(() => {
@@ -88,6 +108,8 @@ onUnmounted(() => {
   document.removeEventListener('pointerdown', closeOnOutside)
   document.removeEventListener('keydown', closeOnEscape)
   window.removeEventListener('focus', onWindowFocus)
+  window.removeEventListener('resize', positionPanel)
+  window.removeEventListener('scroll', positionPanel, true)
 })
 
 function toggle() {
@@ -180,10 +202,11 @@ defineExpose({ reload: loadNotifications })
       <span v-if="unreadCount" class="pulse-unread">{{ unreadCount > 99 ? '99+' : unreadCount }}</span>
     </button>
 
-    <div v-if="notificationStore.bellOpen" class="pulse-dropdown pf-notification-panel">
-      <div class="d-flex justify-content-between align-items-center px-3 py-2 border-bottom">
+    <!-- Named region lets assistive technology and UI tests identify the open panel. -->
+    <div v-if="notificationStore.bellOpen" role="region" aria-label="Notifications" class="pulse-dropdown pf-notification-panel" :style="panelStyle">
+      <div class="d-flex flex-wrap gap-2 justify-content-between align-items-center px-3 py-2 border-bottom">
         <strong class="small">Notifications</strong>
-        <div class="d-flex align-items-center gap-3">
+        <div class="pf-notification-actions d-flex flex-wrap align-items-center gap-3">
           <button v-if="unreadCount" type="button" class="btn btn-link btn-sm p-0" @click="markAll">Mark all read</button>
           <button v-if="notificationStore.items.length" type="button" class="btn btn-link btn-sm p-0 text-danger" @click="clearAll">Clear all</button>
           <button type="button" class="btn-close btn-sm ms-1" aria-label="Close notifications" @click="notificationStore.bellOpen = false"></button>

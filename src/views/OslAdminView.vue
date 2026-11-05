@@ -406,7 +406,7 @@ function submitViolation() {
       <!-- Actionable Queue: Pending Admin Sign-off -->
       <div class="mb-4">
         <h6 class="fw-bold text-dark d-flex align-items-center gap-2 mb-2" style="font-size: 0.85rem;">
-          <span>Action Required: Awaiting OSL Sign-Off ({{ pendingTransfers.length }})</span>
+          <span>Action required: awaiting OSL approval ({{ pendingTransfers.length }})</span>
           <span v-if="pendingTransfers.length" class="badge bg-danger text-white" style="font-size: 0.65rem;">Immediate Review</span>
         </h6>
 

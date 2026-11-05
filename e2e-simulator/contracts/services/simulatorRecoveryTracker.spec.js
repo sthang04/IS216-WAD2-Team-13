@@ -23,7 +23,7 @@ test('pending requirements preserve delivery, acceptance and facility approval a
  assert.equal(tracker.rows[0].updated,input.invitations[0].created_at)
  assert.deepEqual(input,before)
 })
-test('ready requires actual matching acceptance, approved room action and organizer review',()=>{
+test('ready requires actual matching acceptance, approved room action and organiser review',()=>{
  const input=fixture();input.invitations[0].status='Accepted';input.plan.actions[0].status='Approved'
  assert.equal(buildRecoveryTracker(input).status,'Ready to apply')
  assert.equal(buildRecoveryTracker({...input,manualAcknowledged:false}).status,'Pending requirements')

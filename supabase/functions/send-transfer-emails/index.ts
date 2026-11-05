@@ -6,18 +6,18 @@
 //   chloe.a.2025@computing.smu.edu.sg,sa.thang.2023@scis.smu.edu.sg
 // (Resend's onboarding@resend.dev sender only delivers to the Resend account's
 // own address; verify a domain in Resend to send to more than one inbox.)
-// EMAIL_DEMO_MODE=true overrides both: each email goes only to the teammates set
-// for its personas in demo_recipients, and is marked FAILED if there are none.
+// Configured recipient routing overrides both: each email goes to the assigned stand-ins
+// for its personas, and is marked FAILED if there are none.
 import { createClient } from 'jsr:@supabase/supabase-js@2'
-import { demoEmailPlan } from '../_shared/demoDelivery.js'
+import { resolveEmailRecipients } from '../_shared/notificationRecipientRouting.js'
 
 const supabase = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!)
-const demo = Deno.env.get('EMAIL_DEMO_MODE') === 'true'
+const useRecipientRouting = Deno.env.get('EMAIL_DEMO_MODE') === 'true'
 const live = Deno.env.get('EMAIL_LIVE_MODE') === 'true'
 const testInboxes = (Deno.env.get('TEST_EMAIL_RECIPIENT') ?? '').split(',').map((e) => e.trim()).filter(Boolean)
 
 // Stops before claiming any email if the mapping or the real addresses can't be read
-async function loadDemoSetup() {
+async function loadRecipientSetup() {
   const [routes, config, clubs] = await Promise.all([
     supabase.from('demo_recipient_routes').select('*'),
     supabase.from('transfer_email_config').select('to_emails, cc_emails'),
@@ -37,10 +37,10 @@ Deno.serve(async () => {
     .from('transfer_emails').select('*').eq('status', 'QUEUED').order('queued_at').limit(20)
   if (error) return new Response(error.message, { status: 500 })
 
-  let demoSetup = { routes: [], blocked: [] as string[] }
-  if (demo) {
+  let recipientSetup = { routes: [], blocked: [] as string[] }
+  if (useRecipientRouting) {
     try {
-      demoSetup = await loadDemoSetup()
+      recipientSetup = await loadRecipientSetup()
     } catch (e) {
       return new Response(String(e), { status: 500 })
     }
@@ -62,20 +62,20 @@ Deno.serve(async () => {
       : `[TEST MODE: would have gone to ${(email.to_emails ?? []).join(', ')}; cc ${(email.cc_emails ?? []).join(', ') || 'none'}]\n\n${email.body}`
 
     try {
-      if (demo) {
+      if (useRecipientRouting) {
         const { data: transfer, error: transferError } = await supabase.from('facility_transfers')
           .select('claiming_club_id, releasing_club_id').eq('id', email.transfer_id).maybeSingle()
         if (transferError) throw new Error(transferError.message)
-        const plan = demoEmailPlan(email, demoSetup.routes, {
+        const plan = resolveEmailRecipients(email, recipientSetup.routes, {
           claimingClubId: transfer?.claiming_club_id ?? null,
           releasingClubId: transfer?.releasing_club_id ?? null,
-          blocked: demoSetup.blocked
+          blocked: recipientSetup.blocked
         })
-        if (!plan.to.length) throw new Error('No demo recipient configured')
+        if (!plan.to.length) throw new Error('No notification recipient configured')
         to = plan.to
         cc = []
         replyTo = undefined // the persona's address may belong to a real person
-        body = `[Pulse demo, sent for: ${plan.personas.join(', ')}]\n\n${email.body}`
+        body = `[Pulse, sent for: ${plan.personas.join(', ')}]\n\n${email.body}`
       }
       if (!to.length || !to[0]) throw new Error('No recipient configured')
       // Attach the original FBS booking slip to the OSL request when one is stored.

@@ -4,7 +4,7 @@
 // Purpose: fixture-backed responsive Journey browser regressions for simulator controls and state.
 // Use Setup -> Actions -> Assert; real Vue/engine code runs, but these tests do not prove live Supabase integration.
 import {openTimeline,openFacilityHeatmap} from './helpers/disclosures.js'
-import {test,expect} from '@playwright/test'
+import {test,expect} from '../e2e/helpers/browserUi.js'
 import {bootRecovery} from './helpers/recoveryHarness.js'
 async function act(page,locator){if(await page.evaluate(()=>navigator.maxTouchPoints>0))await locator.tap();else await locator.click()}
 async function fits(page){

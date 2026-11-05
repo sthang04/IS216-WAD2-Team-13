@@ -4,7 +4,7 @@
 // Purpose: fixture-backed session Entry browser regressions for simulator controls and state.
 // Use Setup -> Actions -> Assert; real Vue/engine code runs, but these tests do not prove live Supabase integration.
 import {setRawInterval} from './fixtures/disruptionInputs.js'
-import {test,expect} from '@playwright/test'
+import {test,expect} from '../e2e/helpers/browserUi.js'
 async function boot(page,mode='route'){
  await page.route('https://**',r=>r.abort())
  await page.route('**/src/services/simulationDataService.js*',r=>r.fulfill({contentType:'application/javascript',body:"import {campusConnectMultiEventFixture} from '/e2e-simulator/fixtures/campusConnect.js';export async function loadSimulationData(){window.__loads=(window.__loads||0)+1;return campusConnectMultiEventFixture()}"}))

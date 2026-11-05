@@ -105,7 +105,7 @@ function stamp(ts) {
       <ol v-else class="pulse-timeline small mb-0">
         <li v-for="event in history" :key="event.audit_event_id">
           <strong>{{ AUDIT_ACTION_LABELS[event.action] || event.action }}</strong>
-          <span class="text-muted"> · {{ event.actor_name || 'System' }}<template v-if="event.actor_club_name"> ({{ event.actor_club_name }})</template> · {{ stamp(event.created_at) }}</span>
+          <span class="text-muted"> · {{ event.actor_name || 'System' }}<template v-if="event.actor_is_osl && event.action === 'RELEASED'"> (OSL, on behalf of {{ event.actor_club_name }})</template><template v-else-if="event.actor_club_name"> ({{ event.actor_club_name }})</template> · {{ stamp(event.created_at) }}</span>
           <div v-if="event.details?.reason" class="text-muted">Reason: {{ event.details.reason }}</div>
           <div v-if="event.audit_voucher_id" class="text-muted font-monospace">{{ event.audit_voucher_id }}</div>
         </li>

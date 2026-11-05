@@ -4,7 +4,7 @@
 // Meeting scheduler browser regressions: use real forms and controls with isolated API data.
 // Every case follows setup -> actions -> visible assertions; no service is called directly.
 import {test,expect} from './fixtures/app.js'
-import {downloadText,guest} from './fixtures/journeys.js'
+import {downloadText} from './fixtures/journeys.js'
 const open=async(page,app,options={})=>{
  await app.open('/availability',{authenticated:true,meetings:true,...options})
  await expect(page.getByRole('heading',{name:'Weekly Meeting Scheduler',exact:true})).toBeVisible()
@@ -21,7 +21,7 @@ test('heatmap toggles availability and restores the unselected state',async({pag
  await expect(cell).toHaveAttribute('aria-pressed','false')
 })
 
-test('heatmap selects blocks one by one, without dragging, in the legend colours',async({page,app})=>{
+test('heatmap selects blocks one by one, without dragging, in the legend colours',async({page,app},info)=>{
  await open(page,app)
  const cells=page.locator('.scheduler-grid [role=button]')
  const [first,second,third]=[cells.nth(0),cells.nth(1),cells.nth(2)]
@@ -34,12 +34,19 @@ test('heatmap selects blocks one by one, without dragging, in the legend colours
  const legendColour=await page.locator('.legend .avail-amber').evaluate(el=>getComputedStyle(el).backgroundColor)
  await expect(first).toHaveCSS('background-color',legendColour)
  await expect(page.locator('.legend')).not.toContainText(/\bYou\b/)
+ // Touch uses individual taps. Mouse-only drag prevention is checked on desktop.
+ if(!info.project.use.hasTouch){
  // Holding the button across blocks must not paint them
  const box=await third.boundingBox()
  await first.hover();await page.mouse.down()
  await page.mouse.move(box.x+box.width/2,box.y+box.height/2,{steps:5});await page.mouse.up()
  await expect(third).toHaveAttribute('aria-pressed','false')
  await expect(first).toHaveAttribute('aria-pressed','true')
+ }else{
+  await third.tap();await expect(third).toHaveAttribute('aria-pressed','true')
+  await third.tap();await expect(third).toHaveAttribute('aria-pressed','false')
+  await expect(first).toHaveAttribute('aria-pressed','true')
+ }
 })
 
 test('week navigation changes the visible week and returns to this week',async({page,app})=>{
@@ -87,9 +94,13 @@ test('a none-work response updates visible scheduling feedback and survives relo
  await expect(page.getByText('None work',{exact:true})).toBeVisible()
 })
 
-test('guest cannot vote or schedule a meeting',async({page,app})=>{
- await guest(page,app,'/availability')
- await expect(page.getByText('Sign in as a CCA ExCo to schedule meetings.',{exact:true})).toBeVisible()
- await expect(page.locator('.scheduler-grid [role=button]')).toHaveCount(0)
- await expect(page.getByRole('button',{name:'Send Meeting Request',exact:true})).toHaveCount(0)
+// Guest entry was removed; verify the supported signed-out boundary instead.
+test('signed-out access to /availability requests login without exposing protected controls',async({page,app})=>{
+ await app.open('/availability')
+ await expect(page).toHaveURL(/redirect=/)
+ await expect(page.locator('input[name="smu_user_password"]')).toBeVisible()
+ await expect(page.getByRole('button',{name:/explore live facility calendar as guest/i})).toHaveCount(0)
+ await page.reload()
+ await expect(page.locator('input[name="smu_user_password"]')).toBeVisible()
+ await expect(page.getByRole('button',{name:'Submit claim',exact:true})).toHaveCount(0)
 })

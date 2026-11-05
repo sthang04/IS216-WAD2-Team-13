@@ -1,10 +1,10 @@
-// SUPPORT FILE PURPOSE: refinementHarness.js supplies shared setup or controlled data for the browser workflows.
+// SUPPORT FILE PURPOSE: simulatorPreviewHarness.js supplies shared setup or controlled data for the browser workflows.
 // Keep this support code: the Playwright tests depend on consistent setup and isolated state.
 import {openTimeline,openFacilityHeatmap} from './disclosures.js'
 import {expect} from '@playwright/test'
 // Serve synthetic records through the real loader contract. No production
 // credentials or transport are used; unexpected HTTPS requests are aborted.
-export async function bootRefinement(page,options={}){
+export async function bootSimulatorPreview(page,options={}){
  await page.route('https://**',route=>route.abort())
  await page.route('**/src/supabase.js*',route=>route.fulfill({contentType:'application/javascript',body:"export const isSupabaseConfigured=()=>true;export const supabase={auth:{onAuthStateChange(){return {data:{subscription:{unsubscribe(){}}}}}},async rpc(name){if(name==='rpc_simulator_workflow_capabilities')return {data:{contract_version:4,application_enabled:false,invitations_enabled:false}};if(name==='rpc_simulator_plan_history')return {data:{plans:[],invitations:[],audit:[]}};return {error:{message:'Unavailable in read-only fixture'}}}}"}))
  await page.route('**/src/services/simulationDataService.js*',route=>route.fulfill({contentType:'application/javascript',body:
