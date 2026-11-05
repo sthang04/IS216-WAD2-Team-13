@@ -787,11 +787,11 @@ function handleScenarioTrigger(scenarioKey) {
     </div>
 
     <!-- View Switcher Tabs (Prof Kyong feedback: conversational assistant simplifies cognitive load) -->
-    <div class="d-flex flex-wrap align-items-center justify-content-between p-2 mb-4 bg-white rounded-3 shadow-xs border gap-2">
-      <div class="d-flex align-items-center gap-2">
+    <div class="d-flex flex-column flex-md-row align-items-stretch align-items-md-center justify-content-between p-2 mb-4 bg-white rounded-3 shadow-xs border gap-2">
+      <div class="d-flex flex-column flex-sm-row align-items-stretch align-items-sm-center gap-2">
         <button
           type="button"
-          class="btn btn-sm rounded-pill px-3 py-1.5 fw-bold d-flex align-items-center gap-2"
+          class="btn btn-sm rounded-pill px-3 py-2 fw-bold d-flex align-items-center justify-content-center gap-2 flex-grow-1"
           :class="viewMode === 'chatbot' ? 'btn-pulse-primary text-white shadow-xs' : 'btn-light text-secondary border-0'"
           @click="viewMode = 'chatbot'"
         >
@@ -800,7 +800,7 @@ function handleScenarioTrigger(scenarioKey) {
         </button>
         <button
           type="button"
-          class="btn btn-sm rounded-pill px-3 py-1.5 fw-bold d-flex align-items-center gap-2"
+          class="btn btn-sm rounded-pill px-3 py-2 fw-bold d-flex align-items-center justify-content-center gap-2 flex-grow-1"
           :class="viewMode === 'matrix' ? 'btn-pulse-primary text-white shadow-xs' : 'btn-light text-secondary border-0'"
           @click="viewMode = 'matrix'"
         >
@@ -808,7 +808,7 @@ function handleScenarioTrigger(scenarioKey) {
         </button>
       </div>
 
-      <div class="text-muted small pe-2" style="font-size: 0.75rem;">
+      <div class="text-muted small px-2 py-1 text-center text-md-end" style="font-size: 0.75rem;">
         <span v-if="viewMode === 'chatbot'">💬 Conversational Flow &middot; Powered by 50/30/20 Multi-Factor Matcher</span>
         <span v-else>🔬 Low-level multi-scenario matrix for technical inspection</span>
       </div>
@@ -1116,18 +1116,8 @@ function handleScenarioTrigger(scenarioKey) {
     <SimulatorRecoveryWorkflow :active="props.active" :session-version="sessionVersion" @review-saved="reviewSavedRecovery" :selected-recovery-id="selectedRecoveryId" @select-option="selectRecoveryPlan" :refresh-event="refreshSimulator" :refresh-version="invitationRefreshVersion" @invitations-changed="invitationRefreshVersion++" :data="data" :event-id="selectedEventId" :options="recoveryOptions"
       :disruptions="result ? buildDisruptions() : []" />
     </section>
+      <SimulatorBackToTop :sections="sectionShortcuts" :active="props.active" />
     </div><!-- End Mode 2 Matrix Sandbox -->
-
-    <SimulatorBackToTop :sections="sectionShortcuts" :active="props.active" />
-    <PipMascot v-if="result"
-    class="simulation-pip"
-    mode="simulation"
-    :is-static="notificationStore.pipStatic"
-    @update:is-static="setPipStatic"
-    :is-quiet="notificationStore.pipQuiet"
-    @update:is-quiet="setPipQuiet"
-    :result="result"
-    />
 
   </div>
   

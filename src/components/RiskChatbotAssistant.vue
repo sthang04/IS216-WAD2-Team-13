@@ -441,4 +441,20 @@ function handleReset() {
   background: #cbd5e1;
   border-radius: 9999px;
 }
+
+@media (max-width: 576px) {
+  .pulse-scenario-chip {
+    width: 100%;
+  }
+  .pulse-user-bubble {
+    max-width: 90% !important;
+  }
+  .pulse-bot-bubble {
+    max-width: 95% !important;
+  }
+  .pulse-bot-avatar-box {
+    width: 36px;
+    height: 36px;
+  }
+}
 </style>

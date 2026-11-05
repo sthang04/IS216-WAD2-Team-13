@@ -841,9 +841,9 @@ onMounted(async () => {
         </div>
       </main>
  
-      <!-- Notifications Pip is shown outside risk planning; EventRiskView owns Simulation Pip. -->
+      <!-- Notifications Pip is consistently shown on every view for logged-in users -->
       <PipMascot
-        v-if="pipVisible && currentView !== 'risk'"
+        v-if="pipVisible"
         class="d-none d-lg-block"
         mode="notifications"
         :unanswered-count="unreadCount"

@@ -1,4 +1,4 @@
-﻿<script setup>
+<script setup>
 // Purpose: Provide keyboard-accessible section shortcuts and return-to-top navigation without changing approval progress.
 import {ref,onMounted,onUnmounted} from 'vue'
 const props=defineProps({sections:{type:Array,default:()=>[]},active:{type:Boolean,default:true}})
@@ -45,5 +45,5 @@ onUnmounted(()=>{window.removeEventListener('scroll',update);document.removeEven
 .simulator-floating-nav .back-to-top{padding:.65rem .9rem;white-space:nowrap}.has-top .section-shortcuts>summary{border-radius:2rem 0 0 2rem}.has-shortcuts .back-to-top{border-radius:0 2rem 2rem 0}
 .section-shortcuts{position:static;min-width:0}.section-shortcuts>summary{cursor:pointer;background:var(--pulse-card-bg,#fff);color:var(--pulse-ink);border:0;padding:.65rem .9rem;font-size:.8rem;font-weight:600;white-space:nowrap}.section-shortcuts>ul{position:absolute;bottom:calc(100% + .6rem);right:0;width:min(20rem,calc(100vw - 1.5rem));max-height:60vh;overflow-y:auto;list-style:none;margin:0;padding:.4rem;border:1px solid var(--pulse-border);border-radius:.75rem;background:var(--pulse-card-bg,#fff);box-shadow:0 6px 24px #0002}.section-shortcuts li>a,.section-shortcuts li>span{display:block;padding:.65rem .7rem;min-height:44px;color:var(--pulse-ink);text-decoration:none;font-size:.85rem;overflow-wrap:anywhere}.section-shortcuts li>a:hover{background:var(--pulse-primary-light);border-radius:.4rem}.section-shortcuts li>span{color:var(--pulse-ink-muted)}.section-shortcuts small{display:block;font-size:.7rem}a:focus-visible,button:focus-visible,summary:focus-visible{outline:2px solid var(--pulse-primary);outline-offset:3px}
 :global(body:has(.recovery-dialog) .simulator-floating-nav){visibility:hidden}
-@media(max-width:767px){.simulator-floating-nav{bottom:calc(5rem + env(safe-area-inset-bottom));right:.75rem}}
+@media(max-width:767px){.simulator-floating-nav{display:none!important}}
 </style>
