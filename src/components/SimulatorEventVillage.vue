@@ -2,7 +2,27 @@
 // Purpose: Draw recorded activity dependencies, share selection with the list and support fit, zoom, pan and cascade replay.
 import {computed,ref,useId,onMounted,onUnmounted,watch,nextTick} from 'vue'
 import {controlRoomTime} from '../services/simulatorControlRoomService.js'
-const props=defineProps({model:Object,selectedId:[String,Number],replayVersion:{type:Number,default:0}}),emit=defineEmits(['select','inspect-edge'])
+import {groupActivities} from '../services/simulatorActivityGroups.js'
+const props=defineProps({model:Object,selectedId:[String,Number],replayVersion:{type:Number,default:0},routes:{type:Array,default:()=>[]}}),emit=defineEmits(['select','inspect-edge'])
+// One booth per Day Ops activity (not one per crew member), showing its most affected copy.
+// Booths with a drawn dependency stay separate so every edge keeps its endpoints.
+const statusRank={direct:0,downstream:1}
+const moved=(a,b)=>Number.isFinite(a)&&Number.isFinite(b)&&a!==b
+// Affected = an impact from the simulation, or new times in a recovery preview.
+const affected=n=>n.status==='direct'||n.status==='downstream'||moved(n.originalStart,n.simulatedStart)||moved(n.originalEnd,n.simulatedEnd)
+const allBooths=computed(()=>{const linked=new Set(props.model.edges.flatMap(e=>[String(e.from.id),String(e.to.id)]));return groupActivities(props.model.nodes,n=>linked.has(String(n.id))).map(g=>({...[...g.items].sort((a,b)=>(statusRank[a.status]??2)-(statusRank[b.status]??2))[0],crew:g.items.length,affectedCrew:g.items.filter(affected).length,groupIds:g.ids.map(String)}))})
+// Show only what the disruption touches unless the user asks for everything.
+const showAll=ref(false)
+const byTime=(a,b)=>(a.simulatedStart??0)-(b.simulatedStart??0)
+const villageNodes=computed(()=>(showAll.value?allBooths.value:allBooths.value.filter(n=>n.affectedCrew>0)).slice().sort(byTime))
+const visibleEdges=computed(()=>{const shown=new Set(villageNodes.value.map(n=>String(n.id)));return props.model.edges.filter(e=>shown.has(String(e.from.id))&&shown.has(String(e.to.id)))})
+// Route: an unavailable member's affected booths in time order, drawn like the
+// dependency roads. Only on the affected-only map when no recorded dependencies exist.
+const routeBooths=computed(()=>showAll.value||visibleEdges.value.length?[]:props.routes.map(r=>({label:r.label,booths:villageNodes.value.filter(n=>n.groupIds.some(id=>r.ids.includes(id)))})).filter(r=>r.booths.length))
+const routeEdges=computed(()=>routeBooths.value.flatMap(r=>r.booths.slice(1).map((n,i)=>({from:r.booths[i],to:n}))))
+const routeLevel=computed(()=>{const levels=new Map();for(const r of routeBooths.value)r.booths.forEach((n,i)=>{if(!levels.has(String(n.id)))levels.set(String(n.id),i)});return levels})
+const crewLabel=n=>n.crew<2?'':!n.affectedCrew?' · '+n.crew+' crew':n.affectedCrew<n.crew?' · '+n.affectedCrew+' of '+n.crew+' crew affected':' · '+n.crew+' crew affected'
+const isSelected=node=>node.groupIds.includes(String(props.selectedId))
 const view=ref('village'),fit=ref(false),zoom=ref(1),viewport=ref(null),viewportWidth=ref(900),viewportHeight=ref(580),content=ref(null),measuredBounds=ref(null),uid=useId().replace(/:/g,'')
 const assigneeText=n=>{const a=n.assignees||[];return a.length>2?a.slice(0,2).join(', ')+' +'+(a.length-2):a.join(', ')}
 const label=s=>s==='direct'?'Direct impact':s==='downstream'?'Downstream risk':'No detected impact',themes=['#e97f9d','#75a7db','#e6b85b','#87bc8b','#a58bd4']
@@ -13,8 +33,8 @@ function bounds(rows){const bs=rows.map(box);return bs.length?{x:Math.min(...bs.
 // keep branches/convergences together; deep graphs wrap into alternating lanes.
 // Independent activities occupy free positions without inventing any edges.
 const nodes=computed(()=>{
- const linked=new Set(props.model.edges.flatMap(e=>[String(e.from.id),String(e.to.id)])),connected=props.model.nodes.filter(n=>linked.has(String(n.id))),independent=props.model.nodes.filter(n=>!linked.has(String(n.id)));let best=null
- for(const centered of [false,true])for(let columns=1;columns<=Math.min(8,Math.max(1,props.model.nodes.length));columns++){
+ const linked=new Set([...visibleEdges.value,...routeEdges.value].flatMap(e=>[String(e.from.id),String(e.to.id)])),connected=villageNodes.value.filter(n=>linked.has(String(n.id))).map(n=>routeLevel.value.has(String(n.id))?{...n,level:routeLevel.value.get(String(n.id))}:n),independent=villageNodes.value.filter(n=>!linked.has(String(n.id)));let best=null
+ for(const centered of [false,true])for(let columns=1;columns<=Math.min(8,Math.max(1,villageNodes.value.length));columns++){
   const placed=[],levels=new Map();for(const n of connected){if(!levels.has(n.level))levels.set(n.level,[]);levels.get(n.level).push(n)}let bandTop=0
   const depth=Math.max(0,...levels.keys())
   for(let first=0;first<=depth;first+=columns){const last=Math.min(depth,first+columns-1),maxRows=Math.max(1,...Array.from({length:last-first+1},(_,i)=>(levels.get(first+i)||[]).length));let bottom=bandTop
@@ -25,7 +45,7 @@ const nodes=computed(()=>{
   }
   for(const n of independent){let found=false;for(let row=0;!found;row++)for(let col=0;col<columns;col++){const node={...n,x:col*254,y:114+row*282+(col%2?12:0)},b=box(node);if(placed.every(other=>{const a=box(other);return b.right+24<a.left||b.left-24>a.right||b.bottom+24<a.top||b.top-24>a.bottom})){placed.push(node);found=true;break}}}
   const b=bounds(placed),scale=Math.min((viewportWidth.value-36)/b.width,(viewportHeight.value-128)/b.height);if(!best||scale>best.scale)best={placed,scale}
- }const byId=new Map((best?.placed||[]).map(n=>[String(n.id),n]));return props.model.nodes.map((n,i)=>({...byId.get(String(n.id)),theme:themes[i%5]}))
+ }const byId=new Map((best?.placed||[]).map(n=>[String(n.id),n]));return villageNodes.value.map((n,i)=>({...byId.get(String(n.id)),theme:themes[i%5]}))
 })
 // Orthogonal A* routes run through corridors around full booth/label bounds.
 // Routing changes geometry only: recorded endpoints and arrow direction stay exact.
@@ -45,7 +65,8 @@ function routeEdge(a,b,obstacles){
  const points=[];if(found){let key=target;while(key){const [i,j]=key.split(',').map(Number);points.unshift([xs[i],ys[j]]);key=previous.get(key)}}else points.push([start.x,start.y],[end.x,end.y])
  return 'M '+(a.x+sign*80)+' '+(a.y+18)+' '+points.map(p=>'L '+p.join(' ')).join(' ')+' L '+(b.x+endSign*83)+' '+(b.y+18)
 }
-const edges=computed(()=>{const byId=new Map(nodes.value.map(n=>[String(n.id),n])),obstacles=nodes.value.map(box);return props.model.edges.map(e=>{const from=byId.get(String(e.from.id)),to=byId.get(String(e.to.id));return {from,to,d:routeEdge(from,to,obstacles)}})})
+const edges=computed(()=>{const byId=new Map(nodes.value.map(n=>[String(n.id),n])),obstacles=nodes.value.map(box);return visibleEdges.value.map(e=>{const from=byId.get(String(e.from.id)),to=byId.get(String(e.to.id));return {from,to,d:routeEdge(from,to,obstacles)}})})
+const routePaths=computed(()=>{const byId=new Map(nodes.value.map(n=>[String(n.id),n])),obstacles=nodes.value.map(box);return routeEdges.value.map(e=>routeEdge(byId.get(String(e.from.id)),byId.get(String(e.to.id)),obstacles))})
 function measureContent(){if(content.value&&nodes.value.length){const b=content.value.getBBox();measuredBounds.value={x:b.x-12,y:b.y-12,width:b.width+24,height:b.height+24}}}
 watch(nodes,()=>{measuredBounds.value=null;nextTick(measureContent)},{flush:'post'})
 const graphBounds=computed(()=>measuredBounds.value||bounds(nodes.value)),sky=64,footer=64
@@ -55,12 +76,12 @@ const fitScale=computed(()=>Math.min(1.6,(viewportWidth.value-36)/graphBounds.va
 const scene=computed(()=>fit.value?{x:0,y:0,width:viewportWidth.value,height:viewportHeight.value}:{x:0,y:0,width:Math.max(viewportWidth.value+180,graphBounds.value.width+80),height:Math.max(viewportHeight.value+180,graphBounds.value.height+sky+footer+40)})
 const graphOffset=computed(()=>{const b=graphBounds.value,k=fit.value?fitScale.value:1;return fit.value?{x:viewportWidth.value/2-(b.x+b.width/2)*k,y:sky+(viewportHeight.value-sky-footer)/2-(b.y+b.height/2)*k}:{x:(scene.value.width-b.width)/2-b.x,y:sky+20-b.y}})
 const graphTransform=computed(()=>'translate('+graphOffset.value.x+' '+graphOffset.value.y+') scale('+(fit.value?fitScale.value:1)+')'),minimumZoom=computed(()=>Math.min(.25,fitScale.value/4)),zoomPercent=computed(()=>Math.round((fit.value?fitScale.value:zoom.value)*1000)/10)
-function centerOnActivity(id=props.selectedId){const n=nodes.value.find(n=>String(n.id)===String(id))||nodes.value[0];if(n&&viewport.value){viewport.value.scrollLeft=(n.x+graphOffset.value.x)*zoom.value-viewportWidth.value/2;viewport.value.scrollTop=(n.y+20+graphOffset.value.y)*zoom.value-viewportHeight.value/2}}
+function centerOnActivity(id=props.selectedId){const n=nodes.value.find(n=>n.groupIds.includes(String(id)))||nodes.value[0];if(n&&viewport.value){viewport.value.scrollLeft=(n.x+graphOffset.value.x)*zoom.value-viewportWidth.value/2;viewport.value.scrollTop=(n.y+20+graphOffset.value.y)*zoom.value-viewportHeight.value/2}}
 function setMode(mode){fit.value=mode==='fit';if(!fit.value)zoom.value=1;nextTick(()=>{if(fit.value){viewport.value.scrollLeft=0;viewport.value.scrollTop=0}else centerOnActivity()})}
 // Keep the viewport centre stable during manual zoom. Leaving Fit changes
 // coordinate systems, so first centre the selected booth in the explore scene.
 function adjustZoom(delta){const current=fit.value?fitScale.value:zoom.value,wasFit=fit.value,center={x:(viewport.value.scrollLeft+viewportWidth.value/2)/current,y:(viewport.value.scrollTop+viewportHeight.value/2)/current};zoom.value=Math.max(minimumZoom.value,Math.min(2,current*(delta>0?1.15:1/1.15)));fit.value=false;nextTick(()=>{if(wasFit)centerOnActivity();else{viewport.value.scrollLeft=center.x*zoom.value-viewportWidth.value/2;viewport.value.scrollTop=center.y*zoom.value-viewportHeight.value/2}})}
-function focusActivity(id){view.value='village';nextTick(()=>{if(!fit.value)centerOnActivity(id);[...viewport.value.querySelectorAll('[data-activity-id]')].find(n=>n.dataset.activityId===String(id))?.focus({preventScroll:true})})}
+function focusActivity(id){view.value='village';nextTick(()=>{if(!fit.value)centerOnActivity(id);const booth=nodes.value.find(n=>n.groupIds.includes(String(id)));[...viewport.value.querySelectorAll('[data-activity-id]')].find(n=>booth&&n.dataset.activityId===String(booth.id))?.focus({preventScroll:true})})}
 let resizeObserver
 onMounted(()=>{resizeObserver=new ResizeObserver(entries=>{const r=entries[0].contentRect;if(r.width>0&&r.height>0){viewportWidth.value=r.width;viewportHeight.value=r.height}});resizeObserver.observe(viewport.value);nextTick(()=>{measureContent();centerOnActivity()})})
 onUnmounted(()=>resizeObserver?.disconnect())
@@ -68,21 +89,24 @@ defineExpose({focusActivity})
 </script>
 <template>
  <div class="event-village">
-  <div class="village-toolbar"><div role="group" aria-label="Activity display"><button type="button" class="btn btn-sm btn-pulse-outline" :aria-pressed="view==='village'" @click="view='village'">Village</button><button type="button" class="btn btn-sm btn-pulse-outline" :aria-pressed="view==='list'" @click="view='list'">Activity List</button></div><div v-if="view==='village'" class="village-map-controls" role="group" aria-label="Map controls"><button type="button" class="btn btn-sm btn-pulse-outline" aria-label="Zoom out" :disabled="!fit && zoom<=minimumZoom" @click="adjustZoom(-1)">-</button><output aria-label="Map zoom percentage">{{ zoomPercent }}%</output><button type="button" class="btn btn-sm btn-pulse-outline" aria-label="Zoom in" :disabled="!fit && zoom>=2" @click="adjustZoom(1)">+</button><button type="button" class="btn btn-sm btn-pulse-outline" :aria-pressed="fit" @click="setMode(fit?'explore':'fit')">{{ fit?'Explore map':'Fit whole map' }}</button></div></div>
-  <div ref="viewport" v-show="view==='village'" class="village-scroll sim-graph-scroll" :class="{fit}" tabindex="0" role="region" aria-label="Scrollable Event Village">
+  <div class="village-toolbar"><div role="group" aria-label="Activity display"><button type="button" class="btn btn-sm btn-pulse-outline" :aria-pressed="view==='village'" @click="view='village'">Village</button><button type="button" class="btn btn-sm btn-pulse-outline" :aria-pressed="view==='list'" @click="view='list'">Activity List</button><button type="button" class="btn btn-sm btn-pulse-outline" :aria-pressed="showAll" @click="showAll=!showAll">{{ showAll?'Affected only':'Show all ('+allBooths.length+')' }}</button></div><div v-if="view==='village'" class="village-map-controls" role="group" aria-label="Map controls"><button type="button" class="btn btn-sm btn-pulse-outline" aria-label="Zoom out" :disabled="!fit && zoom<=minimumZoom" @click="adjustZoom(-1)">-</button><output aria-label="Map zoom percentage">{{ zoomPercent }}%</output><button type="button" class="btn btn-sm btn-pulse-outline" aria-label="Zoom in" :disabled="!fit && zoom>=2" @click="adjustZoom(1)">+</button><button type="button" class="btn btn-sm btn-pulse-outline" :aria-pressed="fit" @click="setMode(fit?'explore':'fit')">{{ fit?'Explore map':'Fit whole map' }}</button></div></div>
+  <p v-for="r in routeBooths" :key="r.label" class="village-route-caption small mb-2">{{ r.label }}</p>
+  <p v-if="!villageNodes.length" class="village-empty" role="status">No activities are affected by this disruption. <button type="button" class="btn btn-link btn-sm p-0" @click="showAll=true">Show all activities</button></p>
+  <div ref="viewport" v-show="view==='village' && villageNodes.length" class="village-scroll sim-graph-scroll" :class="{fit}" tabindex="0" role="region" aria-label="Scrollable Event Village">
    <svg :viewBox="[scene.x,scene.y,scene.width,scene.height].join(' ')" preserveAspectRatio="xMidYMid meet" :style="{width:fit?'100%':scene.width*zoom+'px',height:fit?'100%':scene.height*zoom+'px'}" class="village-map" role="group" aria-label="Activity dependencies">
     <defs><marker :id="uid+'arrow'" viewBox="0 0 12 12" refX="10" refY="6" markerWidth="7" markerHeight="7" orient="auto"><path d="M1 1 L11 6 L1 11 Z" fill="#607689"/></marker><pattern :id="uid+'grass'" width="120" height="100" patternUnits="userSpaceOnUse"><path d="M18 55 q3 -8 5 0 M80 25 q3 -7 5 0" stroke="#b8d6a7" fill="none"/><circle cx="48" cy="74" r="2" fill="#f5c4cc"/><circle cx="101" cy="46" r="2" fill="#f9e3a1"/></pattern></defs>
     <rect :x="scene.x" :y="scene.y" :width="scene.width" :height="scene.height" fill="#dceecb"/><rect :x="scene.x" :y="scene.y" :width="scene.width" :height="64" fill="#e6f5fc"/><rect :x="scene.x" :y="scene.y+64" :width="scene.width" :height="scene.height-64" :fill="'url(#'+uid+'grass)'"/>
     <g aria-hidden="true"><circle :cx="scene.x+scene.width-70" :cy="scene.y+31" r="18" fill="#ffedaf"/><g v-for="x in [scene.x+70,scene.x+scene.width*.4,scene.x+scene.width*.7]" :key="x" :transform="'translate('+x+' '+(scene.y+29)+')'" fill="white"><ellipse rx="38" ry="12"/><circle cy="-8" r="15"/></g><g v-for="x in [scene.x+28,scene.x+scene.width-28]" :key="x" :transform="'translate('+x+' '+(scene.y+scene.height-36)+')'"><rect x="-5" width="10" height="35" rx="4" fill="#ac876a"/><circle cy="-8" r="23" fill="#93c8a0"/></g></g>
     <g :transform="graphTransform" data-testid="village-graph-transform"><g ref="content" data-testid="village-graph-content">
+    <g v-for="(d,i) in routePaths" :key="'route'+i" class="village-path village-route" aria-hidden="true"><path :d="d" stroke="#d6bc91" stroke-width="16"/><path :d="d" stroke="#fff8e6" stroke-width="12"/><path :d="d" stroke="#607689" stroke-width="2.5" :marker-end="'url(#'+uid+'arrow)'"/></g>
     <g v-for="(edge,i) in edges" :key="i+':'+replayVersion" class="village-path" role="button" tabindex="0" :aria-label="'Dependency: '+edge.from.title+' to '+edge.to.title" @click="emit('inspect-edge',edge)" @keydown.enter.prevent="emit('inspect-edge',edge)" @keydown.space.prevent="emit('inspect-edge',edge)" :data-from="edge.from.id" :data-to="edge.to.id"><path :d="edge.d" stroke="#d6bc91" stroke-width="16"/><path :d="edge.d" stroke="#fff8e6" stroke-width="12"/><path :d="edge.d" stroke="#607689" stroke-width="2.5" :marker-end="'url(#'+uid+'arrow)'"/></g>
     <g role="group" aria-label="Activity booths">
-    <g v-for="node in nodes" :key="String(node.id)+':'+replayVersion" class="village-node sim-graph-node" :data-activity-id="node.id" :class="[node.status,{selected:String(selectedId)===String(node.id)}]" :style="{animationDelay:(node.level*180)+'ms'}" :transform="'translate('+node.x+' '+node.y+')'" role="button" tabindex="0" :aria-label="node.title+': '+label(node.status)" :aria-pressed="String(selectedId)===String(node.id)" @click="emit('select',node)" @keydown.enter.prevent="emit('select',node)" @keydown.space.prevent="emit('select',node)">
+    <g v-for="node in nodes" :key="String(node.id)+':'+replayVersion" class="village-node sim-graph-node" :data-activity-id="node.id" :class="[node.status,{selected:isSelected(node)}]" :style="{animationDelay:(node.level*180)+'ms'}" :transform="'translate('+node.x+' '+node.y+')'" role="button" tabindex="0" :aria-label="node.title+': '+label(node.status)" :aria-pressed="isSelected(node)" @click="emit('select',node)" @keydown.enter.prevent="emit('select',node)" @keydown.space.prevent="emit('select',node)">
      <title>{{ node.title }} &middot; {{ controlRoomTime(node.simulated.starts_at) }}&ndash;{{ controlRoomTime(node.simulated.ends_at) }}</title>
      <ellipse class="impact-ground" cy="70" rx="83" ry="23"/><ellipse class="selection" cy="70" rx="92" ry="31"/>
      <g class="booth"><rect x="-55" y="-19" width="110" height="86" rx="8" fill="#fffaf3" stroke="#8b9ba4" stroke-width="2"/><rect x="-61" y="20" width="122" height="47" rx="5" fill="#e8cbaa" stroke="#8b9ba4" stroke-width="2"/><rect x="-48" y="26" width="96" height="31" rx="5" fill="#fff9ee"/><rect x="-54" y="-25" width="108" height="20" :fill="node.theme"/><path v-for="i in 6" :key="i" :d="'M'+(-54+(i-1)*18)+' -25 h9 l8 20 h-18 Z'" :fill="i%2?'#fff9f2':node.theme"/><path v-for="i in 6" :key="'a'+i" :d="'M'+(-54+(i-1)*18)+' -5 q9 17 18 0'" :fill="i%2?'#fff9f2':node.theme" stroke="#b9a7a0" stroke-width=".8"/><path d="M-62 -28 L0 -65 L62 -28 Z" :fill="node.theme" stroke="#8798a5" stroke-width="2"/><rect x="-26" y="-52" width="52" height="20" rx="5" fill="#fffaf4"/><text y="-37" text-anchor="middle" fill="#8b6578" font-size="17">&#10022;</text><rect x="-16" y="34" width="32" height="25" rx="5" :fill="node.theme"/></g>
      <rect class="impact-pill" x="-83" y="-105" width="166" height="26" rx="13"/><text y="-87" text-anchor="middle" class="status-text">{{ label(node.status) }}</text>
-     <text text-anchor="middle" class="activity-name"><tspan v-for="(line,i) in lines(node.title)" :key="i" x="0" :y="103+i*17">{{ line }}</tspan></text><text :y="112+lines(node.title).length*17" text-anchor="middle" class="activity-time">{{ controlRoomTime(node.simulated.starts_at) }}<template v-if="assigneeText(node)"> &middot; {{ assigneeText(node) }}</template></text>
+     <text text-anchor="middle" class="activity-name"><tspan v-for="(line,i) in lines(node.title)" :key="i" x="0" :y="103+i*17">{{ line }}</tspan></text><text :y="112+lines(node.title).length*17" text-anchor="middle" class="activity-time">{{ controlRoomTime(node.simulated.starts_at) }}{{ crewLabel(node) }}</text>
     </g>
     </g></g></g>
     <!-- Reuse the reference's tabby, grey patches and shared yarn/paws as
@@ -106,8 +130,8 @@ defineExpose({focusActivity})
     </g>
    </svg>
   </div>
-  <p v-if="view==='village'" class="small text-muted mt-2 mb-0">{{ fit && fitScale<.8?'Overview scale. Explore map for readable labels.':fit?'Whole map':'Scroll or swipe to explore.' }}</p>
-  <div v-show="view==='list'" class="village-list" role="group" aria-label="Activity List"><button v-for="node in nodes" :key="node.id" type="button" :class="node.status" :aria-pressed="String(selectedId)===String(node.id)" @click="emit('select',node)"><span><strong>{{ node.title }}</strong><small>{{ controlRoomTime(node.simulated.starts_at) }}&ndash;{{ controlRoomTime(node.simulated.ends_at) }}<template v-if="assigneeText(node)"> &middot; {{ assigneeText(node) }}</template></small></span><span>{{ label(node.status) }}</span></button></div>
+  <p v-if="view==='village' && villageNodes.length" class="small text-muted mt-2 mb-0">{{ fit && fitScale<.8?'Overview scale. Explore map for readable labels.':fit?'Whole map':'Scroll or swipe to explore.' }}</p>
+  <div v-show="view==='list'" class="village-list" role="group" aria-label="Activity List"><button v-for="node in nodes" :key="node.id" type="button" :class="node.status" :aria-pressed="isSelected(node)" @click="emit('select',node)"><span><strong>{{ node.title }}</strong><small>{{ controlRoomTime(node.simulated.starts_at) }}&ndash;{{ controlRoomTime(node.simulated.ends_at) }}{{ crewLabel(node) }}</small></span><span>{{ label(node.status) }}</span></button></div>
  </div>
 </template>
 <style scoped>
@@ -117,4 +141,7 @@ defineExpose({focusActivity})
 .village-zoom{display:flex;align-items:center;gap:.5rem}.village-zoom output{min-width:3.5rem;text-align:center;font-size:.8rem}.village-node.direct .impact-ground,.village-node.downstream .impact-ground{animation:replay-highlight .9s ease-out both}@keyframes replay-highlight{0%,45%{stroke-width:6;filter:drop-shadow(0 0 8px #e11d4870)}100%{stroke-width:2;filter:none}}@media(prefers-reduced-motion:reduce){.impact-ground{animation:none!important}}
 .village-scroll.fit{height:580px;max-height:75vh;overflow:hidden}.village-map{flex-shrink:0}.village-path{cursor:pointer;outline:none}.village-path:focus-visible path:last-child{stroke:var(--pulse-primary);stroke-width:5}@media(max-width:767px){.village-scroll.fit{height:480px}}
 .village-toolbar{align-items:center}.village-map-controls{margin-left:auto;justify-content:flex-end;align-items:center;flex-wrap:wrap}.village-map-controls output{min-width:3rem;text-align:center;font-size:.75rem}.village-toolbar button[aria-pressed=true]{background:var(--pulse-primary-light);color:var(--pulse-primary)}@media(max-width:575px){.village-map-controls{width:100%;gap:.3rem}.village-map-controls button{padding:.4rem .5rem;font-size:.7rem}}
+.village-route{cursor:default}.village-route-caption{color:var(--pulse-ink-muted)}
+.village-list button.direct{background:#fff0f3;box-shadow:inset 4px 0 #ee5c7b}.village-list button.direct>span:last-child{color:#c81e4a;font-weight:700}.village-list button.downstream{background:#fff8e1;box-shadow:inset 4px 0 #d4a138}.village-list button.downstream>span:last-child{color:#9a6b00;font-weight:700}.village-list button[aria-pressed=true]{outline:2px solid var(--pulse-primary);outline-offset:-2px}
+.village-empty{padding:1rem;border:1px dashed var(--pulse-border);border-radius:1rem;color:var(--pulse-ink-muted)}
 </style>

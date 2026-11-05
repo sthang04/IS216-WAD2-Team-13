@@ -175,10 +175,10 @@ const message = computed(() => {
       return "No unread notifications."
     }
     if (count === 1) {
-      return 'You have 1 new notification.'
+      return '1 unread notification · Tap to view'
     }
 
-    return `You have ${count} new notifications.`
+    return `${count} unread notifications · Tap to view`
   }
 
   // WHAT-IF SIMULATOR

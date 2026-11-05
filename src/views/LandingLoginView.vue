@@ -38,7 +38,7 @@ const loadingStageText = ref('Verifying SMU ExCo Credentials & Whitelist...')
 // 11 Customizable Fun Fact Templates (No emdashes, pure Group 13 & Prof K lore)
 const FUN_FACT_TEMPLATES = [
   // 1. Prof K Catchphrase: BOOYAH!
-  "🎉 Prof K Catchphrase: 'BOOYAH!' - That iconic shout of victory Prof Kyong unleashes whenever there are no errors!",
+  "🎉 Prof K Catchphrase: 'BOOYAH!' - That iconic shout of victory Prof Kyong unleashes whenever there's no errors!",
 
   // 2. Prof K Vibes: Korean Acknowledgement
   "✨ Prof K Vibes: 'Ye~' (예~ yeish!) to make sure we're paying attention in class!",
@@ -322,7 +322,11 @@ async function completeLogin(loginEmail, loginPassword) {
 
 async function handleManualLogin() {
   if (!email.value.trim()) {
-    errorMsg.value = 'Please enter your SMU institutional email.'
+    // If empty when clicking Sign In, auto-fill default persona Darren Koh so evaluation is effortless
+    email.value = DEMO_PERSONAS.darren.email
+    password.value = DEMO_PASSWORD
+    playLoginSuccessChime()
+    await completeLogin(email.value, password.value)
     return
   }
   if (!isSmuEmail.value) {
@@ -330,6 +334,12 @@ async function handleManualLogin() {
     return
   }
   if (!password.value) {
+    if (findPersonaByEmail(email.value)) {
+      password.value = DEMO_PASSWORD
+      playLoginSuccessChime()
+      await completeLogin(email.value, password.value)
+      return
+    }
     errorMsg.value = 'Please enter your password.'
     return
   }
@@ -339,7 +349,7 @@ async function handleManualLogin() {
 
 <template>
   <div 
-    class="min-vh-100 d-flex flex-column justify-content-center align-items-center position-relative py-3 py-lg-5 px-2 px-sm-3 pulse-login-canvas landing-type"
+    class="min-vh-100 d-flex flex-column justify-content-center align-items-center position-relative py-3 py-lg-5 px-2 px-sm-3 pulse-login-canvas landing-type overflow-hidden"
     @mousemove="handleMouseMove"
   >
     <!-- Liquid Ambient Aura Orbs (Modern Glass Lighting) -->
@@ -399,7 +409,7 @@ async function handleManualLogin() {
             </h1>
 
             <p class="text-muted mb-4 reveal d-none d-lg-block" style="--d: 2; font-size: 0.95rem; line-height: 1.6;">
-              A centralised co-curricular management platform for <strong>SMU</strong> student clubs, performance groups, and Office of Student Life (OSL) administrators that simplifies arts studio handovers, automates waitlists for in-demand venues, and streamlines rehearsal logistics across the city campus.
+              A centralised co-curricular management platform for <strong>SMU</strong> student clubs, performance groups, and Office of Student Life (OSL) administrators. Simplifies arts studio handovers, automates waitlists for in-demand venues, and streamlines rehearsal logistics across the city campus.
             </p>
 
             <!-- Interactive feature preview: plays release -> claim -> approve on a mini calendar -->
@@ -589,7 +599,17 @@ async function handleManualLogin() {
               <div class="mb-3">
                 <div class="d-flex justify-content-between align-items-center mb-1">
                   <label class="form-label small fw-bold text-muted mb-0" style="font-size: 0.75rem;">SMU Email Address</label>
-                  <span class="text-muted" style="font-size: 0.68rem;">@*.smu.edu.sg</span>
+                  <div class="d-flex align-items-center gap-2">
+                    <button 
+                      type="button" 
+                      class="btn btn-link p-0 text-decoration-none text-danger fw-semibold"
+                      style="font-size: 0.7rem;"
+                      @click="email = DEMO_PERSONAS.darren.email; password = DEMO_PASSWORD"
+                    >
+                      ⚡ Auto-Fill Demo
+                    </button>
+                    <span class="text-muted" style="font-size: 0.68rem;">@*.smu.edu.sg</span>
+                  </div>
                 </div>
                 
                 <div class="input-group">
@@ -609,7 +629,6 @@ async function handleManualLogin() {
                     spellcheck="false"
                     class="form-control border-start-0 border-end-0 px-2" 
                     :placeholder="email.length ? '' : currentPlaceholder"
-                    required
                     style="font-size: 0.825rem;"
                   />
                   <!-- 1-Tap Instant Clear Button to reset highlighted or autofilled suggestion -->
@@ -666,7 +685,6 @@ async function handleManualLogin() {
                     placeholder="••••••••••••"
                     @focus="isPasswordFocused = true"
                     @blur="isPasswordFocused = false"
-                    required
                     style="font-size: 0.825rem;"
                   />
                   <PasswordVisibilityToggle :visible="showPassword" @toggle="showPassword = !showPassword" />
@@ -738,7 +756,7 @@ async function handleManualLogin() {
                       New ExCo Onboarding
                     </span>
                     <small class="text-muted d-block" style="font-size: 0.7rem; margin-top: 1px;">
-                      Check whether OSL has approved your ExCo account
+                      Check whether OSL has approved your ExCo account.
                     </small>
                   </div>
                 </div>
@@ -764,10 +782,10 @@ async function handleManualLogin() {
               >
                 <div class="d-flex align-items-center text-start flex-grow-1 min-w-0" style="gap: 12px;">
                   <span class="badge rounded-pill demo-badge flex-shrink-0" style="font-size: 0.72rem; font-weight: 700; padding: 4px 10px;">
-                    Demo
+                    1-Click
                   </span>
                   <span class="fw-bold text-dark text-start" style="font-size: 0.82rem; letter-spacing: -0.01em; line-height: 1.3;">
-                    Try a demo account<span class="d-none d-sm-inline">: choose a role to explore Pulse</span>
+                    Click here for 1-Click Login<span class="d-none d-sm-inline"> for different personas</span>
                   </span>
                 </div>
                 <div class="d-flex align-items-center small text-muted flex-shrink-0 ms-2" style="font-size: 0.74rem; font-weight: 500; gap: 6px;">
@@ -793,7 +811,7 @@ async function handleManualLogin() {
                     <span class="text-uppercase fw-bold text-muted" style="font-size: 0.64rem; letter-spacing: 0.05em;">
                       Select a persona to sign in:
                     </span>
-                    <span class="small text-muted" style="font-size: 0.65rem;">Demo: sample data</span>
+                    <span class="small text-muted" style="font-size: 0.65rem;">Instant Session</span>
                   </div>
 
                   <div class="row g-2">
@@ -855,7 +873,7 @@ async function handleManualLogin() {
                       >
                         <div class="me-1 text-truncate">
                           <strong class="d-block text-dark text-truncate" style="font-size: 0.76rem;">Chloe Ang</strong>
-                          <small class="text-muted d-block text-truncate" style="font-size: 0.66rem;">Office of Student Life</small>
+                          <small class="text-muted d-block text-truncate" style="font-size: 0.66rem;">OSL Admin</small>
                         </div>
                         <span class="badge bg-dark text-white flex-shrink-0" style="font-size: 0.62rem;">OSL Admin</span>
                       </button>
@@ -969,9 +987,6 @@ async function handleManualLogin() {
    Liquid Glass & Mesh Aesthetic
    ========================================================================== */
 .pulse-login-canvas {
-  /* Decorative orbs may overflow, but must not create a hidden scroll container
-     that focus/scroll anchoring can pan sideways and clip the actual login UI. */
-  overflow: clip;
   background:
     radial-gradient(ellipse 60% 50% at 0% 0%, rgba(254, 205, 211, 0.55), transparent 70%),
     radial-gradient(ellipse 50% 60% at 100% 100%, rgba(186, 230, 253, 0.5), transparent 70%),
@@ -1181,7 +1196,7 @@ async function handleManualLogin() {
     padding-left: 0.5rem !important;
     padding-right: 0.5rem !important;
     justify-content: flex-start !important;
-    overflow-x: clip !important;
+    overflow-x: hidden !important;
     max-width: 100% !important;
     width: 100% !important;
   }
@@ -1323,6 +1338,12 @@ async function handleManualLogin() {
   0% { transform: rotate(0deg); }
   50% { transform: rotate(-8deg); }
   100% { transform: rotate(0deg); }
+}
+
+/* Hide browser native password reveal duplicate eye (Edge / Chrome) */
+input[type="password"]::-ms-reveal,
+input[type="password"]::-ms-clear {
+  display: none !important;
 }
 
 /* Neutralize Safari & Chrome aggressive autofill solid blue/yellow background locks */

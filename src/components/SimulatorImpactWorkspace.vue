@@ -5,7 +5,8 @@
 import {computed,ref,watch,onUnmounted} from 'vue'
 import SimulatorEventVillage from './SimulatorEventVillage.vue'
 import {buildControlRoomModel,controlRoomTime,recoveryControlRoomResult} from '../services/simulatorControlRoomService.js'
-const props=defineProps({data:Object,eventId:[String,Number],result:Object,disruptions:{type:Array,default:()=>[]},loading:Boolean,recovery:Object})
+import {groupActivities,activityKey} from '../services/simulatorActivityGroups.js'
+const props=defineProps({data:Object,eventId:[String,Number],result:Object,disruptions:{type:Array,default:()=>[]},loading:Boolean,recovery:Object,showFacilities:{type:Boolean,default:true}})
 // Selection, disclosure and playback are shared across the three views; none
 // of these controls changes the scenario or persisted event schedule.
 const timelineView=ref('overlay'),selectedId=ref(null),selectedCell=ref(null)
@@ -35,6 +36,33 @@ watch(()=>props.recovery,plan=>{if(!plan)previewMode.value='disrupted';else if(p
 // Leaving the page must stop its timer instead of advancing an invisible view.
 onUnmounted(stopPlayback)
 const selected=computed(()=>model.value.activities.find(a=>String(a.id)===String(selectedId.value)))
+// Overview counts match the Village: one per activity, not one per Day Ops crew copy.
+const statusRank={direct:0,downstream:1}
+const activityGroups=computed(()=>groupActivities(model.value.activities).map(g=>({...g,status:[...g.items].sort((a,b)=>(statusRank[a.status]??2)-(statusRank[b.status]??2))[0].status})))
+// Crew on the selected activity, with the people the disruption touches marked.
+const member=id=>props.data?.members?.find(m=>String(m.id)===String(id))?.full_name || 'Member '+id
+const selectedCrew=computed(()=>{const group=activityGroups.value.find(g=>g.ids.some(id=>String(id)===String(selectedId.value)));return (group?.items || []).flatMap(item=>(props.data?.segment_assignments || []).filter(a=>String(a.segment_id)===String(item.id)).map(a=>({name:member(a.member_id),affected:item.status!=='unchanged'})))})
+// Conflicts per activity: crew copies of one Day Ops activity count once, and two
+// copies of the same activity sharing a room are not a clash.
+const conflictCount=computed(()=>{
+ const list=viewResult.value?.newConflicts
+ if(!Array.isArray(list))return viewResult.value?.conflictCounts?.total ?? 0
+ const byId=new Map(model.value.activities.map(a=>[String(a.id),a]))
+ const keyOf=id=>byId.has(String(id))?activityKey(byId.get(String(id))):String(id)
+ return new Set(list.map((c,i)=>{const ids=c.segmentIds || (c.segmentId!=null?[c.segmentId]:[]);const keys=[...new Set(ids.map(keyOf))].sort();if(ids.length>1&&keys.length===1)return null;return keys.length?(c.type || '')+':'+keys.join('|'):'conflict'+i}).filter(Boolean)).size
+})
+// Time Machine: one row per activity (most affected copy), like the Village.
+const timelineRows=computed(()=>groupActivities(model.value.timeline).map(g=>({...[...g.items].sort((a,b)=>(statusRank[a.status]??2)-(statusRank[b.status]??2))[0],crew:g.items.length})))
+// Route on the map: what each person or room disruption touches, in time order.
+const period=d=>clockLabel(Date.parse(d.start))+'–'+clockLabel(Date.parse(d.end))
+const usesVenue=(segmentId,venue)=>(props.data?.segment_facility_slots || []).some(l=>String(l.segment_id)===String(segmentId)&&(props.data?.facility_slots || []).some(slot=>String(slot.id)===String(l.facility_slot_id)&&slot.venue_name===venue))
+const memberRoutes=computed(()=>props.disruptions.filter(d=>d.type==='MEMBER_UNAVAILABLE'||d.type==='FACILITY_UNAVAILABLE').map(d=>d.type==='MEMBER_UNAVAILABLE'?{
+ label:member(d.memberId)+"'s tasks, "+period(d)+', in time order',
+ ids:model.value.activities.filter(a=>a.status==='direct'&&(props.data?.segment_assignments || []).some(x=>String(x.segment_id)===String(a.id)&&String(x.member_id)===String(d.memberId))).map(a=>String(a.id))
+}:{
+ label:d.venueName+"'s activities, "+period(d)+', in time order',
+ ids:model.value.activities.filter(a=>a.status==='direct'&&usesVenue(a.id,d.venueName)).map(a=>String(a.id))
+}).filter(r=>r.ids.length))
 const statusLabel=status=>status==='direct'?'Direct impact':status==='downstream'?'Downstream risk':'No detected impact'
 function selectActivity(activity,preservePlayback=false){selectedId.value=activity.id;const ms=Date.parse(activity.simulated.starts_at);if(!preservePlayback && Number.isFinite(ms)){const day=new Date(ms+8*3600000).toISOString().slice(0,10);if(day!==model.value.day)selectedDay.value=day;}}
 function barStyle(bar){return bar?{left:bar.left+'%',width:Math.max(bar.width,0.25)+'%'}:{}}
@@ -84,26 +112,27 @@ const heatLabel=status=>({'outage':'Outage','conflict':'Conflict','in-use':'Even
     <section id="impact-dependencies" class="pulse-card p-3 p-lg-4 sim-graph-panel" aria-label="Event Village">
      <div class="village-workspace">
       <div class="village-map-panel">
-     <div class="d-flex justify-content-between flex-wrap gap-2 mb-2"><h5 class="fw-bold">Event Village</h5><button type="button" class="btn btn-outline-secondary btn-sm" @click="cascadeKey++">Replay cascade</button></div>
+     <div class="d-flex justify-content-between flex-wrap gap-2 mb-2"><div><span class="text-uppercase fw-bold text-primary small d-block" style="font-size:.65rem">Step 2 &middot; What&rsquo;s affected</span><h5 class="fw-bold">Event Village</h5></div><button type="button" class="btn btn-outline-secondary btn-sm" @click="cascadeKey++">Replay cascade</button></div>
      <div class="sim-impact-legend small mb-2"><span class="direct">Direct impact</span><span class="downstream">Downstream risk</span><span>No detected impact</span></div>
 
      <p v-if="model.cycle" class="alert alert-warning small" role="status">A dependency cycle exists. This graph does not establish a valid activity order.</p>
-<SimulatorEventVillage ref="village" @inspect-edge="selectedEdge=$event" :model="model" :selected-id="selectedId" :replay-version="cascadeKey" @select="selectActivity" />
+<SimulatorEventVillage ref="village" :routes="memberRoutes" @inspect-edge="selectedEdge=$event" :model="model" :selected-id="selectedId" :replay-version="cascadeKey" @select="selectActivity" />
       </div>
       <aside class="impact-sidebar">
        <!-- One shared model supplies map statuses and overview counts; no
             dependency or cascade calculation is duplicated in the UI. -->
        <section aria-label="Impact Overview"><h6 class="fw-bold">Impact Overview</h6><span class="small text-muted" role="status">{{ previewMode==='recovery'?'Recovery preview':'Simulation complete' }}</span>
-        <dl class="sim-summary simulator-metrics"><div><dt>Activities</dt><dd data-testid="impact-total">{{ model.activities.length }}</dd></div><div><dt>Direct impact</dt><dd data-testid="impact-direct">{{ model.activities.filter(a=>a.status==='direct').length }}</dd></div><div><dt>Downstream risk</dt><dd data-testid="impact-downstream">{{ model.activities.filter(a=>a.status==='downstream').length }}</dd></div><div><dt>Conflicts</dt><dd data-testid="impact-conflicts">{{ viewResult?.conflictCounts?.total ?? viewResult?.newConflicts?.length ?? 0 }}</dd></div></dl>
+        <dl class="sim-summary simulator-metrics"><div><dt>Activities</dt><dd data-testid="impact-total">{{ activityGroups.length }}</dd></div><div><dt>Direct impact</dt><dd data-testid="impact-direct">{{ activityGroups.filter(a=>a.status==='direct').length }}</dd></div><div><dt>Downstream risk</dt><dd data-testid="impact-downstream">{{ activityGroups.filter(a=>a.status==='downstream').length }}</dd></div><div><dt>Conflicts</dt><dd data-testid="impact-conflicts">{{ conflictCount }}</dd></div></dl>
        </section>
        <section class="selected-activity" aria-label="Selected Activity"><div class="selected-heading"><h6 class="fw-bold mb-0">Selected Activity</h6><span v-if="selected" class="activity-impact-badge" :class="selected.status">{{ statusLabel(selected.status) }}</span></div><p v-if="!selected" class="small text-muted mt-2">Select an activity to inspect.</p>
         <div v-else class="sim-inspection small" role="status" aria-label="Activity inspector"><h5 class="selected-name">{{ selected.title }}</h5>
+         <p v-if="selectedCrew.length" class="activity-fact selected-crew"><span aria-hidden="true">&#128101;</span><span><template v-for="(person,i) in selectedCrew" :key="i"><span v-if="i">, </span><strong v-if="person.affected" class="crew-affected">{{ person.name }} (affected)</strong><template v-else>{{ person.name }}</template></template></span></p>
          <div v-for="(cause,i) in causeRows" :key="i" class="activity-fact"><svg aria-hidden="true" width="15" height="15" viewBox="0 0 24 24" fill="currentColor" style="flex-shrink:0"><path v-if="cause.icon==='person'" d="M12 3a4 4 0 1 0 0 8 4 4 0 0 0 0-8M4 21v-3a8 6 0 0 1 16 0v3Z"/><path v-else-if="cause.icon==='facility'" d="M3 21V7l9-5 9 5v14h-7v-7h-4v7ZM6 8v3h3V8Zm9 0v3h3V8Z"/><path v-else d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20m1 4v6l4 3-1 2-5-4V6Z"/></svg><span>{{ cause.text }}</span></div><p v-if="!causeRows.length && selected.causes.length" class="activity-fact">{{ selected.causes[0] }}</p>
-         <p class="activity-fact schedule-fact"><span aria-hidden="true">&#9719;</span><span v-if="!scheduleKnown">Schedule evidence unavailable</span><span v-else-if="!scheduleChanged">Schedule unchanged</span><span v-else>Schedule changed: {{ controlRoomTime(selected.simulated.starts_at) }}&ndash;{{ controlRoomTime(selected.simulated.ends_at) }}</span></p>
+         <p class="activity-fact schedule-fact"><span aria-hidden="true">&#9719;</span><span v-if="!scheduleKnown">Schedule evidence unavailable</span><span v-else-if="!scheduleChanged">{{ selected.status==='unchanged'?'Not affected':'Schedule unchanged' }}</span><span v-else>Schedule changed: {{ controlRoomTime(selected.simulated.starts_at) }}&ndash;{{ controlRoomTime(selected.simulated.ends_at) }}</span></p>
          <div v-if="selectedDependencies.length" class="selected-dependencies"><h6 class="fw-bold">Dependencies</h6><div v-if="prerequisites.length" class="context-dependencies"><strong>Immediate prerequisites</strong><button v-for="e in prerequisites" :key="e.from.id" type="button" @click="selectLinked(e.from.id)">&larr; {{ e.from.title }}</button></div><div v-if="dependents.length" class="context-dependencies"><strong>Immediate dependents</strong><button v-for="e in dependents" :key="e.to.id" type="button" @click="selectLinked(e.to.id)">&rarr; {{ e.to.title }}</button></div></div>
         </div>
         <button v-if="model.edges.length" type="button" class="btn btn-pulse-outline btn-sm mt-2" @click="dependencyDialog.showModal()">View all dependencies</button>
-        <details v-if="selected" class="small mt-3"><summary>Full activity evidence</summary><p v-for="cause in selected.causes" :key="cause">{{ cause }}</p><p>Original: {{ controlRoomTime(selected.starts_at) }}&ndash;{{ controlRoomTime(selected.ends_at) }}</p><p>Simulated: {{ controlRoomTime(selected.simulated.starts_at) }}&ndash;{{ controlRoomTime(selected.simulated.ends_at) }}</p><p>Downstream risk requires review; it is not a confirmed failure.</p><a href="#simulator-recovery">Review recovery options</a></details>
+        <details v-if="selected" class="small mt-3"><summary>Full activity evidence</summary><p v-for="cause in selected.causes" :key="cause">{{ cause }}</p><p>Original: {{ controlRoomTime(selected.starts_at) }}&ndash;{{ controlRoomTime(selected.ends_at) }}</p><p>Simulated: {{ controlRoomTime(selected.simulated.starts_at) }}&ndash;{{ controlRoomTime(selected.simulated.ends_at) }}</p><p v-if="selected.status==='downstream'">Downstream risk requires review; it is not a confirmed failure.</p><a href="#simulator-recovery">Review recovery options</a></details>
        </section>
        <section v-if="selectedEdge" class="small mt-3" aria-label="Selected dependency"><strong>Recorded direct dependency</strong><div><button type="button" class="btn btn-link btn-sm p-0" @click="selectLinked(selectedEdge.from.id)">{{ selectedEdge.from.title }}</button> &rarr; <button type="button" class="btn btn-link btn-sm p-0" @click="selectLinked(selectedEdge.to.id)">{{ selectedEdge.to.title }}</button></div></section>
 
@@ -113,13 +142,13 @@ const heatLabel=status=>({'outage':'Outage','conflict':'Conflict','in-use':'Even
     <dialog v-if="model.edges.length" ref="dependencyDialog" class="dependency-dialog pulse-card" aria-label="All recorded dependencies"><div class="d-flex justify-content-between gap-3"><h6>Recorded dependencies</h6><button type="button" class="btn btn-pulse-outline btn-sm" @click="dependencyDialog.close()">Close dependencies</button></div><p class="small text-muted">Direct prerequisite relationships only. Downstream cascade risk does not add edges.</p><ul><li v-for="(e,i) in model.edges" :key="i"><button type="button" class="btn btn-link btn-sm" @click="selectLinked(e.from.id)">{{ e.from.title }}</button> &rarr; <button type="button" class="btn btn-link btn-sm" @click="selectLinked(e.to.id)">{{ e.to.title }}</button></li></ul></dialog>
     <details id="impact-timeline" :open="timelineOpen" @toggle="toggleTimeline" class="pulse-card p-3 p-lg-4 sim-time-panel">
       <summary class="impact-disclosure-heading">Time Machine <span class="small text-muted">View schedule and playback controls</span></summary>
-     <header class="timeline-header"><div><h6 class="fw-bold mb-1">Time Machine</h6><span class="small text-muted">Explore schedule changes &middot; Singapore time</span></div><div class="timeline-header-controls"><div role="group" aria-label="Timeline display" class="d-flex gap-1"><button v-for="mode in ['original','simulated','overlay']" :key="mode" type="button" class="btn btn-sm text-capitalize" :class="timelineView===mode ? 'btn-pulse-primary' : 'btn-pulse-outline'" :aria-pressed="timelineView===mode" @click="timelineView=mode">{{ mode }}</button></div><button type="button" class="btn btn-pulse-outline btn-sm" :aria-expanded="heatmapOpen" aria-controls="impact-facilities" @click="heatmapOpen=!heatmapOpen">{{ heatmapOpen?'Hide heatmap':'Show heatmap' }}</button></div></header>
+     <header class="timeline-header"><div><h6 class="fw-bold mb-1">Time Machine</h6><span class="small text-muted">Explore schedule changes &middot; Singapore time</span></div><div class="timeline-header-controls"><div role="group" aria-label="Timeline display" class="d-flex gap-1"><button v-for="mode in ['original','simulated','overlay']" :key="mode" type="button" class="btn btn-sm text-capitalize" :class="timelineView===mode ? 'btn-pulse-primary' : 'btn-pulse-outline'" :aria-pressed="timelineView===mode" @click="timelineView=mode">{{ mode }}</button></div><button v-if="showFacilities" type="button" class="btn btn-pulse-outline btn-sm" :aria-expanded="heatmapOpen" aria-controls="impact-facilities" @click="heatmapOpen=!heatmapOpen">{{ heatmapOpen?'Hide heatmap':'Show heatmap' }}</button></div></header>
 <div class="sim-impact-legend small mt-3" role="group" aria-label="Timeline impact colours"><span class="direct">Direct impact</span><span class="downstream">Downstream risk</span><span>No detected impact</span></div>
 <div class="sim-schedule-legend small mb-2"><span>&#9648; Original schedule</span><span>&#9648; {{ previewMode==='recovery'?'Proposed recovery':'Simulated schedule' }}</span><span>&#9474; Playback marker</span></div>
      <div v-if="model.days.length>1" class="mb-3"><label class="small fw-bold" for="impact-day">Event day (Singapore)</label><select id="impact-day" class="form-select form-select-sm" :value="model.day" @change="selectedDay=$event.target.value"><option v-for="day in model.days" :key="day" :value="day">{{ day }}</option></select></div>
      <div class="sim-timeline-axis small text-muted"><span>{{ controlRoomTime(model.domain.start) }}</span><span>{{ controlRoomTime(model.domain.end) }}</span></div>
-     <div v-for="row in model.timeline" :key="row.id" class="sim-timeline-row">
-      <button type="button" class="sim-row-label" @click="selectActivity(row)">{{ row.title }}</button>
+     <div v-for="row in timelineRows" :key="row.id" class="sim-timeline-row" :class="row.status">
+      <button type="button" class="sim-row-label" @click="selectActivity(row)">{{ row.title }}<small v-if="row.crew>1" class="sim-row-crew"> · {{ row.crew }} crew</small></button>
       <div class="sim-timeline-lane">
        <button v-if="timelineView!=='simulated' && row.originalBar" type="button" class="sim-time-bar original" :class="{overlay:timelineView==='overlay'}" :style="barStyle(row.originalBar)" :aria-label="'Original '+row.title+': '+controlRoomTime(row.starts_at)+' to '+controlRoomTime(row.ends_at)" @click="selectActivity(row)" :title="row.title+': '+controlRoomTime(row.starts_at)+' to '+controlRoomTime(row.ends_at)"></button>
        <button v-if="timelineView!=='original' && row.simulatedBar" type="button" class="sim-time-bar simulated" :class="[row.status,{overlay:timelineView==='overlay'}]" :style="barStyle(row.simulatedBar)" :aria-label="'Simulated '+row.title+': '+controlRoomTime(row.simulated.starts_at)+' to '+controlRoomTime(row.simulated.ends_at)" @click="selectActivity(row)" :title="row.title+': '+controlRoomTime(row.simulated.starts_at)+' to '+controlRoomTime(row.simulated.ends_at)"></button>
@@ -137,18 +166,19 @@ const heatLabel=status=>({'outage':'Outage','conflict':'Conflict','in-use':'Even
      <section class="active-activities mt-3" aria-label="Activities at selected time"><div class="d-flex justify-content-between gap-2"><h6>Active at {{ clockLabel(selectedTime) }}</h6><span class="badge bg-light text-dark border">{{ activeActivities.length }} {{ activeActivities.length===1?'activity':'activities' }}</span></div><div class="active-rows"><button v-for="a in activeActivities" :key="a.id" type="button" :class="a.status" :aria-pressed="String(selectedId)===String(a.id)" @click="selectActivity(a,true)"><strong>{{ a.title }}</strong><span>{{ statusLabel(a.status) }}</span></button></div><p v-if="!activeActivities.length" class="small text-muted mb-0">No activities at this time.</p></section>
 
     </details>
-<details :open="heatmapOpen" @toggle="heatmapOpen=$event.target.open" id="impact-facilities" class="pulse-card p-3 p-lg-4 sim-heat-panel">
+<!-- Rooms only matter when a room or timing disruption is in the scenario -->
+<details v-if="showFacilities" :open="heatmapOpen" @toggle="heatmapOpen=$event.target.open" id="impact-facilities" class="pulse-card p-3 p-lg-4 sim-heat-panel">
       <summary class="impact-disclosure-heading">Facility Heatmap <span class="small text-muted">{{ hasFacilityImpact ? 'Room or timing impacts to review' : 'View facility evidence' }}</span></summary>
-     <div class="heatmap-heading"><h6 class="fw-bold mb-0">Facility Heatmap</h6><span class="small text-muted">{{ clockLabel(selectedTime) }}</span></div>
-     <p class="small text-muted">&ldquo;No event use shown&rdquo; does not mean a room is available or approved.</p>
+     <p class="small text-muted mt-2">Each row is a room this event uses, across the day. Grey only means this event isn't using it then; it doesn't mean the room is free. <span class="text-nowrap">Time shown: {{ clockLabel(selectedTime) }}</span></p>
      <div class="sim-heat-legend small mb-3" aria-label="Heatmap states"><span class="in-use">Event use</span><span class="conflict">Conflict</span><span class="outage">Outage</span><span class="no-event-use">No event use shown</span></div>
 
-     <p v-if="!model.facilities.length" class="small mb-0" role="status">No accessible linked facility bookings for this event. Arrange the original booking through Facility Calendar; no reservation is invented here.</p>
+     <p v-if="!model.facilities.length" class="small mb-0" role="status">No rooms recorded for this event yet. Add a venue to the event or its tasks in Day-of Ops, or link a booking from the Facility Calendar.</p>
      <p v-if="model.missingLinks" class="alert alert-warning small">Some linked booking records are inaccessible. Verify calendar coverage before acting.</p>
      <div v-for="facility in model.facilities" :key="facility.id" class="sim-facility-row">
       <strong>{{ facility.name }}</strong>
-      <details class="small"><summary>Linked booking details</summary><div v-for="booking in facility.bookings" :key="booking.id" class="small text-muted mb-1">Booking {{ booking.id }} &middot; {{ booking.status || 'Approval unverified' }} &middot; {{ booking.booking_date || booking.event_date }} {{ booking.start_time || booking.time_slot }}<span v-if="booking.end_time">&ndash;{{ booking.end_time }}</span></div></details>
-      <p class="small text-muted sim-scroll-hint">Swipe or scroll horizontally for later time intervals.</p>
+      <span v-if="facility.bookings.every(b=>b.venue_only)" class="small text-muted"> &middot; Day-of Ops venue, no booking linked</span>
+      <details v-else class="small"><summary>Linked booking details</summary><div v-for="booking in facility.bookings.filter(b=>!b.venue_only)" :key="booking.id" class="small text-muted mb-1">Booking {{ booking.id }} &middot; {{ booking.status || 'Approval unverified' }} &middot; {{ booking.booking_date || booking.event_date }} {{ booking.start_time || booking.time_slot }}<span v-if="booking.end_time">&ndash;{{ booking.end_time }}</span></div></details>
+      <p class="small text-muted sim-scroll-hint d-md-none">Swipe for later times.</p>
       <div class="sim-heat-scroll" tabindex="0" role="region" :aria-label="facility.name+' scrollable usage intervals'"><div class="sim-heat-labels small" :style="{gridTemplateColumns:'repeat('+facility.cells.length+', minmax(4.5rem,1fr))'}"><span v-for="cell in facility.cells" :key="cell.start">{{ new Intl.DateTimeFormat('en-SG',{timeZone:'Asia/Singapore',hour:'2-digit',minute:'2-digit',hourCycle:'h23'}).format(new Date(cell.start)) }}</span></div>
       <div class="sim-heat-cells" :style="{gridTemplateColumns:'repeat('+Math.max(1,facility.cells.length)+', minmax(4.5rem, 1fr))'}" role="group" :aria-label="facility.name+' booking timeline'">
        <button v-for="(cell,i) in facility.cells" :key="i" type="button" class="sim-heat-cell" :class="[cell.status,{current:selectedTime>=cell.start && selectedTime<cell.end,'is-selected':selectedCell?.start===cell.start && selectedCell?.facility===facility.name}]" :aria-pressed="selectedCell?.start===cell.start && selectedCell?.facility===facility.name" :aria-label="facility.name+': '+controlRoomTime(cell.start)+' to '+controlRoomTime(cell.end)+', '+cell.label" :title="controlRoomTime(cell.start)+' to '+controlRoomTime(cell.end)+': '+cell.label" @click="inspectCell(cell,facility.name)"><span class="visually-hidden">{{ cell.label }}</span><span aria-hidden="true">{{ heatLabel(cell.status) }}</span></button>
@@ -183,4 +213,6 @@ button:focus-visible,summary:focus-visible,[tabindex]:focus-visible{outline:2px 
 .selected-heading,.heatmap-heading{display:flex;justify-content:space-between;align-items:center;gap:.5rem}.activity-impact-badge{font-size:.65rem;font-weight:700;padding:.3rem .45rem;border-radius:.4rem;background:var(--pulse-blue-bg);white-space:nowrap}.activity-impact-badge.direct{background:var(--pulse-primary-light);color:var(--pulse-primary)}.activity-impact-badge.downstream{background:var(--pulse-amber-bg);color:var(--pulse-amber)}.selected-name{font-size:1.05rem;font-weight:750;line-height:1.4;margin:.8rem 0 .6rem}.activity-fact{display:flex;gap:.4rem;align-items:baseline;margin:.6rem 0}.selected-dependencies{border-top:1px solid var(--pulse-border);margin-top:1rem;padding-top:1rem}.context-dependencies strong{font-size:.7rem;font-weight:500;color:var(--pulse-ink-muted)}.sim-timeline-row{padding:.4rem 0}.sim-timeline-lane{height:35px}.sim-time-bar.original.overlay{height:10px;top:2px}.sim-time-bar.simulated.overlay{height:15px;top:17px}.sim-time-bar:not(.overlay){height:25px;top:5px}.sim-heat-cell{font-size:.72rem}.heatmap-heading{margin-bottom:.7rem}
 .impact-disclosure-heading{cursor:pointer;font-weight:650;min-height:44px;line-height:1.5}.impact-disclosure-heading span{display:block;font-weight:400;margin:.25rem 0 .5rem}.sim-time-panel,.sim-heat-panel{min-width:0;scroll-margin-top:1.5rem}
 @media(min-width:1024px){.sim-visual-grid.panels-both-open>.sim-time-panel,.sim-visual-grid.panels-both-open>.sim-heat-panel{grid-column:auto;align-self:stretch}}
+.sim-row-crew{color:var(--pulse-ink-muted)}.sim-timeline-row.direct .sim-row-label{color:#c81e4a;font-weight:700}.sim-timeline-row.downstream .sim-row-label{color:#9a6b00;font-weight:700}
+.crew-affected{color:var(--pulse-primary)}
 </style>
