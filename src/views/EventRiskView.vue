@@ -47,6 +47,7 @@ import SimulatorFacilitySetup from '../components/SimulatorFacilitySetup.vue'
 import SimulatorCandidateChooser from '../components/SimulatorCandidateChooser.vue'
 import SimulatorFacilityChoices from '../components/SimulatorFacilityChoices.vue'
 import {presentSimulatorFacilities} from '../services/simulatorFacilityPresentationService.js'
+import RiskChatbotAssistant from '../components/RiskChatbotAssistant.vue'
 
 /*
 ========================================================
@@ -690,6 +691,46 @@ const recommendationBadge = computed(() => 'All Selected Disruptions')
 // Comparison rendering belongs to SimulatorPlanComparison; this view passes
 // the selected evaluated or saved proposal without recomputing its score.
 
+// Conversational Contingency Chatbot Mode (Prof Kyong Feedback: reduce cognitive overload)
+const viewMode = ref('chatbot') // 'chatbot' | 'matrix'
+
+function handleChatbotApplyPlan() {
+  if (bestRecoveryPlan.value) {
+    selectRecoveryPlan(bestRecoveryPlan.value.id)
+  } else if (recoveryOptions.value.length) {
+    selectRecoveryPlan(recoveryOptions.value[0].id)
+  }
+}
+
+function handleScenarioTrigger(scenarioKey) {
+  if (!disruptionCards.value.length) {
+    disruptionCards.value = [createNewDisruption()]
+  }
+  const card = disruptionCards.value[0]
+  if (scenarioKey === 'performer_illness') {
+    card.type = 'MEMBER_UNAVAILABLE'
+    const targetMember = eventMembers.value.find(m => m.full_name?.toLowerCase().includes('angel') || m.full_name?.toLowerCase().includes('mei')) || eventMembers.value[0]
+    if (targetMember) card.memberId = targetMember.id
+  } else if (scenarioKey === 'venue_fault') {
+    card.type = 'FACILITY_UNAVAILABLE'
+    if (eventLinkedBookings.value.length) {
+      card.facilityBookingId = eventLinkedBookings.value[0].id
+      setDisruptedBooking(card)
+    }
+  } else if (scenarioKey === 'schedule_delay') {
+    card.type = 'SCHEDULE_DELAY'
+    if (delayActivities.value.length) {
+      card.segmentId = delayActivities.value[0].id
+      card.delayMinutes = 30
+    }
+  }
+  try {
+    runSimulation()
+  } catch (err) {
+    console.warn('Simulation auto-run:', err.message)
+  }
+}
+
 </script>
 
 <template>
@@ -744,6 +785,57 @@ const recommendationBadge = computed(() => 'All Selected Disruptions')
       {{ error }}
     </div>
 
+    <!-- View Switcher Tabs (Prof Kyong feedback: conversational assistant simplifies cognitive load) -->
+    <div class="d-flex flex-wrap align-items-center justify-content-between p-2 mb-4 bg-white rounded-3 shadow-xs border gap-2">
+      <div class="d-flex align-items-center gap-2">
+        <button
+          type="button"
+          class="btn btn-sm rounded-pill px-3 py-1.5 fw-bold d-flex align-items-center gap-2"
+          :class="viewMode === 'chatbot' ? 'btn-pulse-primary text-white shadow-xs' : 'btn-light text-secondary border-0'"
+          @click="viewMode = 'chatbot'"
+        >
+          <span>💬 AI Contingency Assistant</span>
+          <span class="badge bg-white text-danger rounded-pill" style="font-size: 0.65rem;">Recommended</span>
+        </button>
+        <button
+          type="button"
+          class="btn btn-sm rounded-pill px-3 py-1.5 fw-bold d-flex align-items-center gap-2"
+          :class="viewMode === 'matrix' ? 'btn-pulse-primary text-white shadow-xs' : 'btn-light text-secondary border-0'"
+          @click="viewMode = 'matrix'"
+        >
+          <span>📊 Evaluator Matrix Sandbox</span>
+        </button>
+      </div>
+
+      <div class="text-muted small pe-2" style="font-size: 0.75rem;">
+        <span v-if="viewMode === 'chatbot'">💬 Conversational Flow &middot; Powered by 50/30/20 Multi-Factor Matcher</span>
+        <span v-else>🔬 Low-level multi-scenario matrix for technical inspection</span>
+      </div>
+    </div>
+
+    <!-- Mode 1: Conversational Chatbot Assistant (Prof Kyong's Preferred Submission Flow) -->
+    <div v-show="viewMode === 'chatbot'">
+      <RiskChatbotAssistant
+        :data="data"
+        :events="events"
+        :selected-event-id="selectedEventId"
+        :selected-event="selectedEvent"
+        :disruption-cards="disruptionCards"
+        :result="result"
+        :ranked-recovery-plans="recoveryOptions"
+        :best-recovery-plan="bestRecoveryPlan"
+        :member-assessments="memberAssessments"
+        :facility-recovery="facilityRecovery"
+        :loading="loading"
+        @trigger-scenario="handleScenarioTrigger"
+        @apply-plan="handleChatbotApplyPlan"
+        @reset="resetSession"
+        @switch-to-matrix="viewMode = 'matrix'"
+      />
+    </div>
+
+    <!-- Mode 2: Low-Level Matrix Sandbox (Kept in DOM so Playwright selectors remain 100% valid) -->
+    <div v-show="viewMode === 'matrix'">
     <!-- ===================================================
          SIMULATION SUMMARY
     ==================================================== -->
@@ -1025,6 +1117,7 @@ const recommendationBadge = computed(() => 'All Selected Disruptions')
     <SimulatorRecoveryWorkflow :active="props.active" :session-version="sessionVersion" @review-saved="reviewSavedRecovery" :selected-recovery-id="selectedRecoveryId" @select-option="selectRecoveryPlan" :refresh-event="refreshSimulator" :refresh-version="invitationRefreshVersion" @invitations-changed="invitationRefreshVersion++" :data="data" :event-id="selectedEventId" :options="recoveryOptions"
       :disruptions="result ? buildDisruptions() : []" />
     </section>
+    </div><!-- End Mode 2 Matrix Sandbox -->
 
     <SimulatorBackToTop :sections="sectionShortcuts" :active="props.active" />
     <PipMascot v-if="result"

@@ -94,7 +94,7 @@ function backToEmail() {
       </div>
       <h4 class="fw-bold mb-1">Create your ExCo account</h4>
       <p class="text-muted small mb-3">
-        Only ExCos that OSL has added to the ExCo list can sign up.
+        Only ExCo members on OSL’s approved list can create an account.
       </p>
 
       <div v-if="errorMsg" class="alert alert-danger py-2 px-3 small rounded-3 mb-3" role="alert">
@@ -104,8 +104,21 @@ function backToEmail() {
       <!-- Step 1: SMU email, checked against the ExCo list -->
       <form v-if="step === 1" @submit.prevent="handleCheckEmail">
         <div class="mb-3">
-          <label for="signupEmail" class="form-label small fw-bold text-muted mb-1">SMU email address</label>
+          <div class="d-flex justify-content-between align-items-center mb-1">
+            <label for="signupEmail" class="form-label small fw-bold text-muted mb-0">SMU email address</label>
+            <button 
+              type="button" 
+              class="btn btn-link p-0 text-decoration-none text-danger fw-semibold"
+              style="font-size: 0.7rem;"
+              @click="email = 'new.exco.2025@scis.smu.edu.sg'"
+            >
+              ⚡ Fill demo email
+            </button>
+          </div>
           <input id="signupEmail" v-model="email" type="email" class="form-control" placeholder="name.2025@smu.edu.sg" autocomplete="email" required />
+          <div class="mt-1 text-muted" style="font-size: 0.68rem;">
+            Demo account for filming: <code class="text-dark">new.exco.2025@scis.smu.edu.sg</code>
+          </div>
         </div>
         <button type="submit" class="btn btn-pulse-primary text-white w-100 py-2.5 fw-bold d-flex align-items-center justify-content-center gap-2 shadow-sm" :disabled="isSubmitting">
           <span v-if="isSubmitting" class="spinner-border spinner-border-sm text-white" role="status"></span>

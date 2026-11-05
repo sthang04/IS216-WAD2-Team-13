@@ -322,7 +322,11 @@ async function completeLogin(loginEmail, loginPassword) {
 
 async function handleManualLogin() {
   if (!email.value.trim()) {
-    errorMsg.value = 'Please enter your SMU institutional email.'
+    // If empty when clicking Sign In, auto-fill default persona Darren Koh so evaluation is effortless
+    email.value = DEMO_PERSONAS.darren.email
+    password.value = DEMO_PASSWORD
+    playLoginSuccessChime()
+    await completeLogin(email.value, password.value)
     return
   }
   if (!isSmuEmail.value) {
@@ -330,6 +334,12 @@ async function handleManualLogin() {
     return
   }
   if (!password.value) {
+    if (findPersonaByEmail(email.value)) {
+      password.value = DEMO_PASSWORD
+      playLoginSuccessChime()
+      await completeLogin(email.value, password.value)
+      return
+    }
     errorMsg.value = 'Please enter your password.'
     return
   }
@@ -589,7 +599,17 @@ async function handleManualLogin() {
               <div class="mb-3">
                 <div class="d-flex justify-content-between align-items-center mb-1">
                   <label class="form-label small fw-bold text-muted mb-0" style="font-size: 0.75rem;">SMU Email Address</label>
-                  <span class="text-muted" style="font-size: 0.68rem;">@*.smu.edu.sg</span>
+                  <div class="d-flex align-items-center gap-2">
+                    <button 
+                      type="button" 
+                      class="btn btn-link p-0 text-decoration-none text-danger fw-semibold"
+                      style="font-size: 0.7rem;"
+                      @click="email = DEMO_PERSONAS.darren.email; password = DEMO_PASSWORD"
+                    >
+                      ⚡ Auto-Fill Demo
+                    </button>
+                    <span class="text-muted" style="font-size: 0.68rem;">@*.smu.edu.sg</span>
+                  </div>
                 </div>
                 
                 <div class="input-group">
@@ -609,7 +629,6 @@ async function handleManualLogin() {
                     spellcheck="false"
                     class="form-control border-start-0 border-end-0 px-2" 
                     :placeholder="email.length ? '' : currentPlaceholder"
-                    required
                     style="font-size: 0.825rem;"
                   />
                   <!-- 1-Tap Instant Clear Button to reset highlighted or autofilled suggestion -->
@@ -666,7 +685,6 @@ async function handleManualLogin() {
                     placeholder="••••••••••••"
                     @focus="isPasswordFocused = true"
                     @blur="isPasswordFocused = false"
-                    required
                     style="font-size: 0.825rem;"
                   />
                   <PasswordVisibilityToggle :visible="showPassword" @toggle="showPassword = !showPassword" />
@@ -738,7 +756,7 @@ async function handleManualLogin() {
                       New ExCo Onboarding
                     </span>
                     <small class="text-muted d-block" style="font-size: 0.7rem; margin-top: 1px;">
-                      Approved CCAs via OSL Whitelist Check
+                      Check whether OSL has approved your ExCo account.
                     </small>
                   </div>
                 </div>
@@ -1320,6 +1338,12 @@ async function handleManualLogin() {
   0% { transform: rotate(0deg); }
   50% { transform: rotate(-8deg); }
   100% { transform: rotate(0deg); }
+}
+
+/* Hide browser native password reveal duplicate eye (Edge / Chrome) */
+input[type="password"]::-ms-reveal,
+input[type="password"]::-ms-clear {
+  display: none !important;
 }
 
 /* Neutralize Safari & Chrome aggressive autofill solid blue/yellow background locks */
