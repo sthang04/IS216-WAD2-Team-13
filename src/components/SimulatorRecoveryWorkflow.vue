@@ -394,6 +394,42 @@ const appliedDifferences=computed(()=>{
  return rows
 })
 
+// Pip (the guided chat) drives this same workflow instead of a copy of it: it reads
+// pipState and calls pipAct. Every write still goes through queueAction/executePending,
+// so the confirmation key, idempotent Start and server gates above all still apply.
+// Pip's own button press is the user's confirmation, and its Apply button is the organiser review.
+// Ready apart from the organiser review, which Pip's Apply button records when pressed
+const pipApplyReady=computed(()=>{void clock.value;return !historyLoading.value&&!historyError.value&&
+ workflowReadiness({enabled:applicationEnabled.value,plan:plan.value,invites:history.value.invitations,manualAcknowledged:true}).ready&&
+ buildRecoveryTracker({plan:plan.value,invitations:history.value.invitations,audit:history.value.audit,manualAcknowledged:true,enabled:applicationEnabled.value,data:props.data,now:clock.value}).status==='Ready to apply'})
+const pipState=computed(()=>({
+ notice:recoveryNotice.value,canRequest:invitationEnabled.value,canApply:applicationEnabled.value,
+ busy:busy.value,busyAction:busyAction.value,error:error.value,message:message.value,loading:historyLoading.value,
+ planId:plan.value?.id || '',planTitle:plan.value?.title || '',applied:plan.value?.application_status || '',
+ members:memberRequirements.value.map(row=>({key:row.key,recipient:row.recipient,replaced:row.replaced,count:row.activities.size,
+  state:memberState(row),delivery:row.invitations[0]?deliveryLabel(row.invitations[0]):''})),
+ rooms:roomBlocks.value.map(b=>({key:b.key,venue:b.venue,span:blockSpan(b),status:blockStatus(b),hasClaim:!!blockClaim(b),linked:!!b.first.facilityBookingId})),
+ applyReady:pipApplyReady.value,outstanding:outstandingChecks.value,
+ unresolved:plan.value?.application_status==='Applied'?disruptionResolutions.value.filter(r=>!r.resolved).map(r=>({index:r.index,type:r.disruption.type,memberId:r.disruption.memberId,venueName:r.disruption.venueName})):[],
+ undoReady:applicationEnabled.value&&!busy.value&&!historyLoading.value&&!historyError.value&&undoStatus.value.ready,undoReason:undoStatus.value.reason || '',
+ saved:history.value.plans.map(p=>({id:p.id,title:p.title,application_status:p.application_status,lifecycle:p.lifecycle,status:savedTracker(p).status,updated:p.updated_at}))
+}))
+async function pipAct(name,arg){
+ if(name==='refresh')return refreshHistory()
+ if(name==='open-saved'){selectedPlanId.value=arg;return}
+ if(name==='room-target'){const block=roomBlocks.value.find(b=>b.key===arg);return block?blockRequestTarget(block):null}
+ if(name==='start')startPlan()
+ else if(name==='invite'){const row=memberRequirements.value.find(r=>r.key===arg);if(row)invite(row)}
+ else if(name==='link-room'){const block=roomBlocks.value.find(b=>b.key===arg);if(block)await chooseBlockClaim(block)}
+ else if(name==='apply'){manualAcknowledged.value=true;applyPlan()}
+ else if(name==='undo'){manualAcknowledged.value=true;undoPlan()}
+ else if(name==='cancel')cancelPlan()
+ // The organiser confirmed in Pip that the person/room is back; Undo still re-checks on the server
+ else if(name==='resolve'){const row=disruptionResolutions.value.find(r=>r.index===arg);if(row){manualAcknowledged.value=true;resolutionReasons.value[row.index]='Organiser confirmed in Pip that this disruption is over.';resolveDisruption(row)}}
+ if(pendingAction.value){confirmed.value=true;await executePending()}
+}
+defineExpose({pipState,pipAct})
+
 </script>
 
 <template>
