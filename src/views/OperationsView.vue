@@ -2,7 +2,7 @@
 import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue';
 import { supabase } from '../supabase';
 import { session as facilitySession } from '../services/sessionState';
-import { loadClubExcos, loadEvents as fetchEvents, saveEvent as saveEventToDb, deleteEvent as deleteEventFromDb, isMissingTableError } from '../services/opsService';
+import { loadClubExcos, loadEvents as fetchEvents, saveEvent as saveEventToDb, deleteEvent as deleteEventFromDb, isMissingTableError, loadClubBookings } from '../services/opsService';
 
 const props = defineProps({
   apiMode: { type: Boolean, default: false },
@@ -586,6 +586,7 @@ function openNewEvent() {
     name: '',
     date: '',
     venue: '',
+    facilityBookingId: null,
     start: '',
     end: '',
     mainStart: '',
@@ -603,12 +604,39 @@ function openEditEvent() {
     name: event.value.name,
     date: event.value.date,
     venue: event.value.venue,
+    facilityBookingId: event.value.facilityBookingId ?? null,
     // Older events have no times saved: start from what the tasks cover
     start: formatTime(event.value.start ?? dayStart.value),
     end: formatTime(event.value.end ?? dayEnd.value),
     crewIds: crew.value.map(p => p.memberId)
   }
   eventEditorError.value = ''
+}
+
+// The CCA's bookings on the event's date (Master Facility Calendar). Linking one
+// lets Event Risk test "what if this room is unavailable" on this event.
+const bookingOptions = ref([])
+const bookingOptionsNote = ref('')
+watch(() => eventEditor.value?.date, async (date) => {
+  bookingOptions.value = []
+  bookingOptionsNote.value = ''
+  if (!date || dataMode.value !== 'supabase' || !activeClubId.value) return
+  try {
+    const bookings = await loadClubBookings(activeClubId.value, date)
+    if (eventEditor.value?.date !== date) return
+    bookingOptions.value = bookings
+    // A booking from another date no longer applies
+    if (!bookings.some(b => b.id === eventEditor.value.facilityBookingId)) eventEditor.value.facilityBookingId = null
+  } catch {
+    bookingOptionsNote.value = 'Could not load your bookings. Try again later.'
+  }
+})
+
+// Picking a booking fills in the venue if it's still empty
+function pickBooking() {
+  const e = eventEditor.value
+  const booking = bookingOptions.value.find(b => b.id === e.facilityBookingId)
+  if (booking && !e.venue.trim()) e.venue = booking.facility
 }
 
 // People being taken off the crew, and how many tasks they'd lose
@@ -641,6 +669,7 @@ function saveEvent() {
       name: e.name.trim(),
       date: e.date,
       venue: e.venue.trim(),
+      facilityBookingId: e.facilityBookingId ?? null,
       start,
       end,
       crew: excoPool.value
@@ -656,6 +685,7 @@ function saveEvent() {
     event.value.name = e.name.trim()
     event.value.date = e.date
     event.value.venue = e.venue.trim()
+    event.value.facilityBookingId = e.facilityBookingId ?? null
     event.value.start = start
     event.value.end = end
     const kept = event.value.crew.filter(p => e.crewIds.includes(p.memberId))
@@ -1331,6 +1361,15 @@ function clearLate(person) {
                 <label for="opsEventVenue" class="form-label small fw-bold text-muted mb-1">Venue</label>
                 <input id="opsEventVenue" v-model="eventEditor.venue" type="text" class="form-control form-control-sm" placeholder="e.g. Main Hall" />
               </div>
+            </div>
+
+            <div v-if="dataMode === 'supabase'" class="mb-3">
+              <label for="opsEventBooking" class="form-label small fw-bold text-muted mb-1">Facility booking</label>
+              <select id="opsEventBooking" v-model="eventEditor.facilityBookingId" class="form-select form-select-sm" :disabled="!eventEditor.date" @change="pickBooking">
+                <option :value="null">{{ !eventEditor.date ? 'Pick a date first' : bookingOptions.length ? 'Not linked' : 'No bookings for your CCA on this date' }}</option>
+                <option v-for="b in bookingOptions" :key="b.id" :value="b.id">{{ b.facility }} · {{ b.start }}–{{ b.end }} ({{ b.status }})</option>
+              </select>
+              <div class="text-muted ops-small mt-1">{{ bookingOptionsNote || 'From the Master Facility Calendar. Lets Event Risk test "what if this room is unavailable".' }}</div>
             </div>
 
             <div class="row g-2 mb-1">

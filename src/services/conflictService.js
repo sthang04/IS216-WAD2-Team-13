@@ -793,6 +793,9 @@ export function compareFacilityScheduleConflicts(
 
       if (!segmentMap.has(link.segment_id)) continue;
       if (!facilityMap.has(link.facility_slot_id)) continue;
+      // A Day-of Ops venue with no booking (e.g. a hall) can hold several
+      // activities at once; only real bookings are single-use slots.
+      if (facilityMap.get(link.facility_slot_id).venue_only) continue;
 
       if (!segmentsByFacility.has(link.facility_slot_id)) {
         segmentsByFacility.set(

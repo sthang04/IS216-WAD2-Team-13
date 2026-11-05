@@ -170,10 +170,12 @@ export async function loadLiveSimulationData() {
   // Normalize live records into the shared simulation engine input shape.
   // The engine receives authorized records from both sources without fixtures.
 
+  // Day Ops events with a venue but no linked booking get a stand-in "venue only"
+  // slot (simulatorOpsDataService). Simulation only: never a facility_bookings row.
   return {
     ...operational,
-    segment_facility_slots: normalizedFacilityLinks,
-    facility_slots: facilitySlots,
+    segment_facility_slots: [...normalizedFacilityLinks, ...(operational.venue_only_links || [])],
+    facility_slots: [...facilitySlots, ...(operational.venue_only_slots || [])],
     facilities,
     facility_bookings: bookings,
     segment_facility_bookings: facilityLinks,

@@ -649,7 +649,11 @@ function checkFacilityConflicts(data, plan, disruptions) {
     // Ops task-only recovery does not claim a room. Keep missing-facility
     // evidence visible without suggesting that every meal/movement needs a
     // booking. Explicit room changes and existing links use all checks below.
-    if(segment.source_table==='ops_tasks' && !plan.facilityChanges.has(key) && !links.length){
+    // A Day-of Ops "venue only" stand-in is not a booking either; it only matters
+    // when that room is the one disrupted.
+    const venueOnly=linkedSlots.length>0 && linkedSlots.every(slot=>slot.venue_only)
+    const venueDisrupted=disruptions.some(d=>d.type==='FACILITY_UNAVAILABLE' && venues.some(v=>sameVenue(v,d.venueName)))
+    if(segment.source_table==='ops_tasks' && !plan.facilityChanges.has(key) && (!links.length || (venueOnly && !venueDisrupted))){
       warnings.push('Unlinked Day Ops task venues are not verified reservations; task-only updates do not reserve facilities')
       continue
     }

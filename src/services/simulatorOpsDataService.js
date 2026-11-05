@@ -116,7 +116,13 @@ export function adaptOpsSimulationData({
     normalizedEvents = [],
     segments = [],
     assignments = [],
-    notices = []
+    notices = [],
+    // Tasks at the event's own venue, tied to the booking saved on the Day Ops event
+    eventBookingLinks = [],
+    // Fallback for venues with no booking: a stand-in "venue only" slot per venue
+    // the tasks use, so Facility Unavailable can still show impact and other rooms.
+    venueOnlySlots = [],
+    venueOnlyLinks = []
   for (const event of events) {
     if (!uuid(event.id))
       throw Error('Day Ops event is missing its persisted UUID.')
@@ -151,6 +157,7 @@ export function adaptOpsSimulationData({
       starts_at: null,
       ends_at: null
     }
+    const venueTasks = new Map()
     for (const task of rows) {
       if (
         !uuid(task.id) ||
@@ -179,6 +186,22 @@ export function adaptOpsSimulationData({
         source_table: 'ops_tasks',
         ops_task_id: task.id
       })
+      // An explicit booking saved on the Day Ops event covers tasks held at the
+      // event's venue (no venue of their own, or the same one). Never guessed from names alone.
+      const sameVenue = !task.venue || String(task.venue).trim().toLowerCase() === String(event.venue || '').trim().toLowerCase()
+      if (event.facility_booking_id != null && sameVenue)
+        eventBookingLinks.push({ segment_id: segmentId, booking_id: numericId(event.facility_booking_id) })
+      else {
+        const venueName = String(task.venue || event.venue || '').trim()
+        const key = venueName.toLowerCase()
+        if (venueName) {
+          if (!venueTasks.has(key)) venueTasks.set(key, { name: venueName, ids: [], start: starts_at, end: ends_at })
+          const group = venueTasks.get(key)
+          group.ids.push(segmentId)
+          if (Date.parse(starts_at) < Date.parse(group.start)) group.start = starts_at
+          if (Date.parse(ends_at) > Date.parse(group.end)) group.end = ends_at
+        }
+      }
       // task_type is recorded task-category experience, not a qualification or a
       // crew member's job title. Availability/role suitability still need review.
       assignments.push({
@@ -200,6 +223,21 @@ export function adaptOpsSimulationData({
       )
         normalized.ends_at = ends_at
     }
+    // Venue only: spans that venue's tasks; it is not a reservation and never
+    // reaches the server (Apply still needs a real booking for any room change).
+    const clock = (iso) => (String(iso).slice(0, 10) === event.event_date ? String(iso).slice(11, 16) : '23:59')
+    ;[...venueTasks.values()].forEach((group, i) => {
+      const start = clock(group.start), end = clock(group.end)
+      const slotId = 'venue-' + event.id + '-' + i
+      venueOnlySlots.push({
+        id: slotId, venue_only: true, venue_name: group.name,
+        venue_type: null, building_location: null, facility_id: null,
+        owner_club_id: numericId(event.club_id), status: 'No booking (venue only)',
+        event_date: event.event_date, booking_date: event.event_date,
+        start_time: start + ':00', end_time: end + ':00', time_slot: start + ' - ' + end
+      })
+      for (const segmentId of group.ids) venueOnlyLinks.push({ segment_id: segmentId, facility_slot_id: slotId })
+    })
     if (!rows.length)
       notices.push({
         event_id: id,
@@ -222,8 +260,9 @@ export function adaptOpsSimulationData({
   }
   if (tasks.some((t) => !knownEvents.has(String(t.event_id))))
     throw Error('Operations task references an inaccessible event.')
-  // Only stored edges and exact booking references from the reviewed bridge are
-  // accepted. Sequential task times and matching room names never create links.
+  // Only stored edges and exact booking references are accepted (the reviewed
+  // bridge, or the booking saved on the Day Ops event). Sequential task times and
+  // matching room names never create links.
   const segmentIds = new Set(segments.map((s) => String(s.id)))
   const dependencies = (context?.dependencies || [])
     .filter(
@@ -235,12 +274,16 @@ export function adaptOpsSimulationData({
       prerequisite_segment_id: numericId(d.prerequisite_segment_id),
       dependent_segment_id: numericId(d.dependent_segment_id)
     }))
-  const links = (context?.booking_links || [])
+  const bridged = (context?.booking_links || [])
     .filter((l) => segmentIds.has(String(l.segment_id)))
     .map((l) => ({
       segment_id: numericId(l.segment_id),
       booking_id: numericId(l.booking_id)
     }))
+  const links = [
+    ...bridged,
+    ...eventBookingLinks.filter((e) => !bridged.some((l) => same(l.segment_id, e.segment_id) && same(l.booking_id, e.booking_id)))
+  ]
   return {
     source: 'ops',
     events: normalizedEvents,
@@ -261,7 +304,9 @@ export function adaptOpsSimulationData({
       event_id: eventMap.get(String(c.event_id)),
       member_id: numericId(c.member_id)
     })),
-    integration_notices: notices
+    integration_notices: notices,
+    venue_only_slots: venueOnlySlots,
+    venue_only_links: venueOnlyLinks
   }
 }
 
@@ -269,12 +314,14 @@ export function adaptOpsSimulationData({
  * pagination. No guest sample plan or browser-storage fallback. */
 export async function readOpsSimulationData(client, {allowEmpty=false} = {}) {
   // Step 1: read saved operations records. Empty or failed live reads stay honest.
-  const events = await readSimulatorRows(
-    client,
-    'ops_events',
-    undefined,
-    'id,club_id,name,event_date,venue'
-  )
+  // facility_booking_id needs 20261105000100; read without it until that has been run
+  let events
+  try {
+    events = await readSimulatorRows(client, 'ops_events', undefined, 'id,club_id,name,event_date,venue,facility_booking_id')
+  } catch (error) {
+    if (!/facility_booking_id/.test(error?.message || '')) throw error
+    events = await readSimulatorRows(client, 'ops_events', undefined, 'id,club_id,name,event_date,venue')
+  }
   if(!events.length && allowEmpty)return {
     ...adaptOpsSimulationData({}),replacement_memberships:[],
     member_replacement_coverage:{byEvent:{},rosterVerified:false,scheduleVerified:false}

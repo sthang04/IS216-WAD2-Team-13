@@ -1,6 +1,7 @@
 // Day-of Operations: reading and saving a CCA's events, crew and tasks.
 // Tables: ops_events, ops_event_crew, ops_tasks (supabase/migrations/20261104000100_pulse_ops_events.sql,
-// event start/end times in 20261104000200_pulse_ops_event_times.sql).
+// event start/end times in 20261104000200_pulse_ops_event_times.sql,
+// facility booking link in 20261105000100_pulse_ops_event_booking.sql).
 // The database only lets active ExCos of the event's CCA read or change them.
 
 import { supabase } from '../supabase'
@@ -50,6 +51,8 @@ export async function loadClubExcos(clubId) {
 
 // False until 20261104000200 has been run (ops_events has no start/end time yet)
 let hasEventTimes = true
+// False until 20261105000100 has been run (ops_events has no facility booking yet)
+let hasEventBooking = true
 
 // '42703' / 'PGRST204': the column doesn't exist
 function isMissingColumnError(error) {
@@ -58,7 +61,8 @@ function isMissingColumnError(error) {
 
 function selectEvents(clubId) {
   // The !name picks which link to follow (tasks also link to crew, so there's more than one path)
-  const eventColumns = hasEventTimes ? 'id, name, event_date, venue, start_time, end_time' : 'id, name, event_date, venue'
+  let eventColumns = hasEventTimes ? 'id, name, event_date, venue, start_time, end_time' : 'id, name, event_date, venue'
+  if (hasEventBooking) eventColumns += ', facility_booking_id'
   return supabase
     .from('ops_events')
     .select(`${eventColumns}, ops_event_crew!ops_event_crew_event_id_fkey(member_id, checked_in_at, late), ops_tasks!ops_tasks_event_id_fkey(id, member_id, title, task_type, start_time, end_time, venue, is_fixed)`)
@@ -69,6 +73,11 @@ function selectEvents(clubId) {
 // All of a CCA's events, in the shape the page uses (times in minutes)
 export async function loadEvents(clubId, excos) {
   let response = await selectEvents(clubId)
+  // Drop the newest optional column first, then the older one
+  if (hasEventBooking && isMissingColumnError(response.error)) {
+    hasEventBooking = false
+    response = await selectEvents(clubId)
+  }
   if (hasEventTimes && isMissingColumnError(response.error)) {
     hasEventTimes = false
     response = await selectEvents(clubId)
@@ -82,6 +91,7 @@ export async function loadEvents(clubId, excos) {
     venue: row.venue || '',
     start: row.start_time ? timeToMinutes(row.start_time) : null,
     end: row.end_time ? timeToMinutes(row.end_time) : null,
+    facilityBookingId: row.facility_booking_id ?? null,
     crew: row.ops_event_crew.map((c) => {
       const exco = excos.find((e) => e.memberId === Number(c.member_id))
       return {
@@ -122,6 +132,7 @@ export async function saveEvent(clubId, event, createdBy = null) {
     details.start_time = event.start == null ? null : minutesToTime(event.start)
     details.end_time = event.end == null ? null : minutesToTime(event.end)
   }
+  if (hasEventBooking) details.facility_booking_id = event.facilityBookingId ?? null
   if (createdBy !== null) details.created_by = createdBy
   unwrap(await supabase.from('ops_events').upsert(details))
 
@@ -159,6 +170,24 @@ export async function saveEvent(clubId, event, createdBy = null) {
       is_fixed: b.fixed
     })))))
   }
+}
+
+// The CCA's bookings on one date (Master Facility Calendar), to link to an event
+export async function loadClubBookings(clubId, date) {
+  const rows = unwrap(await supabase
+    .from('facility_bookings')
+    .select('id, booking_date, start_time, end_time, status, facilities(name)')
+    .eq('owner_club_id', clubId)
+    .eq('booking_date', date)
+    .order('start_time'))
+
+  return rows.map((row) => ({
+    id: Number(row.id),
+    facility: row.facilities?.name || 'Facility',
+    start: row.start_time.slice(0, 5),
+    end: row.end_time.slice(0, 5),
+    status: row.status
+  }))
 }
 
 export async function deleteEvent(eventId) {
